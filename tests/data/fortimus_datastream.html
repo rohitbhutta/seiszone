@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>FMUS-A46D</title>
+	<link href="default.css" rel="stylesheet" type="text/css">
+	<script src="jquery.min.js" type="text/javascript"></script>
+	<script src="FileSaver.js" type="text/javascript"></script>
+	<script src="jszip-utils.js" type="text/javascript"></script>
+	<script src="jszip.js" type="text/javascript"></script>
+	<script src="jquery.tablesorter.min.js" type="text/javascript"></script>
+</head>
+<body>
+<script type="text/javascript">
+function download_it(what, as) {
+ var uri = new XMLHttpRequest(); 
+ uri.open('GET', "ready", true); 
+ uri.responseType = 'text'; 
+ uri.onreadystatechange = function() { 
+  if (this.readyState === this.DONE) { 
+   if (this.status == 200) { 
+     var link = document.createElement('a');
+     link.href = what;
+     link.download = as;
+     var clickEvent = document.createEvent("MouseEvent");
+     clickEvent.initEvent("click", true, true);
+     link.dispatchEvent(clickEvent);
+   }
+   if (this.status == 987) { 
+     var text = this.response;
+     alert(text); 
+   }
+  }
+ }
+ uri.send();
+};
+function load_a_link(the_id) { 
+  var links = document.getElementById('id_'+the_id).innerHTML.split(";");  for (i=0; i<links.length; ++i) { 
+    var entities = links[i].split(":");    download_it(entities[0], entities[1]);
+  }
+};
+function validateIp(ipaddress) 
+{ 
+ if (/^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(ipaddress)) 
+  { 
+    return (true); 
+  } 
+alert("You have entered an invalid IP address!") 
+return (false); 
+}; 
+</script>
+<table id="body"><tr><td>
+
+<img src="guralp_header.png">
+<h1><i id="message_0"></i>Fortimus</h1>
+<table id="menu"><tr><td><ul>
+	<li><a href="index.html" title="System Status">Status</a></li>
+	<li><a href="tab2.html" title="Network Config">Network</a></li>
+	<li><a href="tab3.html" title="Sensor Config">Setup</a></li>
+	<li><a href="tab5.html" title="Earthquake Early Warning Config">Trigger</a></li>
+	<li id="selected_menu"><a href="tab6.html" title="Stream Config">Data Stream</a></li>
+	<li><a href="tab7.html" title="microSD Config">Data Record</a></li>
+	<li><a href="tab9.html" title="microSD Storage Explorer">Storage</a></li>
+	<li><a href="login.html" title="Login">Login</a></li>
+	<li><a href="http://london.guralp.com/download/documents/FMUS.pdf" target="_blank" title="User Help">Help</a></li>
+</ul></td></tr></table>
+<h2 id="message_1">System type: Fortimus | Host label: Tetar Dam Top | Host name: FMUS-A46D (192.168.2.21) | Serial number: 0A46D</h2>
+
+<TABLE class="config" border=1px>
+<TR><td colspan="4"><table border="0px" cellpadding="0" cellspacing="0" width="100%"><tr><td class="big">Data Stream</td><td align="right" style="font-size:14px; color:#8080a0; background-color:#e0e0e0"></td></tr></table></td></tr>
+<tr><td ><form name="Disable All Streams" action="tab6.html!Disable All Streams@blank.png" method="get" ><input type="hidden" name="Disable All Streams@blank.png" value="0" /><input id="hmmm" style="background-image:url('blank.png')" class="imgbutton" type="button" OnClick="  form.submit();" value="Disable All Streams" width="150" title="Click to action" onmouseover="this.style.backgroundImage='url(\'blank_1.png\')';" onmouseout="this.style.backgroundImage='url(\'blank.png\')';" onmousedown="this.style.backgroundImage='url(\'blank_2.png\')';" /></form></td><td ><form name="DF:Restore default" action="tab6.html!DF:Restore default@blank.png" method="get" ><input type="hidden" name="DF:Restore default@blank.png" value="0" /><input id="hmmm" style="background-image:url('blank.png')" class="imgbutton" type="button" OnClick="  form.submit();" value="Restore default" width="150" title="Click to action" onmouseover="this.style.backgroundImage='url(\'blank_1.png\')';" onmouseout="this.style.backgroundImage='url(\'blank.png\')';" onmousedown="this.style.backgroundImage='url(\'blank_2.png\')';" /></form></td><td  style="font-style: normal;text-align: left;" width=25% class="status ">The &#34;Disable All&#34; and &#34;Restore default&#34; button will ALSO affect settings of any other sensors</td><td ><form action="tab6.html" method="post"><input type="hidden" name="Reboot" value="true" /><input style="background-image:url('blank.png')" class="imgbutton" type="button" OnClick=" if (confirm('Reboot'))  form.submit();" value="Reboot" width="150" title="Click to action" onmouseover="this.style.backgroundImage='url(\'blank_1.png\')';" onmouseout="this.style.backgroundImage='url(\'blank.png\')';" onmousedown="this.style.backgroundImage='url(\'blank_2.png\')';" /></form></td></tr>
+<tr><td ><form name="DF:Copy to Data Record" action="tab6.html!DF:Copy to Data Record@blank.png" method="get" ><input type="hidden" name="DF:Copy to Data Record@blank.png" value="0" /><input id="hmmm" style="background-image:url('blank.png')" class="imgbutton" type="button" OnClick="  form.submit();" value="Copy to Data Record" width="150" title="Click to action" onmouseover="this.style.backgroundImage='url(\'blank_1.png\')';" onmouseout="this.style.backgroundImage='url(\'blank.png\')';" onmousedown="this.style.backgroundImage='url(\'blank_2.png\')';" /></form></td><td  style="font-style: normal;text-align: left;" width=25% class="status ">&quot;Copy to Data Record&quot; will apply settings from this page to recording configuration of all of the sensors.</td><td   ><table width=100%><tr><td width=60% class="status">Total Samples per Second</td><td><div class="" id="id_915" name="Total Samples per Second">630</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">GDI Throughput (kbps)</td><td><div class="" id="id_916" name="GDI Throughput (kbps)">9.21</div></td></tr></table></td></tr>
+<tr><td   ><form action="tab6.html!Display Streams" method="get" name="A"><table width=100%><tr><td align="left">Display Streams</td><td align="right"><select name="Display Streams" onchange="this.form.submit();" >
+<option value="0">All</option>
+<option selected value="1">Enabled Only</option>
+<option value="2">Disabled Only</option>
+</select></td><td></td>
+</tr></table></form></td><td   ><form action="tab6.html!Apply configuration for tap groups" method="get" name="A"><label><input style="width: 20px" type="checkbox" name="Apply configuration for tap groups" value=1 checked onchange="this.form.submit();" /> Apply configuration for tap groups </label></form></td><td ><form name="Disable Page" action="tab6.html!Disable Page@blank.png" method="get" ><input type="hidden" name="Disable Page@blank.png" value="0" /><input id="hmmm" style="background-image:url('blank.png')" class="imgbutton" type="button" OnClick="  form.submit();" value="Disable Page" width="150" title="Click to action" onmouseover="this.style.backgroundImage='url(\'blank_1.png\')';" onmouseout="this.style.backgroundImage='url(\'blank.png\')';" onmousedown="this.style.backgroundImage='url(\'blank_2.png\')';" /></form></td><td   ><form action="tab6.html!Display On Page" method="get" name="A"><table width=100%><tr><td align="left">Display On Page</td><td align="right"><select name="Display On Page" onchange="this.form.submit();" >
+<option selected="selected" value="0">Sensor 0</option>
+</select></td><td></td>
+</tr></table></form></td></tr>
+<tr><td colspan="4"><table border="0px" cellpadding="0" cellspacing="0" width="100%"><tr><td class="big">Channels configuration</td><td align="right" style="font-size:14px; color:#8080a0; background-color:#e0e0e0"></td></tr></table></td></tr>
+<tr><td  style="font-style: normal;text-align: center;" width=25% class="status  tooltip">Channel sampling rate<span class="tooltiptext">Channel sampling rate configuration column.<br><br>Please note that modifying settings in this column requires a system reboot to take effect.</span></td><td  style="font-style: normal;text-align: center;" width=25% class="status  tooltip">Data transform<span class="tooltiptext">Data transformation configuration column.<br><br>Please note that when data transformation is enabled for a channel a system reboot has to be performed to apply the configuration.</span></td><td  style="font-style: normal;text-align: center;" width=25% class="status  tooltip">SEED name - please use check-box to modify the default<span class="tooltiptext">SEED channel name configuration column.<br><br>In order to modify the default channel SEED name please check the check-box.<br>When SEED channel name modification is enabled location and channel name can be modified. Network and station code settings are available in &quot;Setup&quot; tab.<br><br>Please note that any change to the SEED channel name will take effect after system reboot.</span></td><td  style="font-style: normal;text-align: center;" width=25% class="status  tooltip">RESPonse file - if available<span class="tooltiptext">ASCII representation of RESPonse file.<br><br>Please note that full dataless SEED file is available in &quot;Storage&quot; tab.</span></td></tr>
+<tr><td class="smallgrad" colspan="4"  style="color: #006EB7;font-style: normal;text-align: center;">Seismic channels</td></tr>
+<tr><td   class="tooltip"><span class="tooltiptext">Tap UID: 0x0010<br>Chain Head: S0SeisZ<br>Chain Description: Main seismometer Z chain<br>Part of Triplet: First Seismo Triplet<br>Sensitivity: 2.44E-6 m/s²/count<br>Units: m/s²</span><form action="tab6.html!0ACCZ0" method="get" name="A"><table width=100%><tr><td align="left">0ACCZ0</td><td align="right"><select name="0ACCZ0" onchange="this.form.submit();" >
+<option value="5000">5000 Hz</option>
+<option value="2500">2500 Hz</option>
+<option value="1250">1250 Hz</option>
+<option value="1000">1000 Hz</option>
+<option value="625">625 Hz</option>
+<option value="500">500 Hz</option>
+<option value="250">250 Hz</option>
+<option selected="selected" value="200">200 Hz</option>
+<option value="125">125 Hz</option>
+<option value="100">100 Hz</option>
+<option value="50">50 Hz</option>
+<option value="40">40 Hz</option>
+<option value="25">25 Hz</option>
+<option value="20">20 Hz</option>
+<option value="10">10 Hz</option>
+<option value="8">8 Hz</option>
+<option value="5">5 Hz</option>
+<option value="4">4 Hz</option>
+<option value="2">2 Hz</option>
+<option value="1">1 Hz</option>
+<option value="0">Disabled</option>
+</select></td><td></td>
+</tr></table></form></td><td   class="tooltip"><span class="tooltiptext">Select transform to be applied to this tap.<br>Enabling or Disabling transformations requires a reboot.<br>See Transforms page for transform configuration.</span><form action="tab6.html!T 7:" method="get" name="A"><table width=100%><tr><td align="left"></td><td align="right"><select name="T 7:" onchange="this.form.submit();" >
+<option selected="selected" value="-1">Transforms Disabled for this tap</option>
+<option value="0">Enable Transform (reboot)</option>
+</select></td><td></td>
+</tr></table></form></td><td   ><form action="tab6.html!SeedName16" method="get" name="A"><table width=100%><tr><td align="left"></td><td  style="font-style: normal;text-align: left;" align="center"><input type="checkbox" name="SeedName16_check" id="id_934_chk" value="used"  onchange="this.form.submit();"  />&nbsp;&nbsp;&nbsp;&nbsp;<label>CI.</label><label>TEDT.</label><input type="text" name="SeedName16_location"  id="id_934_loc" value="0J" size="2" maxlength="2" onchange="this.form.submit();" disabled />.<input type="text" name="SeedName16_channel"  id="id_934_chan" value="HNZ" size="3" maxlength="3" onchange="this.form.submit();" disabled /></td></tr></table></form></td><td ><div align="center"><a href="RESP_file_7.txt">RESP_file_7</a></div></td></tr>
+<tr><td   class="tooltip"><span class="tooltiptext">Tap UID: 0x0020<br>Chain Head: S0SeisN<br>Chain Description: Main seismometer N chain<br>Part of Triplet: First Seismo Triplet<br>Sensitivity: 2.44E-6 m/s²/count<br>Units: m/s²</span><form action="tab6.html!0ACCN0" method="get" name="A"><table width=100%><tr><td align="left">0ACCN0</td><td align="right"><select name="0ACCN0" onchange="this.form.submit();" >
+<option value="5000">5000 Hz</option>
+<option value="2500">2500 Hz</option>
+<option value="1250">1250 Hz</option>
+<option value="1000">1000 Hz</option>
+<option value="625">625 Hz</option>
+<option value="500">500 Hz</option>
+<option value="250">250 Hz</option>
+<option selected="selected" value="200">200 Hz</option>
+<option value="125">125 Hz</option>
+<option value="100">100 Hz</option>
+<option value="50">50 Hz</option>
+<option value="40">40 Hz</option>
+<option value="25">25 Hz</option>
+<option value="20">20 Hz</option>
+<option value="10">10 Hz</option>
+<option value="8">8 Hz</option>
+<option value="5">5 Hz</option>
+<option value="4">4 Hz</option>
+<option value="2">2 Hz</option>
+<option value="1">1 Hz</option>
+<option value="0">Disabled</option>
+</select></td><td></td>
+</tr></table></form></td><td   class="tooltip"><span class="tooltiptext">Select transform to be applied to this tap.<br>Enabling or Disabling transformations requires a reboot.<br>See Transforms page for transform configuration.</span><form action="tab6.html!T 11:" method="get" name="A"><table width=100%><tr><td align="left"></td><td align="right"><select name="T 11:" onchange="this.form.submit();" >
+<option selected="selected" value="-1">Transforms Disabled for this tap</option>
+<option value="0">Enable Transform (reboot)</option>
+</select></td><td></td>
+</tr></table></form></td><td   ><form action="tab6.html!SeedName32" method="get" name="A"><table width=100%><tr><td align="left"></td><td  style="font-style: normal;text-align: left;" align="center"><input type="checkbox" name="SeedName32_check" id="id_944_chk" value="used"  onchange="this.form.submit();"  />&nbsp;&nbsp;&nbsp;&nbsp;<label>CI.</label><label>TEDT.</label><input type="text" name="SeedName32_location"  id="id_944_loc" value="0J" size="2" maxlength="2" onchange="this.form.submit();" disabled />.<input type="text" name="SeedName32_channel"  id="id_944_chan" value="HNN" size="3" maxlength="3" onchange="this.form.submit();" disabled /></td></tr></table></form></td><td ><div align="center"><a href="RESP_file_11.txt">RESP_file_11</a></div></td></tr>
+<tr><td   class="tooltip"><span class="tooltiptext">Tap UID: 0x0030<br>Chain Head: S0SeisE<br>Chain Description: Main seismometer E chain<br>Part of Triplet: First Seismo Triplet<br>Sensitivity: 2.44E-6 m/s²/count<br>Units: m/s²</span><form action="tab6.html!0ACCE0" method="get" name="A"><table width=100%><tr><td align="left">0ACCE0</td><td align="right"><select name="0ACCE0" onchange="this.form.submit();" >
+<option value="5000">5000 Hz</option>
+<option value="2500">2500 Hz</option>
+<option value="1250">1250 Hz</option>
+<option value="1000">1000 Hz</option>
+<option value="625">625 Hz</option>
+<option value="500">500 Hz</option>
+<option value="250">250 Hz</option>
+<option selected="selected" value="200">200 Hz</option>
+<option value="125">125 Hz</option>
+<option value="100">100 Hz</option>
+<option value="50">50 Hz</option>
+<option value="40">40 Hz</option>
+<option value="25">25 Hz</option>
+<option value="20">20 Hz</option>
+<option value="10">10 Hz</option>
+<option value="8">8 Hz</option>
+<option value="5">5 Hz</option>
+<option value="4">4 Hz</option>
+<option value="2">2 Hz</option>
+<option value="1">1 Hz</option>
+<option value="0">Disabled</option>
+</select></td><td></td>
+</tr></table></form></td><td   class="tooltip"><span class="tooltiptext">Select transform to be applied to this tap.<br>Enabling or Disabling transformations requires a reboot.<br>See Transforms page for transform configuration.</span><form action="tab6.html!T 15:" method="get" name="A"><table width=100%><tr><td align="left"></td><td align="right"><select name="T 15:" onchange="this.form.submit();" >
+<option selected="selected" value="-1">Transforms Disabled for this tap</option>
+<option value="0">Enable Transform (reboot)</option>
+</select></td><td></td>
+</tr></table></form></td><td   ><form action="tab6.html!SeedName48" method="get" name="A"><table width=100%><tr><td align="left"></td><td  style="font-style: normal;text-align: left;" align="center"><input type="checkbox" name="SeedName48_check" id="id_954_chk" value="used"  onchange="this.form.submit();"  />&nbsp;&nbsp;&nbsp;&nbsp;<label>CI.</label><label>TEDT.</label><input type="text" name="SeedName48_location"  id="id_954_loc" value="0J" size="2" maxlength="2" onchange="this.form.submit();" disabled />.<input type="text" name="SeedName48_channel"  id="id_954_chan" value="HNE" size="3" maxlength="3" onchange="this.form.submit();" disabled /></td></tr></table></form></td><td ><div align="center"><a href="RESP_file_15.txt">RESP_file_15</a></div></td></tr>
+<tr><td class="smallgrad" colspan="4"  style="color: #006EB7;font-style: normal;text-align: center;">MEMS accelerometer channels</td></tr>
+<tr><td   class="tooltip"><span class="tooltiptext">Tap UID: 0x00A0<br>Chain Head: S0AxlZ<br>Chain Description: MEMS accelerometer<br>Part of Triplet: MEMS Accelerometer Triplet<br>Sensitivity: 5.984E-4 m/s²/count<br>Units: m/s²</span><form action="tab6.html!0AXLZ0" method="get" name="A"><table width=100%><tr><td align="left">0AXLZ0</td><td align="right"><select name="0AXLZ0" onchange="this.form.submit();" >
+<option value="500">500 Hz</option>
+<option value="250">250 Hz</option>
+<option value="125">125 Hz</option>
+<option value="100">100 Hz</option>
+<option value="50">50 Hz</option>
+<option value="25">25 Hz</option>
+<option value="20">20 Hz</option>
+<option selected="selected" value="10">10 Hz</option>
+<option value="5">5 Hz</option>
+<option value="4">4 Hz</option>
+<option value="2">2 Hz</option>
+<option value="1">1 Hz</option>
+<option value="0">Disabled</option>
+</select></td><td></td>
+</tr></table></form></td><td   class="tooltip"><span class="tooltiptext">Select transform to be applied to this tap.<br>Enabling or Disabling transformations requires a reboot.<br>See Transforms page for transform configuration.</span><form action="tab6.html!T 25:" method="get" name="A"><table width=100%><tr><td align="left"></td><td align="right"><select name="T 25:" onchange="this.form.submit();" >
+<option selected="selected" value="-1">Transforms Disabled for this tap</option>
+<option value="0">Enable Transform (reboot)</option>
+</select></td><td></td>
+</tr></table></form></td><td   ><form action="tab6.html!SeedName160" method="get" name="A"><table width=100%><tr><td align="left"></td><td  style="font-style: normal;text-align: left;" align="center"><input type="checkbox" name="SeedName160_check" id="id_977_chk" value="used"  onchange="this.form.submit();"  />&nbsp;&nbsp;&nbsp;&nbsp;<label>CI.</label><label>TEDT.</label><input type="text" name="SeedName160_location"  id="id_977_loc" value="9J" size="2" maxlength="2" onchange="this.form.submit();" disabled />.<input type="text" name="SeedName160_channel"  id="id_977_chan" value="BNZ" size="3" maxlength="3" onchange="this.form.submit();" disabled /></td></tr></table></form></td><td ><div align="center"><a href="RESP_file_25.txt">RESP_file_25</a></div></td></tr>
+<tr><td   class="tooltip"><span class="tooltiptext">Tap UID: 0x00B0<br>Chain Head: S0AxlN<br>Chain Description: MEMS accelerometer<br>Part of Triplet: MEMS Accelerometer Triplet<br>Sensitivity: 5.984E-4 m/s²/count<br>Units: m/s²</span><form action="tab6.html!0AXLN0" method="get" name="A"><table width=100%><tr><td align="left">0AXLN0</td><td align="right"><select name="0AXLN0" onchange="this.form.submit();" >
+<option value="500">500 Hz</option>
+<option value="250">250 Hz</option>
+<option value="125">125 Hz</option>
+<option value="100">100 Hz</option>
+<option value="50">50 Hz</option>
+<option value="25">25 Hz</option>
+<option value="20">20 Hz</option>
+<option selected="selected" value="10">10 Hz</option>
+<option value="5">5 Hz</option>
+<option value="4">4 Hz</option>
+<option value="2">2 Hz</option>
+<option value="1">1 Hz</option>
+<option value="0">Disabled</option>
+</select></td><td></td>
+</tr></table></form></td><td   class="tooltip"><span class="tooltiptext">Select transform to be applied to this tap.<br>Enabling or Disabling transformations requires a reboot.<br>See Transforms page for transform configuration.</span><form action="tab6.html!T 30:" method="get" name="A"><table width=100%><tr><td align="left"></td><td align="right"><select name="T 30:" onchange="this.form.submit();" >
+<option selected="selected" value="-1">Transforms Disabled for this tap</option>
+<option value="0">Enable Transform (reboot)</option>
+</select></td><td></td>
+</tr></table></form></td><td   ><form action="tab6.html!SeedName176" method="get" name="A"><table width=100%><tr><td align="left"></td><td  style="font-style: normal;text-align: left;" align="center"><input type="checkbox" name="SeedName176_check" id="id_982_chk" value="used"  onchange="this.form.submit();"  />&nbsp;&nbsp;&nbsp;&nbsp;<label>CI.</label><label>TEDT.</label><input type="text" name="SeedName176_location"  id="id_982_loc" value="9J" size="2" maxlength="2" onchange="this.form.submit();" disabled />.<input type="text" name="SeedName176_channel"  id="id_982_chan" value="BNN" size="3" maxlength="3" onchange="this.form.submit();" disabled /></td></tr></table></form></td><td ><div align="center"><a href="RESP_file_30.txt">RESP_file_30</a></div></td></tr>
+<tr><td   class="tooltip"><span class="tooltiptext">Tap UID: 0x00C0<br>Chain Head: S0AxlE<br>Chain Description: MEMS accelerometer<br>Part of Triplet: MEMS Accelerometer Triplet<br>Sensitivity: 5.984E-4 m/s²/count<br>Units: m/s²</span><form action="tab6.html!0AXLE0" method="get" name="A"><table width=100%><tr><td align="left">0AXLE0</td><td align="right"><select name="0AXLE0" onchange="this.form.submit();" >
+<option value="500">500 Hz</option>
+<option value="250">250 Hz</option>
+<option value="125">125 Hz</option>
+<option value="100">100 Hz</option>
+<option value="50">50 Hz</option>
+<option value="25">25 Hz</option>
+<option value="20">20 Hz</option>
+<option selected="selected" value="10">10 Hz</option>
+<option value="5">5 Hz</option>
+<option value="4">4 Hz</option>
+<option value="2">2 Hz</option>
+<option value="1">1 Hz</option>
+<option value="0">Disabled</option>
+</select></td><td></td>
+</tr></table></form></td><td   class="tooltip"><span class="tooltiptext">Select transform to be applied to this tap.<br>Enabling or Disabling transformations requires a reboot.<br>See Transforms page for transform configuration.</span><form action="tab6.html!T 35:" method="get" name="A"><table width=100%><tr><td align="left"></td><td align="right"><select name="T 35:" onchange="this.form.submit();" >
+<option selected="selected" value="-1">Transforms Disabled for this tap</option>
+<option value="0">Enable Transform (reboot)</option>
+</select></td><td></td>
+</tr></table></form></td><td   ><form action="tab6.html!SeedName192" method="get" name="A"><table width=100%><tr><td align="left"></td><td  style="font-style: normal;text-align: left;" align="center"><input type="checkbox" name="SeedName192_check" id="id_987_chk" value="used"  onchange="this.form.submit();"  />&nbsp;&nbsp;&nbsp;&nbsp;<label>CI.</label><label>TEDT.</label><input type="text" name="SeedName192_location"  id="id_987_loc" value="9J" size="2" maxlength="2" onchange="this.form.submit();" disabled />.<input type="text" name="SeedName192_channel"  id="id_987_chan" value="BNE" size="3" maxlength="3" onchange="this.form.submit();" disabled /></td></tr></table></form></td><td ><div align="center"><a href="RESP_file_35.txt">RESP_file_35</a></div></td></tr>
+<tr></TR>
+</TABLE><br>
+
+<script type="text/javascript">
+var xmltimerid = 0;
+function closewindowaction() {if(xmltimerid !=0) clearTimeout(xmltimerid);}
+window.onbeforeunload = closewindowaction;
+var xmlDoc = null;
+var xmlhttp = null;
+function getValue(vname){ if(!xmlDoc) return null; if(!xmlDoc.getElementsByTagName(vname)) return null; return xmlDoc.getElementsByTagName(vname)[0].childNodes[0].nodeValue; }
+function setValue(vname, id){ 
+    var txt=getValue(vname); 
+    var different = (document.getElementById(id).innerHTML != txt);
+    document.getElementById(id).innerHTML=txt; 
+    if (typeof map_id != "undefined") {
+      if (id == map_id) {
+        updateLocationVal(txt); 
+      }
+      if (different && ids_that_reload.indexOf(id) > -1) {
+        window.location.reload(false);
+      }
+    }
+ }
+function parseXML() {
+	if (xmlDoc) {
+		if (xmlDoc.getElementsByTagName("reload_me").length > 0) {
+			if (xmlDoc.getElementsByTagName("reload_me")[0].innerHTML == "true") {
+				var tmp_url = window.location.href;
+				if (tmp_url.indexOf('!') > 0) tmp_url = tmp_url.substring(0, tmp_url.indexOf('!'));
+				if (tmp_url.indexOf('?') > 0) tmp_url = tmp_url.substring(0, tmp_url.indexOf('?'));
+				window.location.href = tmp_url;
+			}
+		}
+		setValue("item_915", "id_915");
+		setValue("item_916", "id_916");
+	}
+	xmltimerid = setTimeout(importXML, 1000);
+}
+function loadXML()
+{
+   if( xmlhttp.readyState == 0 || xmlhttp.readyState == 4) {
+		xmlDoc = xmlhttp.responseXML;
+       parseXML();
+   }
+}
+function importXML(){
+	if(xmlhttp) {
+		xmlhttp.open("GET", "page5.xml", true);
+		xmlhttp.onreadystatechange = loadXML;
+		xmlhttp.send(null);
+	}
+}
+try { xmlhttp = new XMLHttpRequest(); } catch(e) { alert("No XMLHttp"); }
+importXML();
+</script>
+
+<script type="text/javascript">$(function() {
+	$.getJSON("messages.json", function(result) {
+		$.each(result, function(title, message) {
+			document.title = title;
+			document.getElementById("message_0").innerHTML = message[0];
+			document.getElementById("message_1").innerHTML = message[1];
+		});
+	});
+});</script>
+
+</td></tr>
+<tr><td>
+<div style="font-size: 8pt; color: #AAAAAA; text-align:center; font-weight: normal; padding-top: 12px;">Guralp Systems Limited<br>Midas House, Calleva Park, Aldermaston, Reading, RG7 8EA, UK<br>Tel: +44 118 981 9056, Fax: +44 118 981 9943<br>E-Mail: <a href="mailto:sales@guralp.com" style="color: #AAAAAA;">sales@guralp.com</a>, <a href="mailto:support@guralp.com" style="color: #AAAAAA;">support@guralp.com</a><br><br></div></td></tr></table>
+</body>
+</html>

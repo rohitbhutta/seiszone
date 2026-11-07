@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>FMUS-A46D</title>
+	<link href="default.css" rel="stylesheet" type="text/css">
+	<script src="jquery.min.js" type="text/javascript"></script>
+	<script src="FileSaver.js" type="text/javascript"></script>
+	<script src="jszip-utils.js" type="text/javascript"></script>
+	<script src="jszip.js" type="text/javascript"></script>
+	<script src="jquery.tablesorter.min.js" type="text/javascript"></script>
+</head>
+<body>
+<script type="text/javascript">
+function download_it(what, as) {
+ var uri = new XMLHttpRequest(); 
+ uri.open('GET', "ready", true); 
+ uri.responseType = 'text'; 
+ uri.onreadystatechange = function() { 
+  if (this.readyState === this.DONE) { 
+   if (this.status == 200) { 
+     var link = document.createElement('a');
+     link.href = what;
+     link.download = as;
+     var clickEvent = document.createEvent("MouseEvent");
+     clickEvent.initEvent("click", true, true);
+     link.dispatchEvent(clickEvent);
+   }
+   if (this.status == 987) { 
+     var text = this.response;
+     alert(text); 
+   }
+  }
+ }
+ uri.send();
+};
+function load_a_link(the_id) { 
+  var links = document.getElementById('id_'+the_id).innerHTML.split(";");  for (i=0; i<links.length; ++i) { 
+    var entities = links[i].split(":");    download_it(entities[0], entities[1]);
+  }
+};
+function validateIp(ipaddress) 
+{ 
+ if (/^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(ipaddress)) 
+  { 
+    return (true); 
+  } 
+alert("You have entered an invalid IP address!") 
+return (false); 
+}; 
+</script>
+<table id="body"><tr><td>
+
+<img src="guralp_header.png">
+<h1><i id="message_0"></i>Fortimus</h1>
+<table id="menu"><tr><td><ul>
+	<li><a href="index.html" title="System Status">Status</a></li>
+	<li><a href="tab2.html" title="Network Config">Network</a></li>
+	<li><a href="tab3.html" title="Sensor Config">Setup</a></li>
+	<li><a href="tab5.html" title="Earthquake Early Warning Config">Trigger</a></li>
+	<li><a href="tab6.html" title="Stream Config">Data Stream</a></li>
+	<li><a href="tab7.html" title="microSD Config">Data Record</a></li>
+	<li id="selected_menu"><a href="tab9.html" title="microSD Storage Explorer">Storage</a></li>
+	<li><a href="login.html" title="Login">Login</a></li>
+	<li><a href="http://london.guralp.com/download/documents/FMUS.pdf" target="_blank" title="User Help">Help</a></li>
+</ul></td></tr></table>
+<h2 id="message_1">System type: Fortimus | Host label: Tetar Dam Top | Host name: FMUS-A46D (192.168.2.21) | Serial number: 0A46D</h2>
+
+<TABLE class="config" border=1px>
+<TR><td colspan="4"><table border="0px" cellpadding="0" cellspacing="0" width="100%"><tr><td class="big">SD Card control</td><td align="right" style="font-size:14px; color:#8080a0; background-color:#e0e0e0"></td></tr></table></td></tr>
+<tr><td class="tooltip"><span class="tooltiptext">Pressing this button will copy all data from internal buffers to persistent storage. This action makes 4096B miniseed records to be only partially filled with data which may reduce the expected length of persistent storage.</span><form name="Flush data" action="tab9.html!Flush data@blank.png" method="get" ><input type="hidden" name="Flush data@blank.png" value="0" /><input id="hmmm" style="background-image:url('blank.png')" class="imgbutton" type="button" OnClick="  form.submit();" value="Flush data" width="150" onmouseover="this.style.backgroundImage='url(\'blank_1.png\')';" onmouseout="this.style.backgroundImage='url(\'blank.png\')';" onmousedown="this.style.backgroundImage='url(\'blank_2.png\')';" /></form></td><td class="tooltip"><span class="tooltiptext">Pressing this button will stop the recording on the SD cards.            Press this button before removing your sd-card to avoid loss of data</span><form name="Unmount Cards" action="tab9.html!Unmount Cards@blank.png" method="get" ><input type="hidden" name="Unmount Cards@blank.png" value="0" /><input id="hmmm" style="background-image:url('blank.png')" class="imgbutton" type="button" OnClick="  form.submit();" value="Unmount Cards" width="150" onmouseover="this.style.backgroundImage='url(\'blank_1.png\')';" onmouseout="this.style.backgroundImage='url(\'blank.png\')';" onmousedown="this.style.backgroundImage='url(\'blank_2.png\')';" /></form></td><td class="tooltip"><span class="tooltiptext">Quickformat action erases the data from all of the installed cards. After performing this action current data is going to be destroyed and cannot be recovered.</span><form action="tab9.html" method="post"><input type="hidden" name="Quickformat Cards" value="true" /><input style="background-image:url('blank.png')" class="imgbutton" type="button" OnClick=" if (confirm('Are you sure? Quickformat will erase the data from all of the installed cards. Please make sure that no important data will get destroyed before continuing.'))  form.submit();" value="Quickformat Cards" width="150" onmouseover="this.style.backgroundImage='url(\'blank_1.png\')';" onmouseout="this.style.backgroundImage='url(\'blank.png\')';" onmousedown="this.style.backgroundImage='url(\'blank_2.png\')';" /></form></td><td class="tooltip"><span class="tooltiptext">Fullformat action erases the data from all of the installed cards. After performing this action current data is going to be destroyed and cannot be recovered.</span><form action="tab9.html" method="post"><input type="hidden" name="Fullformat Cards" value="true" /><input style="background-image:url('blank.png')" class="imgbutton" type="button" OnClick=" if (confirm('Are you sure? Fullformat will erase the data from all of the installed cards. Please make sure that no important data will get destroyed before continuing.'))  form.submit();" value="Fullformat Cards" width="150" onmouseover="this.style.backgroundImage='url(\'blank_1.png\')';" onmouseout="this.style.backgroundImage='url(\'blank.png\')';" onmousedown="this.style.backgroundImage='url(\'blank_2.png\')';" /></form></td></tr>
+<tr><td></td><td></td><td></td><td class="status">Full-format is not in progress</td></tr>
+<tr><td colspan="4"><table border="0px" cellpadding="0" cellspacing="0" width="100%"><tr><td class="big">SD Cards status</td><td align="right" style="font-size:14px; color:#8080a0; background-color:#e0e0e0"></td></tr></table></td></tr>
+<tr><td colspan="2"   ><table width=100%><tr><td width=60% class="status">External microSD card present</td><td><div class="" id="id_2798" name="External microSD card present">PRESENT</div></td></tr></table></td><td colspan="2"   ><table width=100%><tr><td width=60% class="status">Number of 128-MiB miniSEED files</td><td><div class="" id="id_2799" name="Number of 128-MiB miniSEED files">461</div></td></tr></table></td></tr>
+<tr><td colspan="2"   ><table width=100%><tr><td width=60% class="status">External microSD card usable</td><td><div class="" id="id_2801" name="External microSD card usable">USABLE</div></td></tr></table></td><td colspan="2"   ><table width=100%><tr><td width=60% class="status">Internal microSD card usable</td><td><div class="" id="id_2802" name="Internal microSD card usable">USABLE</div></td></tr></table></td></tr>
+<tr><td colspan="2"   ><table width=100%><tr><td width=60% class="status">External microSD card init count</td><td><div class="" id="id_2804" name="External microSD card init count">1</div></td></tr></table></td><td colspan="2"   ><table width=100%><tr><td width=60% class="status">Internal microSD card init count</td><td><div class="" id="id_2805" name="Internal microSD card init count">1</div></td></tr></table></td></tr>
+<tr><td colspan="2"   ><table width=100%><tr><td width=60% class="status">External microSD card is primary microSD card</td><td><div class="" id="id_2807" name="External microSD card is primary microSD card">PRIMARY</div></td></tr></table></td><td colspan="2"   ><table width=100%><tr><td width=60% class="status">Internal microSD card is primary microSD card</td><td><div class="" id="id_2808" name="Internal microSD card is primary microSD card">BACKUP</div></td></tr></table></td></tr>
+<tr><td colspan="2"   ><table width=100%><tr><td width=60% class="status">Primary microSD card is recording samples</td><td><div class="" id="id_2810" name="Primary microSD card is recording samples">RECORDING</div></td></tr></table></td><td colspan="2"   ><table width=100%><tr><td width=60% class="status">Backup microSD card is recording samples</td><td><div class="" id="id_2811" name="Backup microSD card is recording samples">RECORDING</div></td></tr></table></td></tr>
+<tr><td colspan="4"><table border="0px" cellpadding="0" cellspacing="0" width="100%"><tr><td class="big">Channel data download by time selection</td><td align="right" style="font-size:14px; color:#8080a0; background-color:#e0e0e0"></td></tr></table></td></tr>
+<tr><td colspan="4">
+<script type="text/javascript">
+    function dataRequest()
+    {
+        var date_from = document.getElementById('datefrom').value;
+        var time_from = document.getElementById('timefrom').value;
+        var date_to = document.getElementById('dateto').value;
+        var time_to = document.getElementById('timeto').value;
+        var channel = document.getElementById('channel').value;
+        var display_channel = document.getElementById('channel').options[document.getElementById('channel').selectedIndex].text;
+        var now = new Date();
+        var from_unix = (new Date(date_from + ' ' + time_from)).getTime()/1000 - (now.getTimezoneOffset() * 60);
+        var to_unix = (new Date(date_to + ' ' + time_to)).getTime()/1000 - (now.getTimezoneOffset() * 60);
+        if (isNaN(from_unix) || isNaN(to_unix) || to_unix <= from_unix) {
+           var trident = window.navigator.userAgent.indexOf("Trident");
+           var dotnet = window.navigator.userAgent.indexOf(".NET");
+           if (trident > 0 || dotnet > 0) { 
+             window.alert("Invalid time selection. Cannot download data for "+display_channel+"\nPlease check date and time format (YYYY-MM-DD hh:mm:ss)");
+           } else { 
+             window.alert("Invalid time selection. Cannot download data for "+display_channel+"\nPlease check date and time format (DD/MM/YYYY hh:mm)");
+           } 
+           return;
+        }
+        var what = "data?channel="+channel+"&from="+from_unix+"&to="+to_unix;
+        var as = display_channel+'_'+date_from+'_'+time_from+'-'+date_to+'_'+time_to+'.mseed';
+        download_it(what, as);
+
+    }
+</script>
+
+<center>
+<form name="dateSelector" action="javascript:dataRequest()">
+<table style="border: 0px solid white;"><tr><td></td>
+<td>Channel: <select id="channel">
+<option value="S0SeisZA" text="CI.TEDT.0L.HNZ [S0SeisZA]">CI.TEDT.0L.HNZ [S0SeisZA]</option>
+<option value="S0SeisNA" text="CI.TEDT.0L.HNN [S0SeisNA]">CI.TEDT.0L.HNN [S0SeisNA]</option>
+<option value="S0SeisEA" text="CI.TEDT.0L.HNE [S0SeisEA]">CI.TEDT.0L.HNE [S0SeisEA]</option>
+<option value="S0HumidA" text="CI.TEDT.9R.LIO [S0HumidA]">CI.TEDT.9R.LIO [S0HumidA]</option>
+<option value="S0TemprA" text="CI.TEDT.9T.LKO [S0TemprA]">CI.TEDT.9T.LKO [S0TemprA]</option>
+</select></td>
+<td>From: <input id="datefrom" type="date" name="date_from">&nbsp;<input id="timefrom" type="time" name="time_from"></td>
+<td>To: <input id="dateto" type="date" name="date_to">&nbsp;<input id="timeto" type="time" name="time_to"></td>
+<td><input type="submit" value="Download"></td>
+<td></td></tr></table></form></center>
+</td></tr>
+<tr><td colspan="4"><table border="0px" cellpadding="0" cellspacing="0" width="100%"><tr><td class="big">SD Card files</td><td align="right" style="font-size:14px; color:#8080a0; background-color:#e0e0e0"></td></tr></table></td></tr>
+<tr><td colspan="4"><div>
+<script type="text/javascript">
+$(function() { 
+  $("#sd_files").tablesorter({ headers : { 3: { sorter:"customDate" } } });
+});
+
+var multidownloadlocked = 0; 
+var waitForFinished = 0; 
+var progressCurrentTrackingWorker = new Array(); 
+var progressTotalTrackingWorker = new Array(); 
+var multidownloadIntervals = new Map(); 
+
+function download_those ( todownload, n)
+{
+    if (n < todownload.length)
+    {
+        var url = todownload[n].value;
+        download_it (url, url);
+
+        setTimeout(function()
+        {
+            download_those(todownload, n+1);
+        }
+        , 500);
+    }
+}
+
+function multidownload()
+{
+    var SomeChecked = false;
+    var links = document.getElementsByClassName ("multidownload");
+    var download = [];
+    for (var i = 0; i < links.length; i++)
+    {
+        if (links[i].checked)
+        {
+            SomeChecked = true;
+            download.push (links[i]);
+        }
+    }
+    if (!SomeChecked)
+    {
+        alert ("Please select at least one file to download");
+    }
+    else
+    {
+        download_those (download, 0);
+    }
+    return false;
+}
+function waitForIt(zip) 
+{
+  setTimeout(function() {
+    if (waitForFinished > 0) { 
+       waitForIt(zip); 
+    } else { 
+       zip.generateAsync({type:"blob"}) 
+         .then(function(content) {             saveAs(content, "FMUS-A46D-files.zip");
+            progressBar = document.getElementById("multiDownloadProgress");
+            if (progressBar) {
+                progressBar.value = 0;
+                progressBar.max = 0;
+                progressBar.style.display = "none";
+            }
+            progressLabel = document.getElementById("multiDownloadLabel");
+            if (progressLabel) {
+                progressLabel.innerHTML="";
+                progressLabel.style.display = "none";
+            }
+            refreshInfo = document.getElementById("refresh_info");
+            if (refreshInfo)
+            {
+                refreshInfo.style.display = "none";
+            }
+          });
+    }
+  }, 1000);}
+function trackProgress(idx, file, current, total) {
+    progressCurrentTrackingWorker[idx] = current;
+    progressTotalTrackingWorker[idx] = total;
+    var totalCurr = 0; 
+    var totalTotal = 0;
+    for (var i = 0; i<progressTotalTrackingWorker.length; ++i)
+    {
+      totalCurr += progressCurrentTrackingWorker[i];
+      totalTotal += progressTotalTrackingWorker[i];
+    }
+    if(totalCurr != totalTotal) {
+      progressBar = document.getElementById("multiDownloadProgress");
+      if (progressBar && totalTotal != 0) {
+        progressBar.value = totalCurr;
+        progressBar.max = totalTotal;
+        progressBar.style.display = "inline";
+      }
+      progressLabel = document.getElementById("multiDownloadLabel");
+      if (progressLabel && totalTotal != 0) {
+        progressLabel.innerHTML="<b>Downloading: "+file+" ("+totalCurr+"/"+totalTotal+")</b> <i style='font-weight: normal;'>"+waitForFinished+" files remaining</i>";        progressLabel.style.display = "inline";
+      }
+    } else if (totalCurr == totalTotal && totalCurr != 0) {
+      progressBar = document.getElementById("multiDownloadProgress");
+      if (progressBar && totalTotal != 0) {
+        progressBar.value = 100;
+        progressBar.max = 100;
+        progressBar.style.display = "inline";
+      }
+      progressLabel = document.getElementById("multiDownloadLabel");
+      if (progressLabel && totalTotal != 0) {
+        progressLabel.innerHTML="<b>Download finished - compressing files, please wait...</b>";
+        progressLabel.style.display = "inline";
+      }
+    }
+}
+function multidownloadzip()
+{
+    var SomeChecked = false;
+    var links = document.getElementsByClassName ("multidownload");
+    if (document.getElementById("refresh_info")) {
+        document.getElementById("refresh_info").style.display = "inline";
+    }
+    var zip = new JSZip(); 
+    waitForFinished = 0; 
+    progressCurrentTrackingWorker = []; 
+    progressTotalTrackingWorker = [];
+    for (var i = 0; i < links.length; i++)
+    {
+        if (links[i].checked)
+            waitForFinished = waitForFinished+1;
+    }
+    for (var i = 0; i < links.length; i++)
+    {
+        if (links[i].checked)
+        {
+            SomeChecked = true;
+            var interval = 
+                setInterval(function(thefile) {
+                    if (multidownloadlocked == 0)
+                    {
+                    	multidownloadlocked = 1;
+                    	JSZipUtils.getBinaryContent(0, 
+                    	  thefile, 
+                    	  function(filepath, err, data) {
+                    		waitForFinished = waitForFinished - 1;
+                    		if (err) { 
+                    		  throw err;
+                    		}
+                    		zip.file(filepath.replace('sd/', ''), data, {binary: true});
+                    		clearInterval(multidownloadIntervals.get(filepath));
+                    		multidownloadlocked = 0;
+                    	  }, 
+                    	  trackProgress
+                    	);
+                    }
+                }, 100+i, links[i].value);
+            multidownloadIntervals.set(links[i].value, interval);
+        }
+    }
+    if (!SomeChecked)
+    {
+        alert ("Please select at least one file to download");
+    }
+    else
+    {
+        waitForIt(zip);
+    }
+    return false;
+}
+function downloadAll()
+{
+    var links = document.getElementsByClassName ("multidownload");
+    if (document.getElementById("refresh_info")) {
+        document.getElementById("refresh_info").style.display = "inline";
+    }
+    var zip = new JSZip(); 
+    waitForFinished = links.length; 
+    progressCurrentTrackingWorker = []; 
+    progressTotalTrackingWorker = [];
+    for (var i = 0; i < links.length; i++)
+    {
+            var interval = 
+                setInterval(function(thefile) {
+                    if (multidownloadlocked == 0)
+                    {
+                    	multidownloadlocked = 1;
+                    	JSZipUtils.getBinaryContent(0, 
+                    	  thefile, 
+                    	  function(filepath, err, data) {
+                    		waitForFinished = waitForFinished - 1;
+                    		if (err) { 
+                    		  throw err;
+                    		}
+                    		zip.file(filepath.replace('sd/', ''), data, {binary: true});
+                    		clearInterval(multidownloadIntervals.get(filepath));
+                    		multidownloadlocked = 0;
+                    	  }, 
+                    	  trackProgress
+                    	);
+                    }
+                }, 100+i, links[i].value);
+            multidownloadIntervals.set(links[i].value, interval);
+    }
+    return false;
+}
+</script>
+<table class="tablesorter" id="sd_files">
+<thead>
+<tr><td></td><th>Filename</th><th>Size (bytes)</th><th>Last data timestamp</th></tr>
+</thead>
+<tbody>
+<tr><td><input type="checkbox" value="sd/00A46D_S0TemprA_______00001_00000.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0TemprA_______00001_00000.mseed">00A46D_S0TemprA_______00001_00000.mseed</a></td><td>8994816</td><td>2026-11-04 18:30:50.000000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0HumidA_______00001_00001.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0HumidA_______00001_00001.mseed">00A46D_S0HumidA_______00001_00001.mseed</a></td><td>8609792</td><td>2026-11-04 19:26:08.000000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_Power__________00001_00002.mseed" class="multidownload" /></td><td><a href="sd/00A46D_Power__________00001_00002.mseed">00A46D_Power__________00001_00002.mseed</a></td><td>9170944</td><td>2026-11-04 18:42:25.000000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_Voltage________00001_00003.mseed" class="multidownload" /></td><td><a href="sd/00A46D_Voltage________00001_00003.mseed">00A46D_Voltage________00001_00003.mseed</a></td><td>8048640</td><td>2026-11-04 19:20:05.000000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisEA_______00200_00004.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisEA_______00200_00004.mseed">00A46D_S0SeisEA_______00200_00004.mseed</a></td><td>134217728</td><td>2026-06-19 20:39:37.425000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisNA_______00200_00005.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisNA_______00200_00005.mseed">00A46D_S0SeisNA_______00200_00005.mseed</a></td><td>134217728</td><td>2026-06-19 12:46:22.285000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisZA_______00200_00006.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisZA_______00200_00006.mseed">00A46D_S0SeisZA_______00200_00006.mseed</a></td><td>134217728</td><td>2026-06-20 19:34:56.660000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisNA_______00200_00007.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisNA_______00200_00007.mseed">00A46D_S0SeisNA_______00200_00007.mseed</a></td><td>134217728</td><td>2026-06-30 04:47:43.150000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisEA_______00200_00008.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisEA_______00200_00008.mseed">00A46D_S0SeisEA_______00200_00008.mseed</a></td><td>134217728</td><td>2026-06-30 22:48:10.475000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisZA_______00200_00009.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisZA_______00200_00009.mseed">00A46D_S0SeisZA_______00200_00009.mseed</a></td><td>134217728</td><td>2026-07-03 00:11:56.435000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisNA_______00200_00010.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisNA_______00200_00010.mseed">00A46D_S0SeisNA_______00200_00010.mseed</a></td><td>134217728</td><td>2026-07-10 11:39:24.225000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisEA_______00200_00011.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisEA_______00200_00011.mseed">00A46D_S0SeisEA_______00200_00011.mseed</a></td><td>134217728</td><td>2026-07-11 14:17:12.935000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisZA_______00200_00012.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisZA_______00200_00012.mseed">00A46D_S0SeisZA_______00200_00012.mseed</a></td><td>134217728</td><td>2026-07-15 04:08:06.470000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisNA_______00200_00013.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisNA_______00200_00013.mseed">00A46D_S0SeisNA_______00200_00013.mseed</a></td><td>134217728</td><td>2026-07-21 08:38:06.365000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisEA_______00200_00014.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisEA_______00200_00014.mseed">00A46D_S0SeisEA_______00200_00014.mseed</a></td><td>134217728</td><td>2026-07-22 14:19:04.825000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisZA_______00200_00015.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisZA_______00200_00015.mseed">00A46D_S0SeisZA_______00200_00015.mseed</a></td><td>134217728</td><td>2026-07-27 09:12:15.390000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisNA_______00200_00016.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisNA_______00200_00016.mseed">00A46D_S0SeisNA_______00200_00016.mseed</a></td><td>134217728</td><td>2026-07-31 04:42:18.110000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisEA_______00200_00017.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisEA_______00200_00017.mseed">00A46D_S0SeisEA_______00200_00017.mseed</a></td><td>134217728</td><td>2026-08-02 08:51:34.515000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisZA_______00200_00018.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisZA_______00200_00018.mseed">00A46D_S0SeisZA_______00200_00018.mseed</a></td><td>134217728</td><td>2026-08-08 13:44:09.395000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisNA_______00200_00019.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisNA_______00200_00019.mseed">00A46D_S0SeisNA_______00200_00019.mseed</a></td><td>134217728</td><td>2026-08-11 02:42:33.600000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisEA_______00200_00020.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisEA_______00200_00020.mseed">00A46D_S0SeisEA_______00200_00020.mseed</a></td><td>134217728</td><td>2026-08-13 19:36:16.675000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisZA_______00200_00021.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisZA_______00200_00021.mseed">00A46D_S0SeisZA_______00200_00021.mseed</a></td><td>134217728</td><td>2026-08-20 19:39:12.465000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisNA_______00200_00022.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisNA_______00200_00022.mseed">00A46D_S0SeisNA_______00200_00022.mseed</a></td><td>134217728</td><td>2026-08-21 18:12:40.385000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisEA_______00200_00023.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisEA_______00200_00023.mseed">00A46D_S0SeisEA_______00200_00023.mseed</a></td><td>134217728</td><td>2026-08-24 15:52:18.390000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisZA_______00200_00024.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisZA_______00200_00024.mseed">00A46D_S0SeisZA_______00200_00024.mseed</a></td><td>134217728</td><td>2026-09-02 02:26:29.510000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisNA_______00200_00025.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisNA_______00200_00025.mseed">00A46D_S0SeisNA_______00200_00025.mseed</a></td><td>134217728</td><td>2026-09-01 13:59:00.005000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisEA_______00200_00026.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisEA_______00200_00026.mseed">00A46D_S0SeisEA_______00200_00026.mseed</a></td><td>134217728</td><td>2026-09-04 11:53:16.620000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisNA_______00200_00027.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisNA_______00200_00027.mseed">00A46D_S0SeisNA_______00200_00027.mseed</a></td><td>134217728</td><td>2026-09-12 03:07:05.640000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisZA_______00200_00028.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisZA_______00200_00028.mseed">00A46D_S0SeisZA_______00200_00028.mseed</a></td><td>134217728</td><td>2026-09-14 09:11:31.040000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisEA_______00200_00029.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisEA_______00200_00029.mseed">00A46D_S0SeisEA_______00200_00029.mseed</a></td><td>134217728</td><td>2026-09-15 17:24:56.340000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisNA_______00200_00030.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisNA_______00200_00030.mseed">00A46D_S0SeisNA_______00200_00030.mseed</a></td><td>134217728</td><td>2026-09-23 01:48:08.010000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisZA_______00200_00031.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisZA_______00200_00031.mseed">00A46D_S0SeisZA_______00200_00031.mseed</a></td><td>134217728</td><td>2026-09-26 00:45:31.060000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisEA_______00200_00032.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisEA_______00200_00032.mseed">00A46D_S0SeisEA_______00200_00032.mseed</a></td><td>134217728</td><td>2026-09-25 19:26:21.555000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisNA_______00200_00033.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisNA_______00200_00033.mseed">00A46D_S0SeisNA_______00200_00033.mseed</a></td><td>134217728</td><td>2026-10-02 13:38:58.480000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisEA_______00200_00034.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisEA_______00200_00034.mseed">00A46D_S0SeisEA_______00200_00034.mseed</a></td><td>134217728</td><td>2026-10-06 21:43:37.635000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisZA_______00200_00035.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisZA_______00200_00035.mseed">00A46D_S0SeisZA_______00200_00035.mseed</a></td><td>134217728</td><td>2026-10-08 06:19:31.690000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisNA_______00200_00036.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisNA_______00200_00036.mseed">00A46D_S0SeisNA_______00200_00036.mseed</a></td><td>134217728</td><td>2026-10-14 01:48:13.500000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisEA_______00200_00037.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisEA_______00200_00037.mseed">00A46D_S0SeisEA_______00200_00037.mseed</a></td><td>134217728</td><td>2026-10-18 09:25:23.925000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisZA_______00200_00038.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisZA_______00200_00038.mseed">00A46D_S0SeisZA_______00200_00038.mseed</a></td><td>134217728</td><td>2026-10-20 14:04:51.040000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisNA_______00200_00039.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisNA_______00200_00039.mseed">00A46D_S0SeisNA_______00200_00039.mseed</a></td><td>134217728</td><td>2026-10-25 21:09:28.910000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisEA_______00200_00040.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisEA_______00200_00040.mseed">00A46D_S0SeisEA_______00200_00040.mseed</a></td><td>134217728</td><td>2026-10-29 20:36:00.120000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisZA_______00200_00041.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisZA_______00200_00041.mseed">00A46D_S0SeisZA_______00200_00041.mseed</a></td><td>134217728</td><td>2026-11-01 16:01:37.245000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisNA_______00200_00042.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisNA_______00200_00042.mseed">00A46D_S0SeisNA_______00200_00042.mseed</a></td><td>125509632</td><td>2026-11-04 20:03:44.400000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisEA_______00200_00043.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisEA_______00200_00043.mseed">00A46D_S0SeisEA_______00200_00043.mseed</a></td><td>74776576</td><td>2026-11-04 19:59:45.200000000</td></tr>
+<tr><td><input type="checkbox" value="sd/00A46D_S0SeisZA_______00200_00044.mseed" class="multidownload" /></td><td><a href="sd/00A46D_S0SeisZA_______00200_00044.mseed">00A46D_S0SeisZA_______00200_00044.mseed</a></td><td>34918400</td><td>2026-11-04 20:03:05.840000000</td></tr>
+<tr><td><input type="checkbox" value="sd/status.log" class="multidownload" /></td><td><a href="sd/status.log">status.log</a></td><td>25468630</td><td>2026-11-04 20:02:24.000000000</td></tr>
+<tr><td><input type="checkbox" value="sd/system.log" class="multidownload" /></td><td><a href="sd/system.log">system.log</a></td><td>15604</td><td>2026-11-03 10:38:53.000000000</td></tr>
+<tr><td><input type="checkbox" value="sd/init.log" class="multidownload" /></td><td><a href="sd/init.log">init.log</a></td><td>15604</td><td>2026-11-03 10:38:53.000000000</td></tr>
+<tr><td><input type="checkbox" value="sd/Sensor0.xml" class="multidownload" /></td><td><a href="sd/Sensor0.xml">Sensor0.xml</a></td><td>923162</td><td>2026-06-08 12:20:52.000000000</td></tr>
+<tr><td><input type="checkbox" value="sd/table_of_events.bin" class="multidownload" /></td><td><a href="sd/table_of_events.bin">table_of_events.bin</a></td><td>1024</td><td>2017-01-01 03:00:00.000000000</td></tr>
+</tbody>
+</table>
+<button onclick="multidownloadzip();">Download selected files</button> <button onclick="downloadAll();">Download all files</button> <progress value="0" max="0" id="multiDownloadProgress" style="display: none;"></progress> <em id="multiDownloadLabel" style="display: none;"></em><br><div style="color: #AAAAAA; font-style: italic; display: none;" id="refresh_info">Please do not refresh this page until the download process is finished.</div><br>
+</td></tr>
+<tr><td colspan="4"><table border="0px" cellpadding="0" cellspacing="0" width="100%"><tr><td class="big">Auxiliary files</td><td align="right" style="font-size:14px; color:#8080a0; background-color:#e0e0e0"></td></tr></table></td></tr>
+<tr><td colspan="4"><script type="text/javascript">
+$(function() { 
+$("#auxiliary_files").tablesorter();
+});
+</script>
+<table class="tablesorter" id="auxiliary_files">
+<thead>
+<tr><th>Filename</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="CI_TEDT.dataless" title="Dataless SEED file">CI_TEDT.dataless</a></td><td>Dataless SEED file</td></tr>
+<tr><td><a href="fram.log" title="FRAM log file">fram.log</a></td><td>FRAM log file</td></tr>
+<tr><td><a href="Certis.xml" title="Certis StationXML">Certis.xml</a></td><td>Certis StationXML</td></tr>
+<tr><td><a href="calvals.txt" title="SCREAM! calibration values">calvals.txt</a></td><td>SCREAM! calibration values</td></tr>
+<tr><td><a href="polezero.txt" title="SCREAM! zeros, poles and gains">polezero.txt</a></td><td>SCREAM! zeros, poles and gains</td></tr>
+<tr><td><a href="calib.txt" title="Calibration text file">calib.txt</a></td><td>Calibration text file</td></tr>
+<tr><td><a href="seedlink.log" title="SeedLink server log">seedlink.log</a></td><td>Seedlink server log</td></tr>
+</tbody>
+</table>
+</div>
+
+
+</td></TR>
+</TABLE><br>
+
+<script type="text/javascript">
+var xmltimerid = 0;
+function closewindowaction() {if(xmltimerid !=0) clearTimeout(xmltimerid);}
+window.onbeforeunload = closewindowaction;
+var xmlDoc = null;
+var xmlhttp = null;
+function getValue(vname){ if(!xmlDoc) return null; if(!xmlDoc.getElementsByTagName(vname)) return null; return xmlDoc.getElementsByTagName(vname)[0].childNodes[0].nodeValue; }
+function setValue(vname, id){ 
+    var txt=getValue(vname); 
+    var different = (document.getElementById(id).innerHTML != txt);
+    document.getElementById(id).innerHTML=txt; 
+    if (typeof map_id != "undefined") {
+      if (id == map_id) {
+        updateLocationVal(txt); 
+      }
+      if (different && ids_that_reload.indexOf(id) > -1) {
+        window.location.reload(false);
+      }
+    }
+ }
+function parseXML() {
+	if (xmlDoc) {
+		if (xmlDoc.getElementsByTagName("reload_me").length > 0) {
+			if (xmlDoc.getElementsByTagName("reload_me")[0].innerHTML == "true") {
+				var tmp_url = window.location.href;
+				if (tmp_url.indexOf('!') > 0) tmp_url = tmp_url.substring(0, tmp_url.indexOf('!'));
+				if (tmp_url.indexOf('?') > 0) tmp_url = tmp_url.substring(0, tmp_url.indexOf('?'));
+				window.location.href = tmp_url;
+			}
+		}
+		setValue("item_2798", "id_2798");
+		setValue("item_2799", "id_2799");
+		setValue("item_2801", "id_2801");
+		setValue("item_2802", "id_2802");
+		setValue("item_2804", "id_2804");
+		setValue("item_2805", "id_2805");
+		setValue("item_2807", "id_2807");
+		setValue("item_2808", "id_2808");
+		setValue("item_2810", "id_2810");
+		setValue("item_2811", "id_2811");
+	}
+	xmltimerid = setTimeout(importXML, 1000);
+}
+function loadXML()
+{
+   if( xmlhttp.readyState == 0 || xmlhttp.readyState == 4) {
+		xmlDoc = xmlhttp.responseXML;
+       parseXML();
+   }
+}
+function importXML(){
+	if(xmlhttp) {
+		xmlhttp.open("GET", "page8.xml", true);
+		xmlhttp.onreadystatechange = loadXML;
+		xmlhttp.send(null);
+	}
+}
+try { xmlhttp = new XMLHttpRequest(); } catch(e) { alert("No XMLHttp"); }
+importXML();
+</script>
+
+<script type="text/javascript">$(function() {
+	$.getJSON("messages.json", function(result) {
+		$.each(result, function(title, message) {
+			document.title = title;
+			document.getElementById("message_0").innerHTML = message[0];
+			document.getElementById("message_1").innerHTML = message[1];
+		});
+	});
+});</script>
+
+</td></tr>
+<tr><td>
+<div style="font-size: 8pt; color: #AAAAAA; text-align:center; font-weight: normal; padding-top: 12px;">Guralp Systems Limited<br>Midas House, Calleva Park, Aldermaston, Reading, RG7 8EA, UK<br>Tel: +44 118 981 9056, Fax: +44 118 981 9943<br>E-Mail: <a href="mailto:sales@guralp.com" style="color: #AAAAAA;">sales@guralp.com</a>, <a href="mailto:support@guralp.com" style="color: #AAAAAA;">support@guralp.com</a><br><br></div></td></tr></table>
+</body>
+</html>

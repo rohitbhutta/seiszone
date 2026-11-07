@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>FMUS-A46D</title>
+	<link href="default.css" rel="stylesheet" type="text/css">
+	<script src="jquery.min.js" type="text/javascript"></script>
+	<script src="FileSaver.js" type="text/javascript"></script>
+	<script src="jszip-utils.js" type="text/javascript"></script>
+	<script src="jszip.js" type="text/javascript"></script>
+	<script src="jquery.tablesorter.min.js" type="text/javascript"></script>
+</head>
+<body>
+<script type="text/javascript">
+function download_it(what, as) {
+ var uri = new XMLHttpRequest(); 
+ uri.open('GET', "ready", true); 
+ uri.responseType = 'text'; 
+ uri.onreadystatechange = function() { 
+  if (this.readyState === this.DONE) { 
+   if (this.status == 200) { 
+     var link = document.createElement('a');
+     link.href = what;
+     link.download = as;
+     var clickEvent = document.createEvent("MouseEvent");
+     clickEvent.initEvent("click", true, true);
+     link.dispatchEvent(clickEvent);
+   }
+   if (this.status == 987) { 
+     var text = this.response;
+     alert(text); 
+   }
+  }
+ }
+ uri.send();
+};
+function load_a_link(the_id) { 
+  var links = document.getElementById('id_'+the_id).innerHTML.split(";");  for (i=0; i<links.length; ++i) { 
+    var entities = links[i].split(":");    download_it(entities[0], entities[1]);
+  }
+};
+function validateIp(ipaddress) 
+{ 
+ if (/^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(ipaddress)) 
+  { 
+    return (true); 
+  } 
+alert("You have entered an invalid IP address!") 
+return (false); 
+}; 
+</script>
+<table id="body"><tr><td>
+
+<img src="guralp_header.png">
+<h1><i id="message_0"></i>Fortimus</h1>
+<table id="menu"><tr><td><ul>
+	<li id="selected_menu"><a href="index.html" title="System Status">Status</a></li>
+	<li><a href="tab2.html" title="Network Config">Network</a></li>
+	<li><a href="tab3.html" title="Sensor Config">Setup</a></li>
+	<li><a href="tab5.html" title="Earthquake Early Warning Config">Trigger</a></li>
+	<li><a href="tab6.html" title="Stream Config">Data Stream</a></li>
+	<li><a href="tab7.html" title="microSD Config">Data Record</a></li>
+	<li><a href="tab9.html" title="microSD Storage Explorer">Storage</a></li>
+	<li><a href="login.html" title="Login">Login</a></li>
+	<li><a href="http://london.guralp.com/download/documents/FMUS.pdf" target="_blank" title="User Help">Help</a></li>
+</ul></td></tr></table>
+<h2 id="message_1">System type: Fortimus | Host label: Tetar Dam Top | Host name: FMUS-A46D (192.168.2.21) | Serial number: 0A46D</h2>
+
+<TABLE class="config" border=1px>
+<TR><td colspan="4"><table border="0px" cellpadding="0" cellspacing="0" width="100%"><tr><td class="big">System Status</td><td align="right" style="font-size:14px; color:#8080a0; background-color:#e0e0e0"></td></tr></table></td></tr>
+<tr><td class="smallgrad" colspan="4"  style="color: #006EB7;font-style: normal;text-align: center;">General Status</td></tr>
+<tr><td   ><table width=100%><tr><td width=60% class="status">Host name</td><td><div class="" id="id_15" name="Host name">FMUS-A46D</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">Host label</td><td><div class="" id="id_16" name="Host label">Tetar Dam Top</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">System type</td><td><div class="" id="id_17" name="System type">Fortimus</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">Product type</td><td><div class="" id="id_18" name="Product type">Fortimus</div></td></tr></table></td></tr>
+<tr><td   ><table width=100%><tr><td width=60% class="status">Serial number</td><td><div class="" id="id_20" name="Serial number">0A46D</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">Firmware version</td><td><div class="" id="id_21" name="Firmware version">2.1-29184</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">IPv4 address</td><td><div class="" id="id_22" name="IPv4 address">192.168.2.21 (Static)</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">SEED network and station</td><td><div class="" id="id_23" name="SEED network and station">CI.TEDT&lt;br&gt;(Tetar Dam Top CH1050)</div></td></tr></table></td></tr>
+<tr><td   ><table width=100%><tr><td width=60% class="status">Digitiser temperature</td><td><div class="" id="id_25" name="Digitiser temperature">29.019 °C</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">Digitiser humidity</td><td><div class="" id="id_26" name="Digitiser humidity">47.40%</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">Input voltage</td><td><div class="" id="id_27" name="Input voltage">14.000 V</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">Power over Ethernet voltage</td><td><div class="" id="id_28" name="Power over Ethernet voltage">0.021 V</div></td></tr></table></td></tr>
+<tr><td   ><table width=100%><tr><td width=60% class="status">System time</td><td><div class="" id="id_30" name="System time">8:04:26 PM&lt;br&gt;Wed 4-Nov-2026</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">Uptime</td><td><div class="" id="id_31" name="Uptime">149d 7h 52m 25s</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">Restart Status</td><td><div class="" id="id_32" name="Restart Status">Restarts:20 Crashes:11 Power:9</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">ETH status</td><td><div class="" id="id_33" name="ETH status">sckt: 14/60&lt;br&gt;data: 2/6</div></td></tr></table></td></tr>
+<tr><td></td></tr>
+<tr><td class="smallgrad" colspan="4"  style="color: #006EB7;font-style: normal;text-align: center;">GNSS Status</td></tr>
+<tr><td   ><table width=100%><tr><td width=60% class="status">GNSS connection status</td><td><div class="" id="id_38" name="GNSS connection status">Connected</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">Last timestamp</td><td><div class="" id="id_39" name="Last timestamp">2026-11-04 20:04:25</div></td></tr></table></td><td colspan="2" rowspan="6" style="margin: 0px 0px 0px 0px; padding: 0px 0px 0px 0px;">
+<div id="mapdiv" style="top: 0px; bottom: 0px; left: 0px; right:0px; margin: 0px 0px 0px 0px; width: 100%; height: 100%; text-align: center; vertical-align: middle; font-size: 9pt; color: #AAAAAA; padding: 0px 0px 0px 0px;"></div>
+<div id="id_40" style="visibility: hidden; font-size: 1px; width: 0px; height: 0px; margin: 0px 0px 0px 0px; padding: 0px 0px 0px 0px;">85.2879,24.92003</div>
+<script type="text/javascript">
+    var map = null;
+    var map_id = -1;
+    var lastlon = null;
+    var lastlat = null;
+    function updateLocation(lon, lat) {
+     if (document.getElementById("mapdiv") != null && lastlon != lon && lastlat != lat) {
+      lastlon = lon;
+      lastlat = lat;
+      map = document.getElementById("mapdiv");
+      if (window.navigator.onLine) {
+        map.innerHTML = '<iframe id="themap" width="100%" height="100%" frameborder="0" scrolling="no" marginheight="0" marginwidth="0"'
+                      + ' src="https://www.openstreetmap.org/export/embed.html?bbox=' + (lon-0.1) + '%2C' + (lat-0.15) + '%2C' + (lon+0.1) + '%2C' + (lat+0.15)
+                      + '&amp;layer=mapnik&amp;marker=' + (lat) + '%2C' + (lon) + '"'
+                      + ' style="border: 0px solid black; padding: 0px 0px 0px 0px; margin: 0px 0px 0px 0px; width: 100%; height: 100%;"></iframe>';
+      } else {
+        map.innerHTML = '<center><img src="logo.png" alt="logo" /><br>Map preview is not available.<br><i>Offline</i>.</center>';
+      }
+      var testrequest = new XMLHttpRequest();
+      testrequest.timeout=1000; 
+      testrequest.open("GET", "has_internet_connection", true);
+      var testrequesthandler = function() {
+        if (testrequest.readyState == 4 && testrequest.status != 200 && testrequest.status != 0) { 
+          document.getElementById("mapdiv").innerHTML = '<center><img src="logo.png" alt="logo" /><br>Map preview is not available.<br><i>Offline</i>.</center>';
+        }
+      }
+      testrequest.onload = testrequesthandler;
+      testrequest.onerror = testrequesthandler;
+      testrequest.ontimeout = function() {
+        document.getElementById("mapdiv").innerHTML = '<center><img src="logo.png" alt="logo" /><br>Map preview is not available.<br><i>Offline</i>.</center>';
+      }
+      testrequest.send();
+     }
+    }
+    function updateLocationVal(text) {
+     if (map_id != null) {
+      var value = text.split(",");
+      updateLocation(parseFloat(value[0]), parseFloat(value[1]));
+     }
+    }
+    var ids_that_reload = [];
+    function addReloader(id) {
+     if (ids_that_reload.indexOf(id) < 0) {
+      ids_that_reload.push("id_"+id); 
+     }
+    }
+</script>
+<script type="text/javascript">map_id = "id_40"; updateLocation(85.2879,24.92003);</script>
+</td></tr>
+<tr><td   ><table width=100%><tr><td width=60% class="status">Last lock time</td><td><div class="" id="id_42" name="Last lock time">2026-09-17 21:00:08</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">GNSS stability</td><td><div class="" id="id_43" name="GNSS stability">100%</div></td></tr></table></td></tr>
+<tr><td   ><table width=100%><tr><td width=60% class="status">Latitude</td><td><div class="" id="id_45" name="Latitude">24.92003</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">Longitude</td><td><div class="" id="id_46" name="Longitude">85.2879</div></td></tr></table></td></tr>
+<tr><td   ><table width=100%><tr><td width=60% class="status">Altitude</td><td><div class="" id="id_48" name="Altitude">127.4</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">Horizontal dilution of precision</td><td><div class="" id="id_49" name="Horizontal dilution of precision">0.54</div></td></tr></table></td></tr>
+<tr><td   ><table width=100%><tr><td width=60% class="status">GNSS PPS status</td><td><div class="" id="id_51" name="GNSS PPS status">Trusted&lt;br&gt;Pulsing</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">GNSS NMEA stream</td><td><div class="" id="id_52" name="GNSS NMEA stream">Input OK</div></td></tr></table></td></tr>
+<tr><td   ><table width=100%><tr><td width=60% class="status">GNSS Lock state</td><td><div class="" id="id_54" name="GNSS Lock state">3D locked</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">Number of satellites</td><td><div class="" id="id_55" name="Number of satellites">Used: 12&lt;br&gt;In view: 18</div></td></tr></table></td></tr>
+<tr><td class="smallgrad" colspan="4"  style="color: #006EB7;font-style: normal;text-align: center;">Data Record Status</td></tr>
+<tr><td   ><table width=100%><tr><td width=60% class="status">microSD status</td><td><div class="" id="id_75" name="microSD status">Recording</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">microSD total</td><td><div class="" id="id_76" name="microSD total">60424192&#xA0;KiB</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">microSD used</td><td><div class="" id="id_77" name="microSD used">5244436&#xA0;KiB</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">microSD free</td><td><div class="" id="id_78" name="microSD free">91%</div></td></tr></table></td></tr>
+<tr><td class="smallgrad" colspan="4"  style="color: #006EB7;font-style: normal;text-align: center;">Sensors Status</td></tr>
+<tr><td   ><table width=100%><tr><td width=60% class="status">Number of sensors detected</td><td><div class="" id="id_82" name="Number of sensors detected">1</div></td></tr></table></td><td></td><td></td><td></td></tr>
+<tr><td class="small"  style="font-style: normal;text-align: left;"><center>Sensor0</center></td><td   ><table width=100%><tr><td width=60% class="status">Serial number (0)</td><td><div class="" id="id_88" name="Serial number (0)"></div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">Firmware ver (0)</td><td><div class="" id="id_89" name="Firmware ver (0)">0.3-0</div></td></tr></table></td><td></td></tr>
+<tr><td></td><td   ><table width=100%><tr><td width=60% class="status">Seismometer Z (0)</td><td><div class="" id="id_93" name="Seismometer Z (0)">80435</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">Seismometer N (0)</td><td><div class="" id="id_94" name="Seismometer N (0)">-60485</div></td></tr></table></td><td   ><table width=100%><tr><td width=60% class="status">Seismometer E (0)</td><td><div class="" id="id_95" name="Seismometer E (0)">38502</div></td></tr></table></td></tr>
+<tr></TR>
+</TABLE><br>
+
+<script type="text/javascript">
+var xmltimerid = 0;
+function closewindowaction() {if(xmltimerid !=0) clearTimeout(xmltimerid);}
+window.onbeforeunload = closewindowaction;
+var xmlDoc = null;
+var xmlhttp = null;
+function getValue(vname){ if(!xmlDoc) return null; if(!xmlDoc.getElementsByTagName(vname)) return null; return xmlDoc.getElementsByTagName(vname)[0].childNodes[0].nodeValue; }
+function setValue(vname, id){ 
+    var txt=getValue(vname); 
+    var different = (document.getElementById(id).innerHTML != txt);
+    document.getElementById(id).innerHTML=txt; 
+    if (typeof map_id != "undefined") {
+      if (id == map_id) {
+        updateLocationVal(txt); 
+      }
+      if (different && ids_that_reload.indexOf(id) > -1) {
+        window.location.reload(false);
+      }
+    }
+ }
+function parseXML() {
+	if (xmlDoc) {
+		if (xmlDoc.getElementsByTagName("reload_me").length > 0) {
+			if (xmlDoc.getElementsByTagName("reload_me")[0].innerHTML == "true") {
+				var tmp_url = window.location.href;
+				if (tmp_url.indexOf('!') > 0) tmp_url = tmp_url.substring(0, tmp_url.indexOf('!'));
+				if (tmp_url.indexOf('?') > 0) tmp_url = tmp_url.substring(0, tmp_url.indexOf('?'));
+				window.location.href = tmp_url;
+			}
+		}
+		setValue("item_15", "id_15");
+		setValue("item_16", "id_16");
+		setValue("item_17", "id_17");
+		setValue("item_18", "id_18");
+		setValue("item_20", "id_20");
+		setValue("item_21", "id_21");
+		setValue("item_22", "id_22");
+		setValue("item_23", "id_23");
+		setValue("item_25", "id_25");
+		setValue("item_26", "id_26");
+		setValue("item_27", "id_27");
+		setValue("item_28", "id_28");
+		setValue("item_30", "id_30");
+		setValue("item_31", "id_31");
+		setValue("item_32", "id_32");
+		setValue("item_33", "id_33");
+		setValue("item_38", "id_38");
+		setValue("item_39", "id_39");
+		setValue("item_40", "id_40");
+		setValue("item_42", "id_42");
+		setValue("item_43", "id_43");
+		setValue("item_45", "id_45");
+		setValue("item_46", "id_46");
+		setValue("item_48", "id_48");
+		setValue("item_49", "id_49");
+		setValue("item_51", "id_51");
+		setValue("item_52", "id_52");
+		setValue("item_54", "id_54");
+		setValue("item_55", "id_55");
+		setValue("item_75", "id_75");
+		setValue("item_76", "id_76");
+		setValue("item_77", "id_77");
+		setValue("item_78", "id_78");
+		setValue("item_82", "id_82");
+		setValue("item_88", "id_88");
+		setValue("item_89", "id_89");
+		setValue("item_93", "id_93");
+		setValue("item_94", "id_94");
+		setValue("item_95", "id_95");
+	}
+	xmltimerid = setTimeout(importXML, 1000);
+}
+function loadXML()
+{
+   if( xmlhttp.readyState == 0 || xmlhttp.readyState == 4) {
+		xmlDoc = xmlhttp.responseXML;
+       parseXML();
+   }
+}
+function importXML(){
+	if(xmlhttp) {
+		xmlhttp.open("GET", "page0.xml", true);
+		xmlhttp.onreadystatechange = loadXML;
+		xmlhttp.send(null);
+	}
+}
+try { xmlhttp = new XMLHttpRequest(); } catch(e) { alert("No XMLHttp"); }
+importXML();
+</script>
+
+<script type="text/javascript">$(function() {
+	$.getJSON("messages.json", function(result) {
+		$.each(result, function(title, message) {
+			document.title = title;
+			document.getElementById("message_0").innerHTML = message[0];
+			document.getElementById("message_1").innerHTML = message[1];
+		});
+	});
+});</script>
+
+</td></tr>
+<tr><td>
+<div style="font-size: 8pt; color: #AAAAAA; text-align:center; font-weight: normal; padding-top: 12px;">Guralp Systems Limited<br>Midas House, Calleva Park, Aldermaston, Reading, RG7 8EA, UK<br>Tel: +44 118 981 9056, Fax: +44 118 981 9943<br>E-Mail: <a href="mailto:sales@guralp.com" style="color: #AAAAAA;">sales@guralp.com</a>, <a href="mailto:support@guralp.com" style="color: #AAAAAA;">support@guralp.com</a><br><br></div></td></tr></table>
+</body>
+</html>
