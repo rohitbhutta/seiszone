@@ -131,7 +131,11 @@ class SourcesPanel(QWidget):
         head = self.tree.header()
         head.setStretchLastSection(True)
         head.setSectionResizeMode(QHeaderView.Interactive)
-        for col, width in ((C_NAME, 190), (C_ADDR, 150), (C_KIND, 80), (C_STATE, 110), (C_PACK, 70)):
+        # what matters most (is it receiving?) first, so it is visible in a narrow dock; the
+        # logical column numbers stay, only the order on screen changes
+        for pos, col in enumerate((C_NAME, C_STATE, C_PACK, C_LAST, C_ADDR, C_KIND)):
+            head.moveSection(head.visualIndex(col), pos)
+        for col, width in ((C_NAME, 188), (C_STATE, 86), (C_PACK, 56), (C_LAST, 78), (C_ADDR, 120)):
             self.tree.setColumnWidth(col, width)
 
         top = QHBoxLayout()
@@ -324,7 +328,7 @@ class SourcesPanel(QWidget):
             if new:
                 item = QTreeWidgetItem()
                 item.setData(0, KEY_ROLE, row["key"])
-                item.setTextAlignment(C_PACK, int(Qt.AlignRight | Qt.AlignVCenter))
+                item.setTextAlignment(C_PACK, Qt.AlignRight | Qt.AlignVCenter)
                 if row.get("fixed"):
                     f = QFont(item.font(0))
                     f.setBold(True)

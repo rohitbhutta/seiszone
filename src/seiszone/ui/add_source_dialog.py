@@ -425,6 +425,18 @@ class AddSourceDialog(QDialog):
             return
         chans, bare = self.chosen()
         self.add_button.setEnabled(bool(chans or bare))
+        self._update_station_counts()
+
+    def _update_station_counts(self):
+        """'3 of 4 ticked' on each station row: the partly-ticked box alone is easy to miss."""
+        root = self.channels.invisibleRootItem()
+        self.channels.blockSignals(True)
+        for i in range(root.childCount()):
+            top = root.child(i)
+            if top.childCount():
+                n = sum(top.child(k).checkState(0) == Qt.Checked for k in range(top.childCount()))
+                top.setText(3, f"{n} of {top.childCount()} ticked")
+        self.channels.blockSignals(False)
 
     # ------------------------------------------------------------------------------------
     # adding

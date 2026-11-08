@@ -15,7 +15,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QComboBox, QDialog, QFileDialog, QFormLayout,
                                QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget,
-                               QListWidgetItem, QMessageBox, QPushButton, QRadioButton, QTreeWidget,
+                               QListWidgetItem, QMessageBox, QPushButton, QRadioButton, QSizePolicy, QTreeWidget,
                                QTreeWidgetItem, QVBoxLayout)
 
 from .. import paths
@@ -74,7 +74,7 @@ class RecordDialog(QDialog):
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.header().setSectionResizeMode(QHeaderView.Interactive)
         self.table.header().setStretchLastSection(True)
-        for col, w in enumerate((150, 90, 140, 130, 50, 80, 110, 220)):
+        for col, w in enumerate((150, 90, 130, 110, 45, 70, 90, 180)):
             self.table.setColumnWidth(col, w)
         self.table.currentItemChanged.connect(lambda *_: self._update_buttons())
         self.table.itemDoubleClicked.connect(lambda *_: self.open_selected_folder())
@@ -86,7 +86,8 @@ class RecordDialog(QDialog):
         self.open_button = QPushButton("Open folder")
         self.open_button.clicked.connect(self.open_selected_folder)
         buttons = QHBoxLayout()
-        buttons.addWidget(self.empty, 1)
+        buttons.addWidget(self.empty)
+        buttons.addStretch(1)     # keeps the buttons small also when the "no recordings" text is hidden
         buttons.addWidget(self.open_button)
         buttons.addWidget(self.stop_button)
         box = QGroupBox("Recordings")
@@ -149,8 +150,10 @@ class RecordDialog(QDialog):
         for key, text in LAYOUTS:
             self.layout_box.addItem(text, key)
         self.layout_box.setCurrentIndex(max(0, self.layout_box.findData(rec.get("layout") or "channel")))
+        self.layout_box.currentIndexChanged.connect(lambda *_: self._update_hint())
         self.disk = QLabel()
         self.disk.setWordWrap(True)
+        self.disk.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.message = QLabel()
         self.message.setWordWrap(True)
         self.start_button = QPushButton(theme.icon("record"), "Start recording")
@@ -171,11 +174,12 @@ class RecordDialog(QDialog):
         form.addRow("", self.channel_list)
         form.addRow("File length", self.minutes)
         form.addRow("Files", self.layout_box)
-        hint = QLabel("Files are named NET.STA/YYYY-MM-DD/NET.STA.LOC.CHA__<start>.mseed, aligned to the clock "
-                      "(UTC). SeisZone never deletes recordings.")
-        hint.setWordWrap(True)
-        hint.setStyleSheet(f"color: {c['muted']};")
-        form.addRow("", hint)
+        self.hint = QLabel()
+        self.hint.setWordWrap(True)
+        self.hint.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.hint.setStyleSheet(f"color: {c['muted']};")
+        form.addRow("", self.hint)
+        self._update_hint()
 
         bottom = QHBoxLayout()
         bottom.addWidget(self.message, 1)
@@ -282,6 +286,11 @@ class RecordDialog(QDialog):
     def ticked(self):
         return [self.channel_list.item(i).data(ID_ROLE) for i in range(self.channel_list.count())
                 if self.channel_list.item(i).checkState() == Qt.Checked]
+
+    def _update_hint(self):
+        name = "NET.STA.LOC.CHA" if self.layout_box.currentData() == "channel" else "NET.STA"
+        self.hint.setText(f"Files are named NET.STA\\YYYY-MM-DD\\{name}__<start>.mseed, a new file every "
+                          "file length, aligned to the clock (UTC). SeisZone never deletes recordings.")
 
     def _update_channel_list(self):
         chosen = self.chosen_radio.isChecked()

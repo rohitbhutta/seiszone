@@ -3,12 +3,12 @@
 SeisZone is **our own** Windows application for live seismic data: connect instruments by
 **IP address + port only**, see every channel live, record continuously to miniSEED, export
 time windows, and share all data again over SeedLink. It replaces the old three-part setup
-(a third-party viewer + the `gecko-omega-addon` service + the Record bar) with one program.
+(a third-party viewer + our earlier Gecko add-on service + its Record bar) with one program.
 
 It is written from scratch on open standards only — SeedLink 3, Güralp GCF / Scream UDP
 protocol, Kelunji Gecko telemetry framing, miniSEED 2, FDSN StationXML. No code, name, look or
 file of any third-party viewer is used. The tested engine parts of our own earlier projects
-(`gecko-omega-addon`, which already contains `gecko-seedlink-bridge` and `omega-record-addon`)
+(the earlier Gecko add-on project, which already contains `gecko-seedlink-bridge` and the old record add-on)
 are carried over and cleaned up.
 
 ## 1. Goals (what the user asked for)
@@ -28,7 +28,7 @@ are carried over and cleaned up.
 | G11 | StationXML per station; show counts or physical units | `core/stationxml.py` |
 | G12 | Logs, tray icon, start with Windows, one installer | `ui/app.py`, `installer/` |
 
-Standing rules: never use the name "Kellith"; recording is user-controlled and data is never
+Standing rules: never use the name of the user's separate business or of the third-party viewer; recording is user-controlled and data is never
 deleted (low disk space only warns); the program runs as the normal user (no admin) — only the
 installer needs admin (firewall rules); the user runs installers themselves.
 
@@ -171,7 +171,7 @@ TCP: BTP/raw stream with acknowledgements. Each data block -> 512-byte Steim2 re
 `gcf.default_seed_name`), duplicates dropped, then `Link.feed`. Status blocks logged.
 
 ### 5.9 Probe — `core/probe.py`
-Port of `gecko-omega-addon/src/instrument_probe.py` (read-only detection: SeedLink HELLO/INFO,
+Port of `instrument_probe.py` of the earlier Gecko add-on project (read-only detection: SeedLink HELLO/INFO,
 GCF UDP/TCP sample, Güralp web page status/data-stream/StationXML), without any third-party
 viewer names. Adds `Instrument.to_source(selected=None) -> dict` (a valid config source:
 seedlink -> `stations` with selectors from `selectors_for`; gcf -> `gcf` net/sta/desc/map),

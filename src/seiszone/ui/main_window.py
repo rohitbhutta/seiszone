@@ -473,7 +473,7 @@ class MainWindow(QMainWindow):
             log.warning("saved window layout ignored (damaged)")
         if not restored:
             self.resize(1600, 950)
-            self.resizeDocks([self.sources_dock], [400], Qt.Horizontal)
+            self.resizeDocks([self.sources_dock], [430], Qt.Horizontal)
             self.resizeDocks([self.channels_dock], [270], Qt.Vertical)
 
     def save_layout(self):

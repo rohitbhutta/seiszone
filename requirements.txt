@@ -1,0 +1,5 @@
+# SeisZone program (Python 3.14). Tested with the versions given as minimum.
+PySide6>=6.12
+pyqtgraph>=0.14
+numpy>=2.5
+scipy>=1.18

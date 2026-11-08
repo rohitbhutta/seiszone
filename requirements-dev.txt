@@ -1,0 +1,8 @@
+# Tests and build only - none of these are part of the program.
+-r requirements.txt
+pytest>=9.1
+pyinstaller>=6.22
+# tools/make_icon.py packs the icon sizes into assets/seiszone.ico
+pillow>=12.3
+# the tests cross-check SeisZone's miniSEED files with ObsPy (never bundled into SeisZone.exe)
+obspy>=1.5

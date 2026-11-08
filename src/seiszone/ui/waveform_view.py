@@ -1,14 +1,16 @@
 """WaveformView: the live multi-channel seismogram display.
 
-One pyqtgraph PlotItem per channel, stacked vertically, X axes linked, UTC time axis under the
-bottom plot, a caption per trace (channel, site, min/max of what is visible). Above the plots a
+One plot row per channel, stacked vertically, X axes linked, UTC time axis under the
+bottom row, a caption per trace (channel, site, min/max of what is visible). Above the plots a
 bar with window length, filter, units, scale, mean removal and Live/Pause.
 
 Speed is the main design constraint (12 channels x 200 sps x 60-minute windows, redrawn four
 times a second on an ordinary office PC):
 
-  * plots are built only when the channel list changes; a refresh only calls setData on the
-    existing curves;
+  * plots are built only when the channel list changes, and from light parts (a ViewBox, a
+    left and a bottom axis in one shared grid layout) instead of pyqtgraph's PlotItem, which
+    costs ~40 ms each (context menu, four axes, a layout pass per plot): twelve channels appear
+    in well under half a second; a refresh only calls setData on the existing curves;
   * only the visible time range is read from the hub, and it is reduced with min/max decimation
     (dsp.envelope) to about two points per screen pixel - no peak is ever lost on screen;
   * a trace is recomputed only when the view moved by at least one pixel (in a 60-minute window
@@ -29,8 +31,8 @@ import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QDoubleValidator, QFont
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QStackedWidget,
-                               QToolButton, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QGraphicsGridLayout, QGraphicsWidget, QHBoxLayout,
+                               QLabel, QLineEdit, QStackedWidget, QToolButton, QVBoxLayout, QWidget)
 
 from ..core import dsp
 from . import theme
@@ -47,6 +49,7 @@ PAUSED_RELOAD = 2.0     # re-read a trace at least this often (backfilled data, 
 SENS_TTL = 30.0         # seconds a looked-up StationXML sensitivity is trusted (files may be added)
 AXIS_WIDTH = 66         # left axis width: the same on every plot so the traces line up
 TIME_AXIS_HEIGHT = 26   # the time axis under the bottom plot
+ROW_GAP = 4             # space between two plots (the hidden bottom axis of the upper one)
 UNIT_NAMES = {"M/S": "m/s", "M/S**2": "m/s²", "M/S2": "m/s²", "M/SEC": "m/s", "M": "m", "PA": "Pa",
               "V": "V", "COUNTS": "counts"}
 
@@ -96,14 +99,18 @@ class _TraceLabel(pg.LabelItem):
 
 
 class _Trace:
-    """One channel on screen and what was last computed for it."""
+    """One channel on screen - its plot parts and what was last computed for it."""
 
-    __slots__ = ("sid", "plot", "curve", "label", "t0", "t1", "version", "computed", "lo", "hi", "yrange",
-                 "text", "units", "has_sens")
+    __slots__ = ("sid", "vb", "left", "bottom", "curve", "label", "t0", "t1", "version", "computed", "lo", "hi",
+                 "yrange", "text", "units", "has_sens")
 
-    def __init__(self, plot, curve, label):
-        self.plot, self.curve, self.label = plot, curve, label
+    def __init__(self, vb, left, bottom, curve, label):
+        self.vb, self.left, self.bottom, self.curve, self.label = vb, left, bottom, curve, label
         self.reset(None)
+
+    def items(self):
+        """The layout items of this row."""
+        return self.left, self.vb, self.bottom
 
     def reset(self, sid):
         """Show another channel in this plot: forget everything computed for the old one."""
@@ -147,6 +154,7 @@ class WaveformView(QWidget):
         self._emitted = None
         self._sens = {}            # sid -> (looked up at, (value, units) | None)
         self._built = False
+        self._colors = {}          # the theme colours last applied
 
         pg.setConfigOptions(antialias=False, background=theme.COLORS["plot_bg"],
                             foreground=theme.COLORS["text"])
@@ -160,9 +168,12 @@ class WaveformView(QWidget):
         self.stack = QStackedWidget()
         self.empty = QLabel("No channels shown.\nTick channels in the Channels table to see them here.")
         self.empty.setAlignment(Qt.AlignCenter)
-        self.glw = pg.GraphicsLayoutWidget()
-        self.glw.ci.setContentsMargins(2, 6, 10, 2)
-        self.glw.ci.setSpacing(4)
+        self.glw = pg.GraphicsView()
+        root = QGraphicsWidget()
+        self.grid = QGraphicsGridLayout(root)
+        self.grid.setContentsMargins(2, 6, 10, 2)
+        self.grid.setSpacing(0)
+        self.glw.setCentralItem(root)
         self.glw.installEventFilter(self)
         self.glw.scene().sigMouseClicked.connect(self._on_click)
         self.stack.addWidget(self.empty)
@@ -245,60 +256,78 @@ class WaveformView(QWidget):
         return bar
 
     def _rebuild(self):
-        """Plots for the current channel list (called only when that list changes). Existing
-        plots are reused for the new channels - creating a pyqtgraph PlotItem is the slow part
-        (~30 ms each) - and only the difference in number is added or removed at the end."""
+        """Plot rows for the current channel list (called only when that list changes).
+        Existing rows are reused for the new channels and only the difference in number is
+        added or removed at the end. Trace i uses grid rows 2i (left axis, ViewBox) and 2i+1
+        (its time axis: with values under the last trace only, a thin gap under the others -
+        where it still draws the vertical grid lines)."""
         n = len(self._sids)
         while len(self._traces) > n:
-            self.glw.removeItem(self._traces.pop().plot)
+            for item in self._traces.pop().items():
+                self.grid.removeItem(item)
+                self.glw.scene().removeItem(item)
         while len(self._traces) < n:
             self._traces.append(self._new_trace(len(self._traces)))
         for i, (tr, sid) in enumerate(zip(self._traces, self._sids)):
             if tr.sid != sid:
                 tr.reset(sid)
-            bottom = tr.plot.getAxis("bottom")
             last = i == n - 1
-            bottom.setStyle(showValues=last, tickLength=5 if last else 0)
-            bottom.setHeight(TIME_AXIS_HEIGHT if last else 0)
+            tr.bottom.setStyle(showValues=last, tickLength=5 if last else 0)
+            tr.bottom.setHeight(TIME_AXIS_HEIGHT if last else ROW_GAP)
         self.stack.setCurrentWidget(self.glw if self._traces else self.empty)
         self._color_traces()
         self._fit_rows()
+        self.grid.activate()   # geometry now, not at the next event: the decimation needs the width
 
     def _new_trace(self, row):
-        plot = self.glw.addPlot(row=row, col=0, viewBox=pg.ViewBox(enableMenu=False),
-                                axisItems={"bottom": pg.DateAxisItem(utcOffset=0)})
-        plot.setMenuEnabled(False)
-        plot.hideButtons()
-        plot.showGrid(x=True, y=False, alpha=0.5)
-        vb = plot.getViewBox()
+        vb = pg.ViewBox(enableMenu=False)
         vb.setMouseEnabled(x=True, y=False)
         vb.disableAutoRange()
         vb.sigRangeChangedManually.connect(self._on_user_range)
-        plot.getAxis("left").setWidth(AXIS_WIDTH)
-        plot.getAxis("left").setStyle(tickFont=self._font, tickTextOffset=4)
-        plot.getAxis("bottom").setStyle(tickFont=self._font, tickTextOffset=3)
+        left = pg.AxisItem("left")
+        left.setWidth(AXIS_WIDTH)
+        left.setStyle(tickFont=self._font, tickTextOffset=4)
+        bottom = pg.DateAxisItem("bottom", utcOffset=0)
+        bottom.setStyle(tickFont=self._font, tickTextOffset=3)
+        bottom.setGrid(128)
+        for axis in (left, bottom):
+            axis.enableAutoSIPrefix(False)   # else every range change re-renders an unused HTML label
+            axis.linkToView(vb)
         if row == 0:   # the first plot holds the X range; the others follow it
             vb.sigXRangeChanged.connect(self._on_xrange)
         else:
-            plot.setXLink(self._traces[0].plot)
-        curve = plot.plot([], [], connect="finite")
-        return _Trace(plot, curve, _TraceLabel(vb))
+            vb.setXLink(self._traces[0].vb)
+        curve = pg.PlotDataItem([], [], connect="finite")
+        vb.addItem(curve)
+        self.grid.addItem(left, 2 * row, 0)
+        self.grid.addItem(vb, 2 * row, 1)
+        self.grid.addItem(bottom, 2 * row + 1, 1)
+        return _Trace(vb, left, bottom, curve, _TraceLabel(vb))
 
-    def _fit_rows(self):
-        """Equal data heights for every trace: the bottom row gets the time axis on top of that."""
+    def _fit_rows(self, height=None):
+        """Equal data heights for every trace; the time axis and the gaps keep their fixed height.
+        `height` is the new viewport height during a resize (the viewport itself is resized
+        only after the event filter has seen the event)."""
         n = len(self._traces)
         if not n:
             return
-        lay = self.glw.ci.layout
+        lay = self.grid
         _l, top, _r, bottom = lay.getContentsMargins()
-        avail = self.glw.viewport().height() - top - bottom - lay.verticalSpacing() * (n - 1)
-        each = max(24.0, (avail - TIME_AXIS_HEIGHT) / n)
-        for i in range(max(n, lay.rowCount())):   # rows of removed plots give their height back
-            lay.setRowFixedHeight(i, 0 if i >= n else each + (TIME_AXIS_HEIGHT if i == n - 1 else 0))
+        avail = (self.glw.viewport().height() if height is None else height) - top - bottom
+        each = max(24.0, (avail - TIME_AXIS_HEIGHT - ROW_GAP * (n - 1)) / n)
+        for i in range(max(2 * n, lay.rowCount())):   # rows of removed plots give their height back
+            if i >= 2 * n:
+                h = 0
+            elif i % 2 == 0:
+                h = each
+            else:
+                h = TIME_AXIS_HEIGHT if i == 2 * n - 1 else ROW_GAP
+            lay.setRowFixedHeight(i, h)
 
     def _apply_colors(self):
         """Colours from the current theme (called again when the application palette changes)."""
         c = theme.COLORS
+        self._colors = dict(c)
         self.glw.setBackground(c["plot_bg"])
         self.empty.setStyleSheet(f"color: {c['muted']}; font-size: 11pt; background: {c['plot_bg']};")
         self.findChild(QFrame, "waveformBar").setStyleSheet(
@@ -308,34 +337,38 @@ class WaveformView(QWidget):
         self._color_traces()
 
     def _color_traces(self):
+        """Pens and caption colours by trace position (also after a reorder). The data stay."""
         c = theme.COLORS
         bg = QColor(c["plot_bg"])
         bg.setAlpha(200)
         for i, tr in enumerate(self._traces):
             tr.curve.setPen(pg.mkPen(theme.trace_color(i), width=1))
-            for name in ("left", "bottom"):
-                ax = tr.plot.getAxis(name)
+            for ax in (tr.left, tr.bottom):
                 ax.setPen(pg.mkPen(c["border"]))
                 ax.setTextPen(pg.mkPen(c["muted"]))
-            tr.plot.getViewBox().setBorder(pg.mkPen(c["grid"]))
+            tr.vb.setBorder(pg.mkPen(c["grid"]))
             tr.label.bg = bg
-            tr.text = None
             tr.label.update()
-        self._version += 1
+            if tr.t0 is not None:
+                self._update_label(tr)
 
     # ------------------------------------------------------------------------------------
     # public contract
     # ------------------------------------------------------------------------------------
     def set_channels(self, sids):
-        """Show these channels (in this order). Plots are rebuilt only if the list changed."""
+        """Show these channels (in this order). Plots are rebuilt only if the list changed; the
+        time spent building counts against the recompute budget, so the call stays short and
+        the traces the budget did not cover follow within the next refreshes."""
         sids = list(dict.fromkeys(s for s in sids if isinstance(s, str) and s))
         if sids == self._sids:
             return
+        started = time.perf_counter()
         t0, t1 = self.visible_range()
         self._sids = sids
         self._rebuild()
         self._set_range(*(self._live_range() if self._live else (t0, t1)))
-        self._reload_now()
+        if self._traces:
+            self._update_traces(urgent=True, started=started)
 
     def channels(self):
         return list(self._sids)
@@ -346,12 +379,12 @@ class WaveformView(QWidget):
             return
         if self._live:
             self._set_range(*self._live_range())
-        self._update_traces(force=False)
+        self._update_traces(urgent=False)
 
     def visible_range(self):
         """(t0, t1) epoch seconds of the time range on screen."""
         if self._traces:
-            x0, x1 = self._traces[0].plot.getViewBox().viewRange()[0]
+            x0, x1 = self._traces[0].vb.viewRange()[0]
             return float(x0), float(x1)
         return self._range or self._live_range()
 
@@ -457,7 +490,7 @@ class WaveformView(QWidget):
         else:
             self._setting_range = True
             try:
-                self._traces[0].plot.setXRange(t0, t1, padding=0)
+                self._traces[0].vb.setXRange(t0, t1, padding=0)
             finally:
                 self._setting_range = False
         self._range_moved()
@@ -493,37 +526,39 @@ class WaveformView(QWidget):
         return self.isVisible() and not (win is not None and win.isMinimized())
 
     def _plot_width(self):
-        w = self._traces[0].plot.getViewBox().width() if self._traces else 0
+        w = self._traces[0].vb.width() if self._traces else 0
         return max(200.0, float(w) or 1000.0)
 
     # ------------------------------------------------------------------------------------
     # computing the traces
     # ------------------------------------------------------------------------------------
     def _reload_now(self):
+        """Recompute what a change made stale, now and with the larger budget."""
         if self._traces:
-            self._update_traces(force=True)
+            self._update_traces(urgent=True)
 
     def _stale(self, tr, t0, t1, px, now):
+        """Settings changed, the view moved by a pixel or more, or the data are getting old."""
         if tr.version != self._version or tr.t0 is None:
             return True
         if abs(t1 - tr.t1) >= px or abs(t0 - tr.t0) >= px:
             return True
         return now - tr.computed >= PAUSED_RELOAD
 
-    def _update_traces(self, force):
+    def _update_traces(self, urgent, started=None):
         t0, t1 = self.visible_range()
         if t1 <= t0:
             return
         width = self._plot_width()
         px = (t1 - t0) / width
         now = time.monotonic()
-        deadline = time.perf_counter() + (FORCED_BUDGET if force else BUDGET)
+        deadline = (started or time.perf_counter()) + (FORCED_BUDGET if urgent else BUDGET)
         n = len(self._traces)
         done = 0
         for k in range(n):
             i = (self._rr + k) % n
             tr = self._traces[i]
-            if not force and not self._stale(tr, t0, t1, px, now):
+            if not self._stale(tr, t0, t1, px, now):
                 continue
             if done and time.perf_counter() > deadline:
                 self._rr = i   # the next refresh continues here (those traces are still stale)
@@ -641,7 +676,7 @@ class WaveformView(QWidget):
                 lo, hi = lo - d, hi + d
             if (lo, hi) != tr.yrange:
                 tr.yrange = (lo, hi)
-                tr.plot.setYRange(lo, hi, padding=0 if mode == "fixed" else 0.06)
+                tr.vb.setYRange(lo, hi, padding=0 if mode == "fixed" else 0.06)
 
     def _update_note(self):
         if self._units != "physical":
@@ -663,15 +698,16 @@ class WaveformView(QWidget):
     # ------------------------------------------------------------------------------------
     def eventFilter(self, obj, ev):
         if obj is self.glw and ev.type() == QEvent.Resize:
-            self._fit_rows()
+            self._fit_rows(ev.size().height() - 2 * self.glw.frameWidth())
             self._version += 1   # more / fewer pixels: decimate again
         return super().eventFilter(obj, ev)
 
     def changeEvent(self, ev):
         super().changeEvent(ev)
-        if self._built and ev.type() in (QEvent.PaletteChange, QEvent.ApplicationPaletteChange):
+        # Qt also sends palette events when a child is first shown: recolour only on a theme change
+        if (self._built and ev.type() in (QEvent.PaletteChange, QEvent.ApplicationPaletteChange)
+                and theme.COLORS != self._colors):
             self._apply_colors()
-            self._reload_now()
 
     def showEvent(self, ev):
         super().showEvent(ev)

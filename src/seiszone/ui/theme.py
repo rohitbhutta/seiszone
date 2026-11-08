@@ -14,8 +14,8 @@ import os
 import sys
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import (QBrush, QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette,
-                           QPen, QPixmap)
+from PySide6.QtGui import (QBrush, QColor, QFont, QIcon, QLinearGradient, QPainter, QPainterPath,
+                           QPalette, QPen, QPixmap)
 
 DARK = {
     "bg": "#0f1720", "panel": "#16212c", "panel2": "#1c2a37", "border": "#2a3b4c",
@@ -84,6 +84,15 @@ QTabBar::tab:selected {{ background: {c['panel']}; border-bottom: 2px solid {c['
 QProgressBar {{ border: 1px solid {c['border']}; border-radius: 4px; text-align: center; }}
 QProgressBar::chunk {{ background: {c['accent']}; }}
 QToolTip {{ background: {c['panel2']}; color: {c['text']}; border: 1px solid {c['border']}; }}
+QTableView::indicator, QTreeView::indicator, QListView::indicator, QCheckBox::indicator {{
+    width: 12px; height: 12px; border: 1px solid {c['muted']}; border-radius: 2px;
+    background: {c['plot_bg']}; }}
+QTableView::indicator:checked, QTreeView::indicator:checked, QListView::indicator:checked,
+QCheckBox::indicator:checked {{ background: {c['accent']}; border-color: {c['accent']}; }}
+QTreeView::indicator:indeterminate, QCheckBox::indicator:indeterminate {{ border-color: {c['accent']};
+    background: qlineargradient(x1:0, y1:1, x2:1, y2:0, stop:0 {c['accent']}, stop:0.5 {c['accent']},
+    stop:0.51 {c['plot_bg']}, stop:1 {c['plot_bg']}); }}
+QCheckBox::indicator:disabled {{ border-color: {c['border']}; }}
 """
 
 
@@ -94,6 +103,8 @@ def apply(app, mode="dark"):
     COLORS.update(LIGHT if MODE == "light" else DARK)
     c = COLORS
     app.setStyle("Fusion")
+    if sys.platform == "win32":  # the Windows UI font by name: platforms without a font list
+        app.setFont(QFont("Segoe UI", 9))  # (offscreen screenshots) would pick any font otherwise
     pal = QPalette()
     for role, key in ((QPalette.Window, "bg"), (QPalette.Base, "panel"), (QPalette.AlternateBase, "panel2"),
                       (QPalette.Button, "panel2"), (QPalette.WindowText, "text"), (QPalette.Text, "text"),

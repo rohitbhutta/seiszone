@@ -11,17 +11,18 @@ config.json (written atomically; a damaged file is kept as config.json.bad and d
      "gcf": {"net": "WB", "sta": "KUM", "desc": "KUMARI", "map": {"ACCZ0": ["0J", "HNZ"]}},  # gcf-*
      "details": {...what the instrument probe found: hostname, serial, firmware, lat, lon...}}
   ],
-  "gecko":   {"enabled": true, "ports": [58772], "rename": {}},   # Kelunji Gecko links connect IN
+  "gecko":   {"enabled": true, "bind": "0.0.0.0", "ports": [58772], "rename": {}},   # Kelunji Gecko links connect IN
   "seedlink_server": {"enabled": true, "bind": "0.0.0.0", "port": 18010, "organization": "SeisZone"},
   "recording": {"folder": "<Documents>\\SeisZone\\Recordings", "file_minutes": 60, "layout": "channel"},
   "buffer_minutes": 60,                          # live data kept in memory per channel
   "view": {"window_seconds": 300, "filter": "none", "units": "counts", "scale": "auto",
            "channels": [], "demean": true},
-  "ui": {"minimize_to_tray": true, "start_minimized": false, "start_with_windows": false,
-         "geometry": "", "state": ""}
+  "ui": {"theme": "dark" | "light", "minimize_to_tray": true, "start_minimized": false,
+         "start_with_windows": false, "geometry": "", "state": ""}
 }
 
 Selectors are SeedLink selectors ("0JHN?", "HHZ", "00BH?"); [] means every channel.
+A seedlink source with "stations": [] uses uni-station mode with its top-level "selectors" list.
 """
 
 import copy
@@ -41,14 +42,14 @@ SOURCE_KINDS = ("seedlink", "gcf-udp", "gcf-tcp")
 DEFAULTS = {
     "version": 1,
     "sources": [],
-    "gecko": {"enabled": True, "ports": [58772], "rename": {}},
+    "gecko": {"enabled": True, "bind": "0.0.0.0", "ports": [58772], "rename": {}},
     "seedlink_server": {"enabled": True, "bind": "0.0.0.0", "port": 18010, "organization": "SeisZone"},
     "recording": {"folder": "", "file_minutes": 60, "layout": "channel"},
     "buffer_minutes": 60,
     "view": {"window_seconds": 300, "filter": "none", "units": "counts", "scale": "auto",
              "channels": [], "demean": True},
-    "ui": {"minimize_to_tray": True, "start_minimized": False, "start_with_windows": False,
-           "geometry": "", "state": ""},
+    "ui": {"theme": "dark", "minimize_to_tray": True, "start_minimized": False,
+           "start_with_windows": False, "geometry": "", "state": ""},
 }
 
 
@@ -116,6 +117,7 @@ def validate_source(src):
     s.setdefault("details", {})
     if s["kind"] == "seedlink":
         s.setdefault("stations", [])
+        s.setdefault("selectors", [])
         for st in s["stations"]:
             st.setdefault("desc", "")
             st.setdefault("selectors", [])

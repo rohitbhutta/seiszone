@@ -51,6 +51,8 @@ def lines_since(n):
 
 def setup(verbose=False, console=False, folder=None):
     log = logging.getLogger("seiszone")
+    for h in list(log.handlers):  # a second setup() (CLI, tests) must not leave the old log file open
+        h.close()
     log.handlers.clear()
     log.setLevel(logging.DEBUG if verbose else logging.INFO)
     log.propagate = False

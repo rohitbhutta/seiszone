@@ -382,6 +382,21 @@ def test_main_second_instance_only_signals(qapp, monkeypatch):
         app_mod.release_single_instance(held)
 
 
+def test_external_close_filter(qapp):
+    """The title-bar X (SC_CLOSE, then WM_CLOSE) is the user's; a bare WM_CLOSE (taskkill, the
+    installer) asks SeisZone to end and is handled once, after the event."""
+    called = []
+    f = app_mod.ExternalCloseFilter(lambda: called.append(1))
+    assert not f.on_message(app_mod.WM_SYSCOMMAND, app_mod.SC_CLOSE | 0x3)   # low bits: how it was asked
+    assert not f.on_message(app_mod.WM_CLOSE, 0)
+    pump(qapp, 0.05)
+    assert called == []
+    assert f.on_message(app_mod.WM_CLOSE, 0)
+    assert not f.on_message(0x0200, 0)   # other messages pass
+    pump(qapp, 0.05)
+    assert called == [1]
+
+
 def test_parse_args():
     args, rest = app_mod.parse_args(["--minimized", "--theme", "light", "-platform", "offscreen"])
     assert args.minimized and args.theme == "light" and not args.verbose

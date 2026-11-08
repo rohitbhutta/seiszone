@@ -246,13 +246,25 @@ class ChannelsPanel(QWidget):
         names = self._source_names()
         rows = [self._row(stats[sid], names, now) for sid in sorted(stats)]
         selected = self.selected()
-        if self.model.set_rows(rows):
+        reset = self.model.set_rows(rows)
+        if reset:
             self._select(selected)
         if rows and not self._sized:
             self._sized = True
             self.table.resizeColumnsToContents()
             self.table.setColumnWidth(C_SHOW, max(48, self.table.columnWidth(C_SHOW)))
+        elif rows and reset:
+            self._widen_columns()
         self._update_count()
+
+    def _widen_columns(self):
+        """Channels came: make room for longer codes / descriptions (a Gecko joining later), but
+        never narrow a column the user has widened."""
+        header = self.table.horizontalHeader()
+        for col in range(len(COLUMNS) - 1):   # the last column stretches anyway
+            need = max(self.table.sizeHintForColumn(col), header.sectionSizeHint(col))
+            if need > self.table.columnWidth(col):
+                self.table.setColumnWidth(col, need)
 
     def shown(self):
         return list(self.model.shown)

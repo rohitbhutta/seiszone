@@ -218,14 +218,15 @@ def test_waveform_renders(view, engine, qapp):
         assert tr.sid in tr.label.text and "min" in tr.label.text
     assert "KUMARI" in view._traces[0].label.text
     # the same channels again: nothing rebuilt
-    plots = [tr.plot for tr in view._traces]
+    plots = [tr.vb for tr in view._traces]
     view.set_channels(list(SIDS))
-    assert [tr.plot for tr in view._traces] == plots
+    assert [tr.vb for tr in view._traces] == plots
     view.set_channels(SIDS[:2])
     assert len(view._traces) == 2
-    assert [tr.plot for tr in view._traces] == plots[:2]       # plots are reused
+    assert [tr.vb for tr in view._traces] == plots[:2]         # plots are reused
+    assert all(vb.scene() is None for vb in plots[2:])        # the others are gone
     pump(qapp, 0.1)
-    assert view._traces[0].plot.height() > 300                # and fill the freed height
+    assert view._traces[0].vb.height() > 300                  # and fill the freed height
     view.set_channels(SIDS[::-1])
     assert view._traces[0].sid == SIDS[-1] and SIDS[-1] in view._traces[0].label.text
     view.set_channels([])
@@ -388,7 +389,7 @@ def test_pause_live_and_range(view, qapp):
     assert view.is_live()
     t0, t1 = view.visible_range()
     # a mouse zoom: the view box changes its range and reports a manual change
-    vb = view._traces[2].plot.getViewBox()
+    vb = view._traces[2].vb
     vb.setXRange(t0 + 200, t0 + 260, padding=0)
     vb.sigRangeChangedManually.emit([True, False])
     assert not view.is_live()

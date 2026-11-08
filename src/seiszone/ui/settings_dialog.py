@@ -118,6 +118,11 @@ class SettingsDialog(QDialog):
         self.error.setWordWrap(True)
         self.error.setStyleSheet(f"color: {c['danger']}; font-weight: 600;")
         self.error.hide()
+        # the message is about the last OK: once the user changes something it is out of date
+        for edit in (self.gecko_ports, self.server_port, self.server_org, self.rec_folder):
+            edit.textEdited.connect(self.error.hide)
+        self.server_bind.editTextChanged.connect(self.error.hide)
+        self.rename.itemChanged.connect(self.error.hide)
         box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         box.accepted.connect(self.accept)
         box.rejected.connect(self.reject)

@@ -15,7 +15,7 @@ import sys
 import threading
 import time
 
-from PySide6.QtCore import QObject, Qt, QTimer
+from PySide6.QtCore import QAbstractNativeEventFilter, QObject, Qt, QTimer
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
@@ -192,6 +192,48 @@ def install_excepthook():
 
 
 # --------------------------------------------------------------------------------------------
+# a close request from outside (taskkill, the installer)
+# --------------------------------------------------------------------------------------------
+
+WM_CLOSE = 0x0010
+WM_SYSCOMMAND = 0x0112
+SC_CLOSE = 0xF060
+
+
+class ExternalCloseFilter(QAbstractNativeEventFilter):
+    """Tells a close by the user from a close request of another program.
+
+    The user's close (title-bar X, Alt+F4, taskbar "Close window") always arrives as
+    WM_SYSCOMMAND/SC_CLOSE first and only hides SeisZone to the tray. `taskkill /PID` (and so the
+    installer before it replaces the program) posts a bare WM_CLOSE: that means "end now", and
+    SeisZone then stops its engine cleanly instead of being killed a few seconds later."""
+
+    def __init__(self, on_external_close):
+        super().__init__()
+        self.on_external_close = on_external_close
+        self._user_close = False
+
+    def on_message(self, message, wparam):
+        """True when the message is an external close request (it is then swallowed)."""
+        if message == WM_SYSCOMMAND and (wparam & 0xFFF0) == SC_CLOSE:
+            self._user_close = True
+        elif message == WM_CLOSE:
+            if self._user_close:
+                self._user_close = False
+                return False
+            QTimer.singleShot(0, self.on_external_close)
+            return True
+        return False
+
+    def nativeEventFilter(self, event_type, message):
+        if event_type != b"windows_generic_MSG":
+            return False, 0
+        from ctypes import wintypes
+        msg = wintypes.MSG.from_address(int(message))
+        return self.on_message(msg.message, msg.wParam or 0), 0
+
+
+# --------------------------------------------------------------------------------------------
 # the running application
 # --------------------------------------------------------------------------------------------
 
@@ -220,6 +262,10 @@ class Controller(QObject):
         window.hiddenToTray.connect(self.hidden_to_tray)
         self.activation = ActivationServer(self.show_window, ACTIVATE_NAME, parent=self)
         app.aboutToQuit.connect(self.shutdown)
+        self.close_filter = None
+        if sys.platform == "win32":
+            self.close_filter = ExternalCloseFilter(self.quit_external)
+            app.installNativeEventFilter(self.close_filter)
 
     def _tray_activated(self, reason):
         if reason == QSystemTrayIcon.DoubleClick:
@@ -256,12 +302,27 @@ class Controller(QObject):
             self.tray.hide()
         self.app.quit()
 
+    def quit_external(self):
+        """Another program asked SeisZone to end (taskkill, the installer): no question, the
+        caller has already decided; active recordings continue at the next start."""
+        if self._down:
+            return
+        log.info("%s was asked to close by another program", APP_NAME)
+        self.window.prepare_quit()
+        self.shutdown()
+        self.window.close()
+        if self.tray is not None:
+            self.tray.hide()
+        self.app.quit()
+
     def shutdown(self):
         """Stop the engine and save the state once (also on Windows log-off)."""
         if self._down:
             return
         self._down = True
         log.info("%s stopping", APP_NAME)
+        if self.close_filter is not None:  # Qt holds a plain pointer to it: unhook before it goes
+            self.app.removeNativeEventFilter(self.close_filter)
         try:
             self.engine.stop()
         except Exception:

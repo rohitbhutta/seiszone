@@ -11,18 +11,19 @@ wrote "Size Zone"; SeisZone is the name). It replaces the earlier three-part set
 
 * a third-party seismic viewer (proprietary, signed by its vendor — **never** rename, patch,
   re-skin or copy it; never write its name in SeisZone),
-* our add-on `C:\D Drive\Only Coding\gecko-omega-addon` (Windows service: Gecko receiver +
-  SeedLink server 18010 + GCF gateway; Record bar; recording engine; installer GeckoOmegaSetup 1.5.4),
-* the older folders `gecko-seedlink-bridge` and `omega-record-addon` (earlier versions of code that
-  is already inside gecko-omega-addon/src).
+* our earlier Gecko add-on project (the `gecko-...-addon` folder in `C:\D Drive\Only Coding`;
+  Windows service: Gecko receiver + SeedLink server 18010 + GCF gateway; Record bar; recording
+  engine; its own installer, version 1.5.4),
+* the older folders `gecko-seedlink-bridge` and the old record add-on (earlier versions of code
+  that is already inside the add-on project's src folder).
 
 SeisZone is written from scratch on open standards (SeedLink 3, Güralp GCF / Scream UDP, Kelunji
 Gecko telemetry framing, miniSEED 2, FDSN StationXML). The proven protocol logic of our own
-gecko-omega-addon code was ported into it.
+Gecko add-on code was ported into it.
 
 ## Standing rules from the user
 
-* Never use the name "Kellith" (separate business). Never write the third-party viewer's or its
+* Never use the name of the user's separate business. Never write the third-party viewer's or its
   vendor's names in SeisZone.
 * Recording is user-controlled (start/stop by the user); data is never deleted by the program;
   low disk space only warns.
@@ -44,17 +45,22 @@ Fortimus: SeedLink on 18000 (channels 0J.HN? 200 sps, 9J.MN? 5 sps), GCF Scream 
 port 80 (status, data streams, StationXML ~0.9 MB — about a minute over the slow VPN).
 Tests must never contact these or listen on 58772/18010 (the real Gecko would connect).
 
-## Status (2026-11-07)
+## Status (2026-11-08)
 
-* Project created at `C:\D Drive\Only Coding\seiszone` (git repository, local only — not pushed;
-  a cloud session cannot see the code unless it is pushed somewhere).
-* Written and checked by the lead: plan.md, memory.md, core spine (`config.py`, `paths.py`,
-  `logsetup.py`, `core/mseed.py` lossless Steim2 codec cross-checked with ObsPy, `core/hub.py`
-  DataHub with gap/backfill handling, `core/links.py`, `core/gcf.py`), `ui/theme.py` (own palette
-  and drawn icons), `tests/fake_engine.py`, `tests/conftest.py`.
-* In progress (parallel build workflow): SeedLink client/server, Gecko receiver, GCF link, probe,
-  StationXML, recorder, export, DSP, engine + CLI, all UI panels/dialogs, icon, installer, docs.
-* Not yet done: field test on the real units; user acceptance.
+* Project at `C:\D Drive\Only Coding\seiszone` (git repository, local only - not pushed).
+* All modules written and integrated: spine, SeedLink client/server, Gecko receiver, GCF link,
+  probe, StationXML, recorder, export, DSP, engine + CLI, every UI panel/dialog, icon, installer,
+  README, user guide. `python -m pytest tests -q`: 144 passed (about 100 s).
+* `tests/test_integration.py` runs the real Engine + MainWindow offscreen against a local fake
+  instrument (200 sps in real time, history backfilled by SeedLink resume), replays the captured
+  Gecko link into the engine's Gecko port, records, exports 30 s and checks it sample by sample;
+  screenshot `build/screens/integration.png`.
+* Build OK: `build/dist/SeisZone/SeisZone.exe` (one folder) and `build/dist/SeisZoneSetup.exe`
+  (about 68 MB). The frozen exe was checked with `--version`, `--engine --seconds 8 --config ...
+  --output FILE` (windowed exe: `--output` writes everything into a file) and with its window
+  for 12 s; a plain `taskkill /PID` (and the installer) now ends SeisZone cleanly, while the
+  user's own close (X, Alt+F4) still hides it to the tray.
+* Not yet done: field test on the real units; user installs and accepts the installer.
 
 ## How to run / test / build
 
@@ -64,6 +70,7 @@ python -m pip install -r requirements.txt -r requirements-dev.txt
 python run_seiszone.py                          # the application, from source
 python run_seiszone.py --probe 10.8.0.182:18000 # read-only detection, prints what was found
 python run_seiszone.py --engine --seconds 60    # headless engine with the user's config
+python run_seiszone.py --engine --seconds 8 --output out.txt   # output into a file (windowed exe)
 python -m pytest tests -q                       # all tests (offscreen Qt, temp SEISZONE_HOME)
 python installer/build.py                       # PyInstaller -> build/dist/SeisZone, Inno -> SeisZoneSetup.exe
 ```
@@ -90,7 +97,7 @@ User files: `%APPDATA%\SeisZone` (config.json, state.json, stationxml\), `%LOCAL
 
 ## Open items / next steps
 
-1. Finish and verify the parallel build (all tests green, offscreen screenshots, installer).
+1. User installs build/dist/SeisZoneSetup.exe (UAC) and checks the window on the real desktop.
 2. Field test read-only against 10.8.0.180/181/182 and the SMR03 (Gecko connects only when
    SeisZone listens on 58772 — the old GeckoSeedLink service is uninstalled since 2026-11-06).
-3. User acceptance; then decide whether the old gecko-omega-addon folder is retired.
+3. User acceptance; then decide whether the old Gecko add-on folder is retired.
