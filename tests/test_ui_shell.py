@@ -1,0 +1,388 @@
+"""Offscreen smoke tests of the application shell: MainWindow with FakeEngine data, its timers,
+toolbar dialogs, layout saving, the log panel, single-instance helpers and start with Windows.
+
+Nothing here touches the network: FakeEngine never connects, the single-instance test uses its
+own random mutex / local socket names, and the start-with-Windows test writes to a test-only
+registry key that is deleted again.
+"""
+
+import copy
+import logging
+import os
+import subprocess
+import sys
+import threading
+import time
+import types
+import uuid
+
+import pytest
+
+# the offscreen platform has no font list of its own: without this the screenshots show boxes
+if sys.platform == "win32" and os.path.isdir(r"C:\Windows\Fonts"):
+    os.environ.setdefault("QT_QPA_FONTDIR", r"C:\Windows\Fonts")
+
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
+
+from seiszone import VERSION, logsetup, paths
+from seiszone.config import Config, State
+from seiszone.ui import app as app_mod
+from seiszone.ui import theme
+from seiszone.ui.log_panel import LogPanel
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SCREENS = os.path.join(ROOT, "build", "screens")
+DATA_SECONDS = 330   # synthetic data: just over the default 5-minute window (keeps the tests fast)
+log = logging.getLogger("seiszone")
+
+
+@pytest.fixture(scope="module")
+def qapp():
+    app = QApplication.instance() or QApplication([])
+    theme.apply(app, "dark")
+    if not logsetup.LOG_LINES and not log.handlers:
+        logsetup.setup(folder=paths.log_dir())
+    return app
+
+
+def pump(app, seconds):
+    """Run the Qt event loop for a while (timers fire, widgets repaint)."""
+    end = time.time() + seconds
+    while time.time() < end:
+        app.processEvents()
+        time.sleep(0.01)
+
+
+def close_modals_soon(app, every_ms=100, times=30):
+    """Reject any modal dialog / message box that a slot opens with exec(), so a test never
+    hangs waiting for a click."""
+    def tick(n=times):
+        w = app.activeModalWidget()
+        if isinstance(w, QDialog):
+            w.reject()
+        if n > 0:
+            QTimer.singleShot(every_ms, lambda: tick(n - 1))
+    QTimer.singleShot(every_ms, tick)
+
+
+_BASE = []
+
+
+def fake_engine(config, state=None):
+    """A FakeEngine for this config. The synthetic data (slow to encode) is made once and its
+    hub shared: the user interface only reads it."""
+    from fake_engine import FakeEngine, FakeRecorder
+    if not _BASE:
+        _BASE.append(FakeEngine(Config(os.path.join(paths.config_dir(), "shell_base.json")),
+                                seconds=DATA_SECONDS))
+    base = _BASE[0]
+    engine = copy.copy(base)
+    engine.config, engine.recorder, engine.calls = config, FakeRecorder(), []
+    engine.state = state or State(config.path + ".state.json")
+    if not config.sources():
+        config.add_source(base.config.sources()[0])
+    return engine
+
+
+@pytest.fixture
+def window(qapp, tmp_path):
+    from seiszone.ui.main_window import MainWindow
+    config = Config(str(tmp_path / "config.json"))
+    config.set("recording", "folder", str(tmp_path / "rec"))
+    engine = fake_engine(config)
+    w = MainWindow(engine, config)
+    yield w
+    w.prepare_quit()
+    w.close()
+    w.deleteLater()
+    pump(qapp, 0.1)
+
+
+# --------------------------------------------------------------------------------------------
+# main window
+# --------------------------------------------------------------------------------------------
+
+def test_window_builds_and_timers_tick(qapp, window):
+    assert window.windowTitle() == f"SeisZone {VERSION}"
+    texts = [a.text() for a in window.toolbar.actions() if a.text()]
+    assert texts == ["Add source", "Remove", "Reconnect", "Record", "Export", "Spectrum", "Settings", "About"]
+    window.show()
+    pump(qapp, 2.0)
+    # first start: the first channels are shown as soon as data is there, and remembered
+    shown = window.view.channels()
+    assert shown and set(shown) <= set(window.engine.hub.stream_ids())
+    assert window.config.get("view", "channels") == list(shown)
+    assert "1/1 sources receiving" in window.st["sources"].text()
+    assert "Gecko links: 1" in window.st["gecko"].text()
+    assert ":18010" in window.st["server"].text() and "1 client" in window.st["server"].text()
+    assert window.st["recording"].text() == "Not recording"
+    assert window.st["disk"].text().startswith("Free 100.0 GB")
+
+
+def test_toolbar_dialogs_open_and_close(qapp, window):
+    window.show()
+    pump(qapp, 0.5)
+    for name, opener in (("about", window.open_about), ("record", window.open_record_dialog),
+                         ("export", window.open_export_dialog), ("spectrum", window.open_spectrum),
+                         ("settings", window.open_settings)):
+        dlg = opener()
+        assert dlg is not None, name
+        pump(qapp, 0.3)
+        assert dlg.isVisible(), name
+        assert window.dialogs.get(name) is dlg
+        dlg.reject()
+        pump(qapp, 0.2)
+        assert name not in window.dialogs, name
+    # add source may open its dialog modally: it is rejected programmatically
+    close_modals_soon(qapp)
+    window.act_add.trigger()
+    pump(qapp, 0.5)
+    assert qapp.activeModalWidget() is None
+
+
+def test_record_button_and_quit_confirmation(qapp, window, monkeypatch):
+    window.engine.recorder.start("test", str(window.config.get("recording", "folder")))
+    window.refresh()
+    assert window.act_record.text() == "Recording (1)"
+    assert "Recording 1" in window.st["recording"].text()
+    asked = []
+    monkeypatch.setattr(QMessageBox, "question",
+                        staticmethod(lambda *a, **k: asked.append(a) or QMessageBox.No))
+    assert window.confirm_quit() is False and asked
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.Yes))
+    assert window.confirm_quit() is True
+
+
+def test_close_without_tray_closes(qapp, window):
+    window.show()
+    pump(qapp, 0.2)
+    window.close()
+    pump(qapp, 0.2)
+    assert not window.isVisible()
+    assert not window.fast.isActive() and not window.slow.isActive()
+    assert window.config.get("ui", "geometry")
+
+
+def test_close_with_tray_hides(qapp, window):
+    hidden = []
+    window.tray_available = True
+    window.hiddenToTray.connect(lambda: hidden.append(1))
+    window.show()
+    pump(qapp, 0.2)
+    window.close()
+    pump(qapp, 0.1)
+    assert hidden and not window.isVisible()
+    assert window.fast.isActive()  # still running in the tray
+
+
+def test_layout_saved_and_restored(qapp, window):
+    from seiszone.ui.main_window import MainWindow
+    window.resize(700, 520)  # within the offscreen screen (restoreGeometry clamps to the screen)
+    window.show()
+    pump(qapp, 0.3)
+    size = (window.width(), window.height())  # the panels' minimum sizes may enlarge it
+    window.save_layout()
+    geo = window.config.get("ui", "geometry")
+    assert geo and window.config.get("ui", "state")
+    w2 = MainWindow(window.engine, window.config)
+    try:
+        w2.show()
+        pump(qapp, 0.3)
+        # restored, not the 1600x950 first-start size (minimum widths follow the live labels)
+        assert abs(w2.width() - size[0]) <= 30 and abs(w2.height() - size[1]) <= 30
+    finally:
+        w2.prepare_quit()
+        w2.close()
+        w2.deleteLater()
+
+
+def test_damaged_layout_ignored(qapp, window):
+    from seiszone.ui.main_window import MainWindow
+    window.config.update_section("ui", {"geometry": "not base64 !!", "state": "%%%"})
+    w2 = MainWindow(window.engine, window.config)
+    try:
+        assert w2.width() >= 800
+    finally:
+        w2.prepare_quit()
+        w2.close()
+        w2.deleteLater()
+
+
+def test_screenshot(qapp, window):
+    window.resize(1600, 950)
+    window.show()
+    pump(qapp, 2.0)
+    os.makedirs(SCREENS, exist_ok=True)
+    path = os.path.join(SCREENS, "main_window.png")
+    assert window.grab().save(path)
+    assert os.path.getsize(path) > 10_000
+    window.open_about()
+    pump(qapp, 0.3)
+    about = window.dialogs["about"]
+    assert about.grab().save(os.path.join(SCREENS, "about.png"))
+    about.reject()
+
+
+# --------------------------------------------------------------------------------------------
+# log panel
+# --------------------------------------------------------------------------------------------
+
+def test_log_panel_shows_new_lines(qapp):
+    logsetup.setup(folder=paths.log_dir())
+    panel = LogPanel()
+    marker = f"shell-test {uuid.uuid4().hex}"
+    log.warning("%s warning", marker)
+    log.info("%s info", marker)
+    panel.refresh()
+    held = [t for t in panel.lines() if marker in t]
+    assert len(held) == 2 and "WARNING" in held[0]
+    assert marker in panel.text.toPlainText()
+    panel.refresh()  # nothing new: nothing appended twice
+    assert sum(marker in t for t in panel.lines()) == 2
+    panel.filter.setText("WARNING")
+    assert f"{marker} warning" in panel.text.toPlainText()
+    assert f"{marker} info" not in panel.text.toPlainText()
+    panel.filter.setText("")
+    assert f"{marker} info" in panel.text.toPlainText()
+
+
+def test_log_panel_keeps_at_most_5000_lines(qapp):
+    logsetup.setup(folder=paths.log_dir())
+    panel = LogPanel()
+    for i in range(5200):
+        log.info("flood %d", i)
+    panel.refresh()
+    assert len(panel.lines()) <= 5000
+    assert panel.text.document().blockCount() <= 5000
+    assert panel.lines()[-1].endswith("flood 5199")
+
+
+# --------------------------------------------------------------------------------------------
+# single instance, start with Windows, arguments
+# --------------------------------------------------------------------------------------------
+
+def test_single_instance_helpers(qapp):
+    name = f"Local\\SeisZone.Test.{uuid.uuid4().hex}"
+    first = app_mod.acquire_single_instance(name)
+    assert first
+    try:
+        if sys.platform == "win32":
+            assert app_mod.acquire_single_instance(name) is None
+    finally:
+        app_mod.release_single_instance(first)
+    again = app_mod.acquire_single_instance(name)
+    assert again
+    app_mod.release_single_instance(again)
+
+    shown = []
+    sock_name = f"SeisZone.Test.{uuid.uuid4().hex}"
+    server = app_mod.ActivationServer(lambda: shown.append(1), name=sock_name)
+    # the second start is another process, like in real use (a QLocalSocket in a short-lived
+    # Python thread of this process leaves Windows pipe notifications behind for a dead thread)
+    code = ("import sys; sys.path.insert(0, sys.argv[1]);"
+            "from PySide6.QtCore import QCoreApplication; app = QCoreApplication([]);"
+            "from seiszone.ui import app as a; sys.exit(0 if a.notify_running_instance(sys.argv[2], 5000) else 3)")
+    child = subprocess.Popen([sys.executable, "-c", code, os.path.join(ROOT, "src"), sock_name])
+    try:
+        end = time.time() + 30
+        while child.poll() is None and time.time() < end:
+            qapp.processEvents()
+            time.sleep(0.01)
+        assert child.poll() == 0 and shown == [1]
+    finally:
+        if child.poll() is None:
+            child.kill()
+        server.close()
+    assert not app_mod.notify_running_instance(f"SeisZone.Test.{uuid.uuid4().hex}", timeout_ms=200)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows registry")
+def test_autostart_registry(monkeypatch):
+    import winreg
+    parent = rf"Software\SeisZoneTest_{uuid.uuid4().hex[:8]}"
+    key = parent + r"\Run"
+    monkeypatch.setattr(app_mod, "RUN_KEY", key)
+    try:
+        assert app_mod.autostart_enabled() is False
+        assert app_mod.set_autostart(True)
+        assert app_mod.autostart_enabled() is True
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as k:
+            value, kind = winreg.QueryValueEx(k, app_mod.RUN_VALUE)
+        assert kind == winreg.REG_SZ and value.endswith("--minimized") and "-m seiszone" in value
+        assert app_mod.set_autostart(False)
+        assert app_mod.autostart_enabled() is False
+        assert app_mod.set_autostart(False)  # removing twice is fine
+    finally:
+        for k in (key, parent):
+            try:
+                winreg.DeleteKey(winreg.HKEY_CURRENT_USER, k)
+            except OSError:
+                pass
+
+
+def _fake_engine_module(monkeypatch, made):
+    """seiszone.core.engine replaced by FakeEngine (no sockets, no listeners)."""
+    def engine(config, state=None):
+        made.append(fake_engine(config, state))
+        return made[-1]
+    mod = types.ModuleType("seiszone.core.engine")
+    mod.Engine = engine
+    monkeypatch.setitem(sys.modules, "seiszone.core.engine", mod)
+
+
+def _isolate_main(monkeypatch):
+    """Own single-instance names and restore the global hooks main() installs."""
+    monkeypatch.setattr(app_mod, "MUTEX_NAME", f"Local\\SeisZone.Test.{uuid.uuid4().hex}")
+    monkeypatch.setattr(app_mod, "ACTIVATE_NAME", f"SeisZone.Test.{uuid.uuid4().hex}")
+    monkeypatch.setattr(sys, "excepthook", sys.excepthook)
+    monkeypatch.setattr(threading, "excepthook", threading.excepthook)
+
+
+def test_main_starts_and_quits(qapp, monkeypatch):
+    from seiszone.ui.main_window import MainWindow
+    made, seen = [], {}
+    _fake_engine_module(monkeypatch, made)
+    _isolate_main(monkeypatch)
+
+    def fake_exec(app):
+        """Instead of the real event loop: let it run 1.5 s, then File > Quit."""
+        pump(app, 1.5)
+        wins = [w for w in app.topLevelWidgets() if isinstance(w, MainWindow) and w.isVisible()]
+        seen["windows"] = len(wins)
+        seen["channels"] = wins[0].view.channels() if wins else []
+        if wins:
+            wins[0].act_quit.trigger()
+        pump(app, 0.2)
+        seen["visible_after"] = any(w.isVisible() for w in wins)
+        return 0
+    monkeypatch.setattr(QApplication, "exec", fake_exec)
+    try:
+        assert app_mod.main(["--theme", "dark"]) == 0
+    finally:
+        qapp.setQuitOnLastWindowClosed(True)
+    assert seen["windows"] == 1 and seen["channels"] and not seen["visible_after"]
+    calls = [c[0] for c in made[0].calls]
+    assert calls.count("start") == 1 and calls.count("stop") == 1
+    assert Config().get("ui", "geometry")  # layout saved on quit
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="named mutex")
+def test_main_second_instance_only_signals(qapp, monkeypatch):
+    made = []
+    _fake_engine_module(monkeypatch, made)
+    _isolate_main(monkeypatch)
+    held = app_mod.acquire_single_instance(app_mod.MUTEX_NAME)  # "the first SeisZone"
+    try:
+        t = time.time()
+        assert app_mod.main([]) == 0
+        assert time.time() - t < 5
+        assert made == []  # no engine, no window: the running instance keeps everything
+    finally:
+        app_mod.release_single_instance(held)
+
+
+def test_parse_args():
+    args, rest = app_mod.parse_args(["--minimized", "--theme", "light", "-platform", "offscreen"])
+    assert args.minimized and args.theme == "light" and not args.verbose
+    assert rest == ["-platform", "offscreen"]

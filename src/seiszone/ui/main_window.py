@@ -14,7 +14,7 @@ import time
 from PySide6.QtCore import QByteArray, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QAction, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QDockWidget, QGridLayout, QLabel, QMainWindow,
-                               QMessageBox, QPushButton, QToolBar, QVBoxLayout)
+                               QMessageBox, QPushButton, QTabWidget, QToolBar, QVBoxLayout, QWidget)
 
 from .. import APP_NAME, VERSION, paths
 from . import theme
@@ -100,11 +100,13 @@ class AboutDialog(QDialog):
             path.setStyleSheet(f"color: {c['muted']};")
             grid.addWidget(path, i, 1)
             btn = QPushButton("Open")
+            btn.setAutoDefault(False)
             btn.clicked.connect(lambda _=False, f=folder: open_folder(f))
             grid.addWidget(btn, i, 2)
         grid.setColumnStretch(1, 1)
         lay.addLayout(grid)
         box = QDialogButtonBox(QDialogButtonBox.Close)
+        box.button(QDialogButtonBox.Close).setDefault(True)
         box.rejected.connect(self.reject)
         lay.addWidget(box)
 
@@ -134,7 +136,10 @@ class MainWindow(QMainWindow):
         self.sources_dock = self._dock("Sources", "dock_sources", self.sources, Qt.LeftDockWidgetArea)
         self.channels_dock = self._dock("Channels", "dock_channels", self.channels, Qt.BottomDockWidgetArea)
         self.log_dock = self._dock("Log", "dock_log", self.log_panel, Qt.BottomDockWidgetArea)
+        self.setTabPosition(Qt.BottomDockWidgetArea, QTabWidget.North)
         self.tabifyDockWidget(self.channels_dock, self.log_dock)
+        for d in (self.channels_dock, self.log_dock):
+            d.setTitleBarWidget(QWidget())  # the tab is their title; View menu shows / hides them
         self.channels_dock.raise_()
 
         self._build_actions()
@@ -253,7 +258,6 @@ class MainWindow(QMainWindow):
         self.st = {}
         for key in ("sources", "gecko", "server", "recording", "disk"):
             lab = QLabel()
-            lab.setContentsMargins(8, 0, 8, 0)
             sb.addPermanentWidget(lab)
             self.st[key] = lab
 
@@ -311,8 +315,10 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _set(label, text, color=None, tip=""):
+        """One status-bar field: text, colour, tooltip; a thin line separates the fields."""
         label.setText(text)
-        label.setStyleSheet(f"color: {color};" if color else "")
+        style = f"padding: 0 10px; border-left: 1px solid {theme.COLORS['border']};"
+        label.setStyleSheet(style + (f" color: {color};" if color else ""))
         label.setToolTip(tip)
 
     def _update_status(self, status, sessions):
@@ -514,5 +520,12 @@ class MainWindow(QMainWindow):
             self.hide()
             self.hiddenToTray.emit()
             return
-        ev.ignore()
-        self.request_quit()
+        if self.quit_callback:
+            # Qt refuses a nested close() from inside closeEvent: quit right after this event
+            ev.ignore()
+            QTimer.singleShot(0, self.quit_callback)
+        elif self.confirm_quit():
+            self.prepare_quit()
+            ev.accept()
+        else:
+            ev.ignore()

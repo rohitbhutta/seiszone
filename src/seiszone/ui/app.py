@@ -20,6 +20,7 @@ from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
 from .. import APP_NAME, ORGANIZATION, VERSION, logsetup
+from . import theme
 
 log = logging.getLogger("seiszone")
 
@@ -63,20 +64,29 @@ def release_single_instance(handle):
 
 
 def notify_running_instance(name=ACTIVATE_NAME, timeout_ms=2000):
-    """Ask the running SeisZone to show its window. True when it was reached."""
+    """Ask the running SeisZone to show its window. True when it confirmed ("ok").
+
+    Waits for the answer instead of disconnecting at once: a pipe closed right after the write
+    can lose the message before the running instance has read it."""
     sock = QLocalSocket()
     sock.connectToServer(name)
     if not sock.waitForConnected(timeout_ms):
         return False
     sock.write(b"show\n")
     sock.flush()
-    sock.waitForBytesWritten(timeout_ms)
+    reply = b""
+    end = time.monotonic() + timeout_ms / 1000
+    while b"ok" not in reply and time.monotonic() < end:
+        if sock.bytesAvailable() or sock.waitForReadyRead(100):
+            reply += bytes(sock.readAll())
+        elif sock.state() != QLocalSocket.ConnectedState:
+            break
     sock.disconnectFromServer()
-    return True
+    return b"ok" in reply
 
 
 class ActivationServer(QObject):
-    """Local socket of the first instance: a second start sends "show" here."""
+    """Local socket of the first instance: a second start sends "show" here, gets "ok" back."""
 
     def __init__(self, on_show, name=ACTIVATE_NAME, parent=None):
         super().__init__(parent)
@@ -90,11 +100,18 @@ class ActivationServer(QObject):
     def _accept(self):
         while self.server.hasPendingConnections():
             sock = self.server.nextPendingConnection()
-            sock.readyRead.connect(lambda s=sock: self._read(s))
+            buf = bytearray()
+            sock.readyRead.connect(lambda s=sock, b=buf: self._read(s, b))
             sock.disconnected.connect(sock.deleteLater)
+            # the second start writes at once: its bytes may already be here (no readyRead then)
+            self._read(sock, buf)
 
-    def _read(self, sock):
-        if b"show" in bytes(sock.readAll()):
+    def _read(self, sock, buf):
+        buf += bytes(sock.readAll())
+        if b"show" in buf:
+            buf.clear()
+            sock.write(b"ok\n")
+            sock.flush()
             self.on_show()
 
     def close(self):
@@ -187,7 +204,7 @@ class Controller(QObject):
         self._down = False
         self.tray = None
         if QSystemTrayIcon.isSystemTrayAvailable():
-            self.tray = QSystemTrayIcon(app.windowIcon(), self)
+            self.tray = QSystemTrayIcon(theme.app_icon(), self)
             self.tray.setToolTip(f"{APP_NAME} {VERSION}")
             menu = QMenu()
             menu.addAction("Show SeisZone", self.show_window)
@@ -201,7 +218,7 @@ class Controller(QObject):
         window.tray_available = self.tray is not None
         window.quit_callback = self.quit
         window.hiddenToTray.connect(self.hidden_to_tray)
-        self.activation = ActivationServer(self.show_window, parent=self)
+        self.activation = ActivationServer(self.show_window, ACTIVATE_NAME, parent=self)
         app.aboutToQuit.connect(self.shutdown)
 
     def _tray_activated(self, reason):
@@ -224,7 +241,7 @@ class Controller(QObject):
 
     def hidden_to_tray(self):
         if self.tray is not None and not self.config.get("ui", "tray_hint_shown", False):
-            self.tray.showMessage(APP_NAME, "SeisZone keeps running in the tray", self.app.windowIcon(), 5000)
+            self.tray.showMessage(APP_NAME, "SeisZone keeps running in the tray", theme.app_icon(), 5000)
             self.config.set("ui", "tray_hint_shown", True)
 
     def quit(self):
@@ -285,15 +302,14 @@ def main(argv=None):
     app.setOrganizationName(ORGANIZATION)
     app.setApplicationVersion(VERSION)
 
-    mutex = acquire_single_instance()
+    mutex = acquire_single_instance(MUTEX_NAME)
     if mutex is None:
-        reached = notify_running_instance()
+        reached = notify_running_instance(ACTIVATE_NAME)
         log.info("%s is already running - %s", APP_NAME,
                  "its window was brought forward" if reached else "it did not answer")
         return 0
 
     from .. import config as cfg_mod
-    from . import theme
     from .main_window import MainWindow
     from ..core.engine import Engine  # written in parallel; imported only when the app really starts
 
