@@ -60,7 +60,17 @@ Tests must never contact these or listen on 58772/18010 (the real Gecko would co
   --output FILE` (windowed exe: `--output` writes everything into a file) and with its window
   for 12 s; a plain `taskkill /PID` (and the installer) now ends SeisZone cleanly, while the
   user's own close (X, Alt+F4) still hides it to the tray.
-* Not yet done: field test on the real units; user installs and accepts the installer.
+* Committed as 8c7f6d9 ("SeisZone 1.0.0 ...").
+* Field test 2026-11-08 (read-only, scratch SEISZONE_HOME, frozen exe `--engine --seconds 120`):
+  `--probe`/`--add` found all three Fortimus units (FMUS-5469 KUMARI etc., serial, firmware, GNSS
+  position, 901 KB StationXML each). All three streamed 0J.HN? 200 sps + 9J.MN? 5 sps with 0 gaps.
+  Shown latency ~22 s = PC clock 18.8 s fast (w32tm vs time.google.com) + ~3 s real; the PC clock
+  should be synced (Windows Settings > Time > Sync now).
+* The OLD `GeckoSeedLink` service (GeckoOmegaAddon.exe) was found running again on 2026-11-08 and
+  holds 58772 + 18010 with the SMR03 connected. SeisZone reports "port in use by another program"
+  and carries on. The Gecko part of the field test waits until the user stops/uninstalls that old
+  service (the user's decision; we did not touch it).
+* Not yet done: Gecko field test; user installs and accepts the installer.
 
 ## How to run / test / build
 
@@ -98,6 +108,6 @@ User files: `%APPDATA%\SeisZone` (config.json, state.json, stationxml\), `%LOCAL
 ## Open items / next steps
 
 1. User installs build/dist/SeisZoneSetup.exe (UAC) and checks the window on the real desktop.
-2. Field test read-only against 10.8.0.180/181/182 and the SMR03 (Gecko connects only when
-   SeisZone listens on 58772 — the old GeckoSeedLink service is uninstalled since 2026-11-06).
+2. Fortimus field test done (above). SMR03 field test: the user first stops/uninstalls the old
+   GeckoSeedLink service (it holds 58772); then run SeisZone and check "Gecko receiver" links.
 3. User acceptance; then decide whether the old Gecko add-on folder is retired.
