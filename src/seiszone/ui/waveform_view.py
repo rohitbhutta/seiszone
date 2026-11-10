@@ -19,20 +19,29 @@ times a second on an ordinary office PC):
     on long windows never freeze the window;
   * nothing is done while the window is hidden or minimized.
 
-Gaps in the data are NaN between the hub's segments, so the line breaks there. Zooming or
-panning with the mouse pauses the live view; the Live button (or a double-click) returns.
+Gaps in the data are NaN between the hub's segments, so the line breaks there.
+
+Live and paused: the live right edge follows the data, not the PC clock (see _live_range), so
+the newest sample touches the right edge whatever the clock offset. The mouse wheel over a plot
+steps the window length while live (it stays live); dragging (panning) pauses, and while paused
+the wheel zooms. A paused view is shown by an amber "Paused – back to live" button and follows
+the newest data again by itself after AUTO_LIVE seconds without mouse use on the plots (the
+button or a double-click return at once). SeisZone always starts live.
+
 Every trace keeps at least MIN_ROW pixels: when more channels are shown than fit, the plots
 scroll vertically (the time axis is under the last trace).
 """
 
+import collections
 import logging
 import math
 import time
+import weakref
 
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import QEvent, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QDoubleValidator, QFont
+from PySide6.QtGui import QColor, QDoubleValidator, QFont, QIcon
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QGraphicsGridLayout, QGraphicsWidget, QHBoxLayout,
                                QLabel, QLineEdit, QScrollArea, QStackedWidget, QToolButton, QVBoxLayout,
                                QWidget)
@@ -54,6 +63,11 @@ AXIS_WIDTH = 66         # left axis width: the same on every plot so the traces 
 TIME_AXIS_HEIGHT = 26   # the time axis under the bottom plot
 ROW_GAP = 4             # space between two plots (the hidden bottom axis of the upper one)
 MIN_ROW = 24            # pixels of a trace at least (more channels than fit: the plots scroll)
+AUTO_LIVE = 120.0       # a paused view follows live data again after this many seconds without mouse use
+LAG_MEMORY = 60.0       # seconds an observed arrival lag counts for the live right edge
+LAG_LIMIT = 300.0       # larger arrival lags are not followed (old data: the view anchors to it instead)
+LAG_GROWTH = 0.5        # seconds per second a growing arrival lag may grow (the live edge never steps back)
+WHEEL_NOTCH = 120       # one mouse wheel notch in Qt's angle-delta units (touchpads send parts of it)
 UNIT_NAMES = {"M/S": "m/s", "M/S**2": "m/s²", "M/S2": "m/s²", "M/SEC": "m/s", "M": "m", "PA": "Pa",
               "V": "V", "COUNTS": "counts"}
 
@@ -102,6 +116,21 @@ class _TraceLabel(pg.LabelItem):
         p.fillRect(self.boundingRect(), self.bg)
 
 
+class _PlotBox(pg.ViewBox):
+    """ViewBox that offers its mouse wheel to the view first (while live the wheel steps the
+    window length instead of zooming). The view is held weakly: no reference cycle through Qt."""
+
+    def __init__(self, on_wheel):
+        super().__init__(enableMenu=False)
+        self._on_wheel = weakref.WeakMethod(on_wheel)
+
+    def wheelEvent(self, ev, axis=None):
+        handler = self._on_wheel()
+        if handler is not None and handler(ev):
+            return
+        super().wheelEvent(ev, axis)
+
+
 class _Trace:
     """One channel on screen - its plot parts and what was last computed for it."""
 
@@ -148,8 +177,16 @@ class WaveformView(QWidget):
         except (TypeError, ValueError):
             self._fixed = 1000.0
         self._demean = bool(v.get("demean", True))
-        self._live = True
+        self._live = True          # always starts live (never saved)
         self._anchored = False     # live range ends at the newest (old) data, not at now
+        self._lags = collections.deque()   # (PC time, arrival lag) of the newest-sample advances
+        self._lag = None           # the arrival lag the live edge uses (None: never seen)
+        self._lag_at = 0.0         # PC time it was last worked out
+        self._relag = False        # another channel set: the next lag measured replaces _lag at once
+        self._latest = None       # newest sample end of the shown channels at the last look
+        self._latest_at = 0.0      # PC time that value last changed
+        self._touched = time.monotonic()   # last mouse use on the plots (a paused view returns AUTO_LIVE later)
+        self._wheel = 0            # wheel delta not yet turned into a window step
         self._sids = []
         self._traces = []
         self._version = 0          # bumped by every setting change: every trace recomputes
@@ -180,6 +217,7 @@ class WaveformView(QWidget):
         self.grid.setSpacing(0)
         self.glw.setCentralItem(root)
         self.glw.installEventFilter(self)
+        self.glw.viewport().installEventFilter(self)   # mouse use on the plots (the auto-return to live)
         self.glw.scene().sigMouseClicked.connect(self._on_click)
         self.scroll = QScrollArea()          # the plots scroll when they do not fit
         self.scroll.setFrameShape(QFrame.NoFrame)
@@ -293,7 +331,7 @@ class WaveformView(QWidget):
         self.grid.activate()   # geometry now, not at the next event: the decimation needs the width
 
     def _new_trace(self, row):
-        vb = pg.ViewBox(enableMenu=False)
+        vb = _PlotBox(self._on_wheel)
         vb.setMouseEnabled(x=True, y=False)
         vb.disableAutoRange()
         vb.sigRangeChangedManually.connect(self._on_user_range)
@@ -362,6 +400,7 @@ class WaveformView(QWidget):
             f"QLabel#barCaption, QLabel#barRange {{ color: {c['muted']}; }}"
             f"QLabel#barNote {{ color: {c['warn']}; }}")
         self._color_traces()
+        self._update_live_button()
 
     def _color_traces(self):
         """Pens and caption colours by trace position (also after a reorder). The data stay."""
@@ -392,6 +431,9 @@ class WaveformView(QWidget):
         started = time.perf_counter()
         t0, t1 = self.visible_range()
         self._sids = sids
+        self._latest = None   # another channel set: its newest sample is a new reference, not an arrival
+        self._lags.clear()    # and its own arrival lag (the old set's may be much smaller: a gap at the edge)
+        self._relag = True
         self._rebuild()
         self._set_range(*(self._live_range() if self._live else (t0, t1)))
         if self._traces:
@@ -401,9 +443,12 @@ class WaveformView(QWidget):
         return list(self._sids)
 
     def refresh(self):
-        """Follow live data and recompute traces that are out of date (MainWindow: every 250 ms)."""
+        """Follow live data and recompute traces that are out of date (MainWindow: every 250 ms).
+        A view paused for AUTO_LIVE seconds without mouse use on the plots goes live again."""
         if not self._traces or not self._on_screen():
             return
+        if not self._live and time.monotonic() - self._touched >= AUTO_LIVE:
+            self.set_live(True)
         if self._live:
             self._set_range(*self._live_range())
         self._update_traces(urgent=False)
@@ -420,6 +465,9 @@ class WaveformView(QWidget):
         changed = live != self._live
         self._live = live
         self._anchored = False
+        self._wheel = 0
+        if not live:
+            self._touched = time.monotonic()   # the auto-return counts from the pause
         self._update_live_button()
         if live and changed:
             self._set_range(*self._live_range())
@@ -490,31 +538,87 @@ class WaveformView(QWidget):
         if self._live:
             b.setIcon(theme.icon("live"))
             b.setText("Live")
-            b.setToolTip("Following the newest data. Zooming or panning pauses it.")
+            b.setToolTip("Following the newest data. The mouse wheel over a plot changes the window length; "
+                         "dragging a plot pauses.")
+            b.setStyleSheet("")
         else:
-            b.setIcon(theme.icon("pause"))
-            b.setText("Paused")
-            b.setToolTip("Paused - click (or double-click a plot) to follow the newest data again")
+            c = theme.COLORS
+            # amber, so a paused view is never mistaken for a live one; dark text on the bright dark-theme
+            # amber, white on the deeper light-theme amber (both readable)
+            fg = c["bg"] if theme.MODE == "dark" else "#ffffff"
+            b.setIcon(QIcon())
+            b.setText("Paused – back to live")
+            b.setToolTip(f"Paused: the view does not follow the newest data. Click here (or double-click a "
+                         f"plot) to go live again; it does so by itself after {AUTO_LIVE / 60:g} minutes "
+                         f"without mouse use on the plots.")
+            b.setStyleSheet(f"QToolButton, QToolButton:hover {{ background: {c['warn']}; color: {fg}; "
+                            f"font-weight: 600; border-radius: 4px; padding: 4px 10px; }}")
 
     # ------------------------------------------------------------------------------------
     # time range
     # ------------------------------------------------------------------------------------
     def _live_range(self):
-        """The window ending now, or at the shown channels' newest sample when that is ahead of
-        the PC clock (instrument clock ahead: continuous, no jump when it crosses now). When only
-        old data is held (newest sample more than 80 % of the window ago) it ends just after
-        that sample, so the traces are never off screen; it follows now again once the data is
-        back within half a window (hysteresis: a latency near the threshold never flips it)."""
+        """The window ending where the newest data arrive: now minus the arrival lag of the shown
+        channels' newest sample (the smallest seen in the last LAG_MEMORY s, see _note_latest).
+        So each record touches the right edge as it arrives and the view scrolls smoothly in
+        between, whatever the PC clock's offset (a PC clock 18.8 s fast and 2.5 s records used to
+        leave the right ~20 s always empty); when the data stop, the edge keeps moving in real
+        time and the growing gap shows it. Never seen data arrive: the edge is now (or the newest
+        sample, when that is ahead). When only old data is held (newest sample more than 80 % of
+        the window before that edge) it ends just after that sample, so the traces are never off
+        screen; it follows the data again once they are back within half a window (hysteresis:
+        a latency near the threshold never flips it)."""
         now = time.time()
         stats = self.engine.hub.stats_snapshot()
         ends = [stats[s]["last_end"] for s in self._sids if s in stats]
-        end = now
+        if ends:
+            self._note_latest(max(ends), now)
+        live = now - self._live_lag(now)
+        end = live
         if ends:
             latest = max(ends)
             limit = 0.5 if self._anchored else 0.8
-            self._anchored = latest < now - limit * self._window
-            end = latest + 0.02 * self._window if self._anchored else max(now, latest)
+            self._anchored = latest < live - limit * self._window
+            end = latest + 0.02 * self._window if self._anchored else max(live, latest)
         return end - self._window, end
+
+    def _note_latest(self, latest, now):
+        """Record the arrival lag (now - newest sample end) each time the newest sample of the
+        shown channels advances. Not counted: the first look and a change of the channel set
+        (a reference only - that data may have arrived long ago; after a change the first lag
+        measured replaces the old set's at once, see _live_lag), lags beyond LAG_LIMIT, and
+        advances much faster than real time (a backfill of the instrument's buffer: its lags
+        only shrink towards the real one and would make the view race through old data)."""
+        prev, self._latest = self._latest, latest
+        if prev is not None and latest > prev:
+            lag = now - latest
+            realtime = latest - prev <= 2.0 * (now - self._latest_at) + 5.0
+            if abs(lag) <= LAG_LIMIT and realtime:
+                if not self._lags and self._lag is not None and not self._relag:
+                    # data back after a silence: the lag known before stays a candidate for
+                    # LAG_MEMORY s, so the backfilled records do not pull the view back
+                    self._lags.append((now, self._lag))
+                self._lags.append((now, lag))
+        if latest != prev:
+            self._latest_at = now
+
+    def _live_lag(self, now):
+        """The smallest arrival lag of the last LAG_MEMORY s; none in that time: the last one
+        used (data stopped: the view keeps scrolling in real time); never any: 0. A lag that
+        grows (the smallest one expired) grows by at most LAG_GROWTH s per second, so the right
+        edge never steps back - it only slows down for a moment. The first lag of another
+        channel set is taken at once (the plots were rebuilt anyway)."""
+        lags = self._lags
+        while lags and lags[0][0] < now - LAG_MEMORY:
+            lags.popleft()
+        if lags:
+            best = min(lag for _t, lag in lags)
+            if self._lag is not None and best > self._lag and not self._relag:
+                best = min(best, self._lag + LAG_GROWTH * max(0.0, now - self._lag_at))
+            self._lag = best
+            self._relag = False
+        self._lag_at = now
+        return self._lag or 0.0
 
     def _set_range(self, t0, t1):
         if not self._traces:
@@ -538,10 +642,28 @@ class WaveformView(QWidget):
             self.range_label.setText(text)
 
     def _on_user_range(self, *_args):
-        """Mouse zoom / pan: stop following live data."""
+        """Mouse pan (or a zoom while paused): stop following live data."""
+        self._touched = time.monotonic()
         if self._live:
-            self._live = False
-            self._update_live_button()
+            self.set_live(False)
+
+    def _on_wheel(self, ev):
+        """The mouse wheel over a plot (or its time axis). Live: it steps the Window choice -
+        up shorter, down longer - and the view stays live; returns True (handled). Paused:
+        False, the plot zooms as usual."""
+        self._touched = time.monotonic()
+        if not self._live:
+            return False
+        self._wheel += ev.delta()
+        steps = int(self._wheel / WHEEL_NOTCH)    # whole notches (towards zero for both directions)
+        if steps:
+            self._wheel -= steps * WHEEL_NOTCH
+            box = self.window_box
+            i = min(box.count() - 1, max(0, box.currentIndex() - steps))
+            if i != box.currentIndex():
+                box.setCurrentIndex(i)            # _set_window: new range, saved
+        ev.accept()
+        return True
 
     def _on_xrange(self, *_args):
         if self._setting_range:
@@ -735,6 +857,10 @@ class WaveformView(QWidget):
             self._version += 1   # more / fewer pixels: decimate again
         elif obj is self.scroll.viewport() and ev.type() == QEvent.Resize:
             self._size_canvas(ev.size().width(), ev.size().height())
+        elif obj is self.glw.viewport() and (
+                ev.type() in (QEvent.MouseButtonPress, QEvent.MouseButtonDblClick, QEvent.Wheel)
+                or (ev.type() == QEvent.MouseMove and ev.buttons() != Qt.NoButton)):
+            self._touched = time.monotonic()   # the user is working with the plots: no auto-return yet
         return super().eventFilter(obj, ev)
 
     def changeEvent(self, ev):

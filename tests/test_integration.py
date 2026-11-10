@@ -309,4 +309,8 @@ def test_application_end_to_end(tmp_path):
     assert stop_time < 6, f"engine stop took {stop_time:.1f} s"
     assert not engine.running and not any(t.name == "seiszone-engine" for t in threading.enumerate())
     assert errors.lines == [], "errors were logged:\n" + "\n".join(errors.lines)
-    assert cfg.source(SOURCE_ID)["enabled"] and Config(cfg.path).get("view", "channels") == sorted(SIDS)
+    # the instrument's channels, then the Gecko's as they joined (new channels are shown by themselves;
+    # within each group in the order they arrived)
+    saved = Config(cfg.path).get("view", "channels")
+    assert cfg.source(SOURCE_ID)["enabled"] and len(saved) == len(SIDS) + len(GECKO_SIDS)
+    assert set(saved[:len(SIDS)]) == set(SIDS) and set(saved[len(SIDS):]) == set(GECKO_SIDS)

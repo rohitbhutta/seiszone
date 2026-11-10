@@ -10,8 +10,10 @@ The user interface calls the public methods from its own thread. They change con
 once (the config is the truth) and then ask the loop to bring the running links in line with
 it, so calls in quick succession (disable, enable, edit) always end in the configured state.
 A listener port that is busy (another program, an old SeisZone still closing) is shown in
-status() and tried again every LISTEN_RETRY seconds (with the settings the listeners were
-opened with: a settings change is applied by apply_settings only); it never stops the engine.
+status() with the program that holds it ("owner": the old Gecko SeedLink service or another
+program, see core/ports.py) and tried again every LISTEN_RETRY seconds (with the settings the
+listeners were opened with: a settings change is applied by apply_settings only), so a port
+that becomes free is taken within a few seconds; it never stops the engine.
 
 The SeedLink server's packet numbers continue from the previous run (state "server_seq" plus
 SEQ_SAFETY_GAP for the packets numbered after the last save), so a number a downstream client
@@ -25,6 +27,7 @@ import threading
 import time
 
 from .. import config as cfg_mod
+from . import ports
 from .gcf_link import GcfLink
 from .gecko import GeckoReceiver
 from .hub import DataHub
@@ -42,19 +45,38 @@ LINK_STOP_WAIT = 3        # s a link gets to say goodbye (BYE, GCFSTOP) before i
 SERVER_CLOSE_WAIT = 2     # s for a listener and its connections to close
 TICK = 1.0                # s between housekeeping steps
 STATUS_LOG_EVERY = 60.0   # s between one-line status messages in the log
-LISTEN_RETRY = 30.0       # s between new tries of a listener port that could not be opened
+LISTEN_RETRY = 3.0        # s between new tries of a listener port that could not be opened (cheap)
 ADDR_IN_USE = {errno.EADDRINUSE, 10048}   # 10048 = WSAEADDRINUSE
 ADDR_DENIED = {errno.EACCES, 10013}       # 10013 = WSAEACCES (port excluded / reserved by Windows)
 SEQ_SAFETY_GAP = 100000   # server packet numbers skipped at start (numbered after the last save)
 
 
-def listen_error(port, exc):
-    """A busy or blocked port in words the user understands."""
+def listen_error(port, exc, owner=None):
+    """A busy or blocked port in words the user understands (owner: see ports.describe_owner)."""
     if exc.errno in ADDR_IN_USE:
+        if owner == "old-service":
+            return f"port {port} is used by the old Gecko SeedLink service"
         return f"port {port} is in use by another program"
     if exc.errno in ADDR_DENIED:
         return f"port {port} is blocked (reserved by Windows or another program)"
     return f"port {port} cannot be opened ({getattr(exc, 'strerror', None) or exc})"
+
+
+def busy_port_owner(port, exc):
+    """(owner, pid) of a port whose bind failed: only "address in use" has an owner to look for
+    (a read-only query of this PC's listener table, a few milliseconds)."""
+    if exc.errno not in ADDR_IN_USE:
+        return None, None
+    try:
+        return ports.describe_owner(port)
+    except Exception:  # never let the lookup break the listener retry
+        log.debug("owner of port %s not found", port, exc_info=True)
+        return None, None
+
+
+def owner_note(owner, pid):
+    """', process id N' for the log line of another program's port (never a program name)."""
+    return f", process id {pid}" if owner == "other" and pid else ""
 
 
 def station_descriptions(src):
@@ -103,10 +125,12 @@ class Engine:
         self._changes = None          # asyncio.Lock: one change of links / listeners at a time
         self._gecko_servers = {}      # configured port -> asyncio.Server
         self._gecko_errors = {}       # configured port -> error text
+        self._gecko_owners = {}       # configured port -> (owner, pid) of a busy port
         self._gecko_cfg = None        # (enabled, bind, ports) the listeners were opened with
         self._sl_server = None        # asyncio.Server of the SeedLink server
         self._sl_port = None          # port it really listens on (differs from config for port 0)
         self._sl_error = ""
+        self._sl_owner = (None, None)  # (owner, pid) of its port while that is busy
         self._sl_cfg = None           # (enabled, bind, port) it was opened with
         self._last_status_log = 0.0
         self._last_retry = 0.0
@@ -321,14 +345,18 @@ class Engine:
         g = self.config.get("gecko") or {}
         s = self.config.get("seedlink_server") or {}
         srv = self.server
+        g_owner, g_pid = self._gecko_owner()
+        s_owner, s_pid = self._sl_owner if self._sl_error else (None, None)
         return {
             "sources": sources,
             "gecko": {"enabled": bool(g.get("enabled", True)), "ports": list(g.get("ports") or []),
                       "listening": self._gecko_ports(), "error": "; ".join(self._gecko_errors.values()),
+                      "owner": g_owner, "owner_pid": g_pid,
                       "links": [dict(x) for x in list(self.gecko.links.values())]},
             "server": {"enabled": bool(s.get("enabled", True)), "bind": s.get("bind", "0.0.0.0"),
                        "port": self._sl_port or s.get("port"), "listening": self._sl_server is not None,
-                       "error": self._sl_error, "clients": srv.clients if srv else 0,
+                       "error": self._sl_error, "owner": s_owner, "owner_pid": s_pid,
+                       "clients": srv.clients if srv else 0,
                        "peers": [dict(p) for p in list(srv.peers)] if srv else []},
             "started": self.started if self.running else None,
         }
@@ -395,6 +423,16 @@ class Engine:
             port = 18010
         return bool(s.get("enabled", True)), s.get("bind") or "0.0.0.0", port
 
+    def _gecko_owner(self):
+        """(owner, pid) of the busy Gecko ports: the old service first (the one SeisZone can
+        offer to stop), then another program; (None, None) when no port is busy."""
+        owners = [self._gecko_owners.get(p, (None, None)) for p in list(self._gecko_errors)]
+        for kind in ("old-service", "other"):
+            for owner, pid in owners:
+                if owner == kind:
+                    return owner, pid
+        return None, None
+
     def _gecko_ports(self):
         return [srv.sockets[0].getsockname()[1] for srv in list(self._gecko_servers.values()) if srv.sockets]
 
@@ -413,17 +451,21 @@ class Engine:
             try:
                 self._gecko_servers[port] = await asyncio.start_server(self.gecko.handle, bind, port)
                 self._gecko_errors.pop(port, None)
+                self._gecko_owners.pop(port, None)
                 log.info("Gecko receiver listening on %s:%d", bind, self._gecko_servers[port].sockets[0].getsockname()[1])
             except OSError as e:
-                text = listen_error(port, e)
+                owner, pid = busy_port_owner(port, e)
+                text = listen_error(port, e, owner)
                 if self._gecko_errors.get(port) != text:
-                    log.error("Gecko receiver: %s (%s)", text, e)
+                    log.error("Gecko receiver: %s (%s%s)", text, e, owner_note(owner, pid))
                 self._gecko_errors[port] = text
+                self._gecko_owners[port] = (owner, pid)
 
     async def _close_gecko(self, ports):
         servers = [self._gecko_servers.pop(p) for p in ports if p in self._gecko_servers]
         for p in ports:
             self._gecko_errors.pop(p, None)
+            self._gecko_owners.pop(p, None)
         await self._close_servers(servers)
 
     async def _open_server(self, cfg=None):
@@ -440,10 +482,12 @@ class Engine:
         try:
             self._sl_server = await asyncio.start_server(server.handle, bind, port)
         except OSError as e:
-            text = listen_error(port, e)
+            owner, pid = busy_port_owner(port, e)
+            text = listen_error(port, e, owner)
             if self._sl_error != text:
-                log.error("SeedLink server: %s (%s)", text, e)
+                log.error("SeedLink server: %s (%s%s)", text, e, owner_note(owner, pid))
             self._sl_error = text
+            self._sl_owner = (owner, pid)
             return
         self.server = server
         self._sl_port = self._sl_server.sockets[0].getsockname()[1]

@@ -473,6 +473,169 @@ def test_listener_retry_does_not_swallow_a_settings_change(make_engine):
         busy.close()
 
 
+# ---------------------------------------------------------------------- busy ports and their owner
+
+def busy_listener():
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    s.listen(1)
+    return s, s.getsockname()[1]
+
+
+def test_busy_port_names_its_owner_and_is_taken_once_free(make_engine):
+    """A port held by another program (here: this test) is reported with owner "other" and its
+    process id; once that program lets go, the listener retry opens it within a few seconds."""
+    from seiszone.core import engine as engine_mod
+    gecko_busy, gecko_port = busy_listener()
+    server_busy, server_port = busy_listener()
+    try:
+        engine = make_engine(server_port=server_port, gecko_ports=(gecko_port,))
+        st = engine.status()
+        assert st["gecko"]["error"] == f"port {gecko_port} is in use by another program"
+        assert st["server"]["error"] == f"port {server_port} is in use by another program"
+        if sys.platform == "win32":
+            assert st["gecko"]["owner"] == st["server"]["owner"] == "other"
+            assert st["gecko"]["owner_pid"] == st["server"]["owner_pid"] == os.getpid()
+    finally:
+        gecko_busy.close()
+        server_busy.close()
+    assert engine_mod.LISTEN_RETRY <= 5
+    t0 = time.monotonic()
+    wait_for(lambda: engine.status()["server"]["listening"] and engine.status()["gecko"]["listening"],
+             timeout=engine_mod.LISTEN_RETRY + 5, what="listeners on the freed ports")
+    assert time.monotonic() - t0 < engine_mod.LISTEN_RETRY + 3
+    st = engine.status()
+    assert st["gecko"]["listening"] == [gecko_port] and st["server"]["port"] == server_port
+    for part in ("gecko", "server"):
+        assert st[part]["error"] == "" and st[part]["owner"] is None and st[part]["owner_pid"] is None
+    with socket.create_connection(("127.0.0.1", server_port), timeout=5) as s:
+        s.sendall(b"HELLO\r\n")
+        assert b"SeisZone v" in s.makefile("rb").readline()
+
+
+def test_port_of_the_old_gecko_service_is_named(make_engine, monkeypatch):
+    """The old Gecko SeedLink service holds the port: the error says so (no program names)."""
+    from seiszone.core import ports
+    asked = []
+    monkeypatch.setattr(ports, "describe_owner", lambda port: asked.append(port) or ("old-service", 4321))
+    busy, port = busy_listener()
+    try:
+        engine = make_engine(server_port=port, gecko_ports=(port, 0))
+        st = engine.status()
+        assert st["gecko"]["error"] == f"port {port} is used by the old Gecko SeedLink service"
+        assert st["server"]["error"] == f"port {port} is used by the old Gecko SeedLink service"
+        assert st["gecko"]["owner"] == st["server"]["owner"] == "old-service"
+        assert st["gecko"]["owner_pid"] == st["server"]["owner_pid"] == 4321
+        assert len(st["gecko"]["listening"]) == 1          # the other Gecko port works
+        assert port in asked
+        assert "used by the old Gecko SeedLink service" in engine.status_line()
+        # a settings change away from the busy port clears the owner
+        engine.config.update_section("gecko", {"ports": [0]})
+        engine.config.update_section("seedlink_server", {"port": 0})
+        engine.apply_settings().result(5)
+        st = engine.status()
+        assert st["gecko"]["owner"] is None and st["server"]["owner"] is None and not st["server"]["error"]
+    finally:
+        busy.close()
+
+
+def test_listen_error_texts_and_owner_lookup_failure(monkeypatch):
+    from seiszone.core import engine as engine_mod
+    from seiszone.core import ports
+    busy = OSError(10048, "in use")
+    assert engine_mod.listen_error(58772, busy, "old-service") == "port 58772 is used by the old Gecko SeedLink service"
+    assert engine_mod.listen_error(58772, busy, "other") == "port 58772 is in use by another program"
+    assert engine_mod.listen_error(58772, OSError(10013, "denied"), "old-service").startswith("port 58772 is blocked")
+
+    def broken(port):
+        raise RuntimeError("lookup failed (test)")
+    monkeypatch.setattr(ports, "describe_owner", broken)
+    assert engine_mod.busy_port_owner(58772, busy) == (None, None)    # never breaks the retry
+    monkeypatch.setattr(ports, "describe_owner", lambda port: pytest.fail("looked up for a denied port"))
+    assert engine_mod.busy_port_owner(58772, OSError(10013, "denied")) == (None, None)
+
+
+def test_ports_parse_listener_tables():
+    """GetExtendedTcpTable rows (fakes): only LISTEN rows count, ports are in network order."""
+    import struct
+    from seiszone.core import ports
+    rows4 = [(ports.MIB_TCP_STATE_LISTEN, 0, socket.htons(58772), 0, 0, 111),
+             (5, 0x0100007F, socket.htons(50000), 0x0100007F, socket.htons(18000), 222),   # ESTABLISHED
+             (ports.MIB_TCP_STATE_LISTEN, 0x0100007F, socket.htons(18010), 0, 0, 333)]
+    buf4 = struct.pack("<I", len(rows4)) + b"".join(ports.ROW4.pack(*r) for r in rows4)
+    assert ports.parse_tcp_table(buf4, ports.AF_INET) == [(58772, 111), (18010, 333)]
+    assert ports.parse_tcp_table(buf4[:-4], ports.AF_INET) == [(58772, 111)]          # cut row ignored
+    rows6 = [(b"\0" * 16, 0, socket.htons(58772), b"\0" * 16, 0, 0, ports.MIB_TCP_STATE_LISTEN, 444),
+             (b"\0" * 15 + b"\1", 0, socket.htons(1), b"\0" * 16, 0, 0, 1, 555)]          # CLOSED
+    buf6 = struct.pack("<I", len(rows6)) + b"".join(ports.ROW6.pack(*r) for r in rows6)
+    assert ports.parse_tcp_table(buf6, ports.AF_INET6) == [(58772, 444)]
+    assert ports.parse_tcp_table(b"", ports.AF_INET) == []
+
+
+def test_ports_describe_owner_with_fakes(monkeypatch):
+    from seiszone.core import ports
+    monkeypatch.setattr(ports, "listeners", lambda: [(18010, 0), (18010, 700), (58772, 700), (1567, 900)])
+    services = {ports.OLD_SERVICE: 700}
+    monkeypatch.setattr(ports, "service_pid", lambda name: services.get(name))
+    assert ports.port_owner(58772) == 700 and ports.port_owner(18010) == 700 and ports.port_owner(9) is None
+    assert ports.describe_owner(58772) == ("old-service", 700)
+    assert ports.describe_owner(1567) == ("other", 900)
+    assert ports.describe_owner(9) == (None, None)
+    services.clear()                               # the old service is not running (or not installed)
+    assert ports.describe_owner(58772) == ("other", 700)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows listener table")
+def test_ports_finds_this_process_as_owner():
+    """Read-only, local: a listening 127.0.0.1 / ::1 socket of this test belongs to this process."""
+    from seiszone.core import ports
+    s4, p4 = busy_listener()
+    try:
+        assert ports.port_owner(p4) == os.getpid()
+        assert ports.describe_owner(p4) == ("other", os.getpid())
+        if socket.has_ipv6:
+            with socket.socket(socket.AF_INET6) as s6:
+                try:
+                    s6.bind(("::1", 0))
+                except OSError:
+                    return
+                s6.listen(1)
+                assert ports.port_owner(s6.getsockname()[1]) == os.getpid()
+    finally:
+        s4.close()
+    assert ports.service_pid("SeisZoneTestNoSuchService") is None
+
+
+def test_ports_stop_old_service_asks_windows_once(monkeypatch):
+    """ShellExecuteW is replaced: one elevated, hidden cmd.exe that stops and disables the
+    service; the user's No (ERROR_CANCELLED) and other failures give False."""
+    from seiszone.core import ports
+    calls = []
+    answers = [(42, 0), (ports.SE_ERR_ACCESSDENIED, ports.ERROR_CANCELLED), (2, 2)]
+
+    def fake_shell_execute(*args):
+        calls.append(args)
+        return answers.pop(0)
+    monkeypatch.setattr(ports, "_shell_execute", fake_shell_execute)
+    monkeypatch.setattr(ports.sys, "platform", "win32")
+    assert ports.stop_old_service() is True
+    hwnd, verb, program, params, directory, show = calls[0]
+    assert hwnd is None and verb == "runas" and directory is None and show == ports.SW_HIDE
+    assert program.lower().endswith(os.path.join("system32", "cmd.exe"))
+    assert params == "/c sc stop GeckoSeedLink & sc config GeckoSeedLink start= disabled"
+    assert ports.stop_old_service() is False          # the user said No
+    assert ports.stop_old_service() is False          # could not be started
+    assert len(calls) == 3
+
+    def broken(*args):
+        raise OSError("no shell (test)")
+    monkeypatch.setattr(ports, "_shell_execute", broken)
+    assert ports.stop_old_service() is False
+    monkeypatch.setattr(ports.sys, "platform", "linux")
+    monkeypatch.setattr(ports, "_shell_execute", lambda *a: pytest.fail("ShellExecuteW outside Windows"))
+    assert ports.stop_old_service() is False and ports.listeners() == [] and ports.service_pid("x") is None
+
+
 def test_cli_refuses_to_run_beside_seiszone(tmp_path, capsys, monkeypatch, quiet_log):
     from seiszone import single_instance
     monkeypatch.setattr(single_instance, "MUTEX_NAME", f"Local\\SeisZone.Test.{time.time_ns()}")

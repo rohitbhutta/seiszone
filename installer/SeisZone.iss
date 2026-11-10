@@ -1,17 +1,22 @@
 ; SeisZone installer (Inno Setup 6).
 ; Build: python installer\build.py   (PyInstaller -> build\dist\SeisZone\, then this script)
 ;    or: ISCC.exe installer\SeisZone.iss  after PyInstaller has built build\dist\SeisZone\
-; Silent: SeisZoneSetup.exe /VERYSILENT /SUPPRESSMSGBOXES [/TASKS="desktopicon"]
+; Silent: SeisZoneSetup.exe /VERYSILENT /SUPPRESSMSGBOXES [/MERGETASKS="desktopicon"]
+;   (/MERGETASKS keeps the tasks that are on by default; /TASKS= would switch them off)
 ;
-; Administrator rights are needed only to write to Program Files and to add the one Windows
-; Firewall rule. SeisZone itself always runs as the normal user. Recordings, exports, settings
-; and logs live in the user's own folders and are never touched by setup or uninstall.
+; Administrator rights are needed only to write to Program Files, to add the one Windows
+; Firewall rule and (task "stopoldservice") to stop and disable the old Gecko SeedLink service,
+; which holds the Gecko port 58772 and the SeedLink port 18010. That service is not removed: it
+; can be switched on again in Windows Services. SeisZone itself always runs as the normal user.
+; Recordings, exports, settings and logs live in the user's own folders and are never touched
+; by setup or uninstall.
 
 #ifndef AppVer
-  #define AppVer "1.0.0"
+  #define AppVer "1.0.1"
 #endif
 #define AppName "SeisZone"
 #define Exe "SeisZone.exe"
+#define OldService "GeckoSeedLink"
 
 [Setup]
 AppId={{37295E38-5357-4E08-9810-1EEB96AED4F2}
@@ -52,6 +57,8 @@ UninstalledAll=%1 was removed from your computer.%n%nYour recordings, exports, s
 
 [Tasks]
 Name: desktopicon; Description: "Create a desktop icon"; GroupDescription: "Shortcuts:"; Flags: unchecked
+; on by default, offered only when the old Gecko SeedLink service is installed on this PC
+Name: stopoldservice; Description: "Stop and disable the old Gecko SeedLink service, so your Gecko recorder connects to SeisZone (frees ports 58772 and 18010)"; GroupDescription: "Old Gecko SeedLink service:"; Check: OldServiceInstalled
 
 [InstallDelete]
 ; program library of an older version: replaced as a whole so no stale module is left behind
@@ -108,6 +115,25 @@ begin
   Sleep(1000);
 end;
 
+{ True when the old Gecko SeedLink service is installed (its key under Services exists). }
+function OldServiceInstalled: Boolean;
+begin
+  Result := RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\{#OldService}');
+end;
+
+{ Stop the old service and keep it off. A clean stop is not a failure, so its "restart on
+  failure" actions do not start it again; it stays installed and can be switched on again in
+  Windows Services. SeisZone opens the freed ports by itself within a few seconds. }
+procedure StopOldService;
+var
+  Code: Integer;
+begin
+  Exec(ExpandConstant('{sys}\sc.exe'), 'stop {#OldService}', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Log(Format('sc stop {#OldService}: exit code %d', [Code]));
+  Exec(ExpandConstant('{sys}\sc.exe'), 'config {#OldService} start= disabled', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Log(Format('sc config {#OldService} start= disabled: exit code %d', [Code]));
+end;
+
 var
   ClosedBySetup: Boolean;
 
@@ -128,12 +154,15 @@ begin
   ClosedBySetup := True;
 end;
 
-{ A silent update brings SeisZone back (as the normal user, in the tray); an interactive one
-  offers "Launch SeisZone" on its last page. }
+{ The old Gecko SeedLink service is stopped first (task "stopoldservice"), so SeisZone finds
+  the Gecko and SeedLink ports free. A silent update brings SeisZone back (as the normal user,
+  in the tray); an interactive one offers "Launch SeisZone" on its last page. }
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Code: Integer;
 begin
+  if (CurStep = ssPostInstall) and WizardIsTaskSelected('stopoldservice') then
+    StopOldService;
   if (CurStep = ssPostInstall) and ClosedBySetup and WizardSilent then
     ExecAsOriginalUser(ExpandConstant('{app}\{#Exe}'), '--minimized', '', SW_SHOWNORMAL, ewNoWait, Code);
 end;

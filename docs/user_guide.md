@@ -27,7 +27,9 @@ Contents
 1. Run **SeisZoneSetup.exe**. Windows asks for administrator permission: answer **Yes**.
    Setup needs it only to copy the program to `C:\Program Files\SeisZone` and to add one
    Windows Firewall rule. SeisZone itself always runs with your normal user rights.
-2. Choose whether you want a desktop icon. A Start menu icon is always made.
+2. Choose whether you want a desktop icon. A Start menu icon is always made. If the old Gecko
+   SeedLink service is installed, leave **"Stop and disable the old Gecko SeedLink service, so
+   your Gecko recorder connects to SeisZone"** ticked (see section 13).
 3. If SeisZone is already running (for an update), setup tells you **"SeisZone is running and
    will be closed"**. Click OK. Recordings that were running continue when SeisZone starts again.
 4. At the end leave **Launch SeisZone** ticked and click Finish.
@@ -103,6 +105,9 @@ Nothing else is needed on the PC: the firewall rule was made by the installer an
 listens on 58772 whenever it runs. The Gecko then appears in the Sources list under
 **Gecko receiver :58772** with its serial number and site name, and its channels (network
 SS, station SMR03) appear in the channels table.
+
+If the old Gecko SeedLink service of the earlier Gecko setup still runs on this PC, the Gecko
+connects to it instead; see **Gecko recorder does not appear / port in use** in section 13.
 
 ## 5. The main window
 
@@ -285,11 +290,34 @@ SeisZone starts again.
   > Inbound Rules that "SeisZone" is enabled.
 * Both devices must be on the same network (or a route must exist between them).
 
-**"Port in use" / the Gecko receiver or SeedLink server shows an error**
+**Gecko recorder does not appear / port in use**
 
-Another program already listens on that port (often an older Gecko or SeedLink program, or a
-second copy of a server). Close or uninstall that program, or choose another port in Settings
-(and then change it in the W610 or the other programs too). The log names the busy port.
+The Gecko connects to whatever program listens on port 58772 of this PC. If the **old Gecko
+SeedLink service** (the Windows service "GeckoSeedLink" of the earlier Gecko setup) still runs,
+it holds port 58772 (Gecko) and 18010 (SeedLink), the Gecko stays connected to it, and SeisZone
+shows on the **Gecko receiver** and **SeedLink server** rows:
+`error - port 58772 is used by the old Gecko SeedLink service`.
+
+* The first time this happens while the SeisZone window is open, SeisZone asks: *"Your Gecko
+  recorder is connected to the old Gecko SeedLink service, not SeisZone. Stop and disable the
+  old service now ...?"* Click **Stop old service**. Windows asks once for administrator permission (click Yes).
+* Later, use the button **Free the port – stop the old Gecko SeedLink service** above the
+  sources list, or right-click the Gecko receiver / SeedLink server row.
+* The rows then show **Waiting for the port…**. Within a few seconds SeisZone opens the ports
+  itself, the rows turn to **listening** and the Gecko connects to SeisZone (the W610 dials
+  again by itself, usually within a minute).
+* The installer does the same when its task **"Stop and disable the old Gecko SeedLink
+  service..."** stays ticked (it is offered only when that service exists).
+* The old service is only stopped and switched off (start type "Disabled"), not removed. To use
+  it again: Windows key, type **Services**, open **Gecko SeedLink Server**, set Startup type to
+  Automatic and click Start (then SeisZone gets the ports no more).
+
+If the row says `port ... is in use by another program`, some other program holds the port
+(another SeedLink server, a second copy of a program). Close or uninstall that program, or
+choose another port in Settings (and then change it in the W610 or the other programs too).
+SeisZone tries the port again every few seconds and takes it as soon as it is free. The log
+names the busy port and the process id of the program that holds it (Task Manager, Details
+tab, PID column).
 
 **Physical units are not offered for a channel**
 

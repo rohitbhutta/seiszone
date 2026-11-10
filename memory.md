@@ -45,12 +45,17 @@ Fortimus: SeedLink on 18000 (channels 0J.HN? 200 sps, 9J.MN? 5 sps), GCF Scream 
 port 80 (status, data streams, StationXML ~0.9 MB — about a minute over the slow VPN).
 Tests must never contact these or listen on 58772/18010 (the real Gecko would connect).
 
-## Status (2026-11-08)
+## Status (2026-11-10, version 1.0.1)
 
 * Project at `C:\D Drive\Only Coding\seiszone` (git repository, local only - not pushed).
+* **Version 1.0.1** (see "Version 1.0.1" below) is built but NOT committed yet: the working tree
+  holds the 1.0.1 changes on top of commit 625b5b1. The user has 1.0.0 installed and running
+  (`C:\Program Files\SeisZone`); `build/dist/SeisZoneSetup.exe` (1.0.1, 68.4 MB) upgrades it in
+  place (same AppId).
 * All modules written and integrated: spine, SeedLink client/server, Gecko receiver, GCF link,
   probe, StationXML, recorder, export, DSP, engine + CLI, every UI panel/dialog, icon, installer,
-  README, user guide. `python -m pytest tests -q`: 188 passed (about 2 min; 144 before the review fixes below).
+  README, user guide. `python -m pytest tests -q`: 211 passed (about 2 min; 188 in 1.0.0 after
+  the review fixes, 144 before them).
 * `tests/test_integration.py` runs the real Engine + MainWindow offscreen against a local fake
   instrument (200 sps in real time, history backfilled by SeedLink resume), replays the captured
   Gecko link into the engine's Gecko port, records, exports 30 s and checks it sample by sample;
@@ -66,14 +71,53 @@ Tests must never contact these or listen on 58772/18010 (the real Gecko would co
   position, 901 KB StationXML each). All three streamed 0J.HN? 200 sps + 9J.MN? 5 sps with 0 gaps.
   Shown latency ~22 s = PC clock 18.8 s fast (w32tm vs time.google.com) + ~3 s real; the PC clock
   should be synced (Windows Settings > Time > Sync now).
-* The OLD `GeckoSeedLink` service (the old Gecko add-on's exe) was found running again on 2026-11-08 and
-  holds 58772 + 18010 with the SMR03 connected. SeisZone reports "port in use by another program"
-  and carries on. The Gecko part of the field test waits until the user stops/uninstalls that old
-  service (the user's decision; we did not touch it).
+* The OLD `GeckoSeedLink` service (the old Gecko add-on's service) was found running again on
+  2026-11-08 and holds 58772 + 18010 with the SMR03 connected. 1.0.0 only said "port in use by
+  another program"; 1.0.1 names it and offers to stop it (below). We never stopped it ourselves:
+  that is the user's choice (button in SeisZone or the installer task).
 * Field test 2026-11-10 after the review fixes (rebuilt frozen exe, same scratch home, 90 s): the
   new resume command `DATA n <time>` is accepted by all three Fortimus servers; each backfilled
   ~22-24 h of history (~5,850 packets per source) with 0 gaps and no errors.
-* Not yet done: Gecko field test; user installs and accepts the installer.
+* Not yet done: Gecko field test; user installs and accepts 1.0.1.
+
+### Version 1.0.1 (2026-11-10)
+
+Why: after installing 1.0.0 and connecting a Fortimus (IP + port 18000) the user reported
+(1) the readings were not live: the view sat on one fixed reading and showed only one channel
+(KA.KAND.0J.HNZ), and (2) the Gecko recorder was connected to the PC but not in SeisZone. Causes:
+(1) the live right edge followed the PC clock, which is ~18.8 s fast, so the newest data sat ~20 s
+left of the edge and moved in record-sized jumps; a mouse wheel paused the view without a clear
+sign; only the first channels were ever shown. (2) the old Gecko SeedLink service still holds
+58772 (Gecko) and 18010 (SeedLink server), so SeisZone could not listen on them.
+
+* Live view (`ui/waveform_view.py`): right edge = now minus the smallest arrival lag seen in the
+  last 60 s (follows the data, not the PC clock; guards against backfill, long silences and
+  backwards steps; a new channel set takes its lag at once). Wheel while Live steps the window
+  length and stays Live (while Paused it zooms; a drag pauses). Paused is an amber
+  "Paused – back to live" button and goes Live by itself after 120 s without mouse use.
+* Channels (`ui/main_window.py`, `ui/channels_panel.py`): every new channel is shown as it
+  arrives (up to 12) unless the user unticked it; unticked channels go into config view
+  `"hidden"` and stay hidden after a restart. On the user's PC all KA.KAND channels appear.
+* Old service (`core/ports.py` new, `core/engine.py`, `ui/sources_panel.py`): a busy port's
+  owner is found read-only (TCP listener table + service status query; no program names are ever
+  looked up or shown); status `owner`/`owner_pid`, error "port N is used by the old Gecko
+  SeedLink service". The Sources panel shows a bar + context-menu action "Free the port – stop
+  the old Gecko SeedLink service" and asks once per run (only while the window is on screen).
+  The action is one UAC request: `cmd /c sc stop GeckoSeedLink & sc config GeckoSeedLink start=
+  disabled` (stopped and disabled, never deleted). Rows then show "Waiting for the port…" until
+  the engine listens (max 60 s). Busy ports are retried every 3 s (was 30 s).
+* Installer: task `stopoldservice` (on by default, offered only when the service's registry key
+  exists) does the same stop + disable after install. Silent installs use `/MERGETASKS`.
+* Docs: README and user guide ("Gecko recorder does not appear / port in use"), plan.md 5.14,
+  5.15 (incl. live view and auto-show) and new 5.16.
+* Built 2026-11-10 (`python installer/build.py`, SEISZONE_HOME in a temp folder): frozen exe
+  `--version` = "SeisZone 1.0.1"; `--engine --seconds 8 --config <temp: no sources, Gecko off,
+  server 127.0.0.1 port 0> --output FILE` exit code 0. Setup not run.
+* Known limits: on the first data after a start the edge moves back once by the lag (~21 s on
+  the user's PC); a PC clock more than 5 min off gets no compensation; "Show only these" hides
+  the others for good; stale saved channels count towards the 12; with many channels the scroll
+  bar (not the wheel) scrolls the plots; the UAC request blocks the window until answered; the
+  W610's redial time after the port frees up is not measured.
 
 ### Review fixes (2026-11-08, after an independent review of 35 confirmed defects)
 
@@ -159,7 +203,12 @@ User files: `%APPDATA%\SeisZone` (config.json, state.json, stationxml\), `%LOCAL
 
 ## Open items / next steps
 
-1. User installs build/dist/SeisZoneSetup.exe (UAC) and checks the window on the real desktop.
-2. Fortimus field test done (above). SMR03 field test: the user first stops/uninstalls the old
-   GeckoSeedLink service (it holds 58772); then run SeisZone and check "Gecko receiver" links.
-3. User acceptance; then decide whether the old Gecko add-on folder is retired.
+1. Commit the 1.0.1 working tree (not committed by the build step).
+2. User installs build/dist/SeisZoneSetup.exe 1.0.1 over 1.0.0 (UAC) and checks that the view is
+   live and shows all channels.
+3. The user chooses to stop the old GeckoSeedLink service: installer task "stopoldservice" or
+   the Sources panel's "Free the port" / "Stop old service". Then check that "Gecko receiver"
+   shows the SMR03 link (W610 redial time unknown, usually within a minute) - the SMR03 field test.
+4. User syncs the PC clock (Windows Settings > Time > Sync now; it was 18.8 s fast), so the
+   Latency column shows the real ~3 s.
+5. User acceptance; then decide whether the old Gecko add-on folder is retired.

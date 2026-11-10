@@ -261,6 +261,160 @@ def test_sources_panel_add_button_opens_the_add_dialog(make_engine, qapp, monkey
     assert panel.selected_source_id() == engine.config.sources()[0]["id"]
 
 
+def held_by_old_service(engine, held):
+    """engine.status() as while the old Gecko SeedLink service holds 58772 and 18010 (as long
+    as held["on"] is true)."""
+    base = engine.status
+
+    def status():
+        st = base()
+        if held["on"]:
+            st["gecko"].update(listening=[], links=[], owner="old-service", owner_pid=4321,
+                               error="port 58772 is used by the old Gecko SeedLink service")
+            st["server"].update(listening=False, clients=0, peers=[], owner="old-service", owner_pid=4321,
+                                error="port 18010 is used by the old Gecko SeedLink service")
+        return st
+    engine.status = status
+
+
+def test_sources_panel_frees_the_ports_of_the_old_gecko_service(make_engine, qapp, monkeypatch):
+    from seiszone.ui import sources_panel as sp
+    engine = make_engine()
+    held = {"on": True}
+    held_by_old_service(engine, held)
+    opened, stops, answers = [], [], [False, True]
+    monkeypatch.setattr(QMessageBox, "open", lambda self: opened.append(self))     # never shown
+    monkeypatch.setattr(sp.ports, "stop_old_service", lambda: stops.append(1) or answers.pop(0))
+
+    panel = sp.SourcesPanel(engine, engine.config)
+    pump(qapp)
+    assert opened == []                           # the window is not on screen yet (tray): no question
+    panel.show()
+    panel.refresh()
+    gecko, server = panel.tree.topLevelItem(1), panel.tree.topLevelItem(2)
+    assert gecko.text(sp.C_STATE) == "error - port 58772 is used by the old Gecko SeedLink service"
+    assert server.text(sp.C_STATE) == "error - port 18010 is used by the old Gecko SeedLink service"
+    assert "old Gecko SeedLink service holds this port" in gecko.toolTip(sp.C_NAME)
+    assert not panel.old_service_bar.isHidden() and panel.free_button.isEnabled()
+    assert "58772 and 18010" in panel.old_service_label.text()
+    assert panel.free_button.text() == "Free the port – stop the old Gecko SeedLink service"
+
+    # the one question of this run, with its two answers
+    pump(qapp)
+    assert len(opened) == 1
+    box = opened[0]
+    assert box.text() == sp.OFFER_TEXT and box.text().startswith("Your Gecko recorder is connected to the old")
+    assert "administrator permission" in box.text() and "Windows Services" in box.text()
+    buttons = {b.text(): b for b in box.buttons()}
+    assert set(buttons) == {"Stop old service", "Not now"}
+    buttons["Not now"].click()
+    assert stops == [] and panel.offer_box is None
+    panel.refresh()
+    pump(qapp)
+    assert len(opened) == 1                       # not asked again in this run
+
+    # the context menu of both rows offers it; the user says No to Windows' question first
+    for row in (gecko, server):
+        find_action(panel.build_menu(row), sp.FREE_ACTION_TEXT)
+    find_action(panel.build_menu(gecko), sp.FREE_ACTION_TEXT).trigger()
+    assert stops == [1] and gecko.text(sp.C_STATE).startswith("error - ")
+    assert panel.free_button.isEnabled()
+    panel.free_button.click()                     # now permission is given
+    assert stops == [1, 1]
+    assert gecko.text(sp.C_STATE) == server.text(sp.C_STATE) == sp.WAITING_TEXT == "Waiting for the port…"
+    assert not panel.free_button.isEnabled() and panel.old_service_label.text().startswith(sp.WAITING_TEXT)
+    assert not find_action(panel.build_menu(gecko), sp.FREE_ACTION_TEXT).isEnabled()
+    assert not panel.free_ports()                 # one stop at a time
+    panel.refresh()
+    assert gecko.text(sp.C_STATE) == sp.WAITING_TEXT
+
+    # the engine has the ports: back to normal
+    held["on"] = False
+    panel.refresh()
+    assert gecko.text(sp.C_STATE) == "listening" and server.text(sp.C_STATE) == "listening"
+    assert panel.old_service_bar.isHidden() and panel._freeing is None
+    with pytest.raises(AssertionError):
+        find_action(panel.build_menu(gecko), sp.FREE_ACTION_TEXT)
+    assert not panel.free_ports() and stops == [1, 1]     # nothing to free: Windows is not asked
+    panel.close()
+
+
+def test_sources_panel_waits_until_the_engine_listens(make_engine, qapp, monkeypatch):
+    """The old service has let go but the port is still busy a moment (no known owner): the rows
+    keep waiting until the engine listens, they do not fall back to an error."""
+    from seiszone.ui import sources_panel as sp
+    engine = make_engine()
+    held = {"on": True}
+    held_by_old_service(engine, held)
+    monkeypatch.setattr(sp.ports, "stop_old_service", lambda: True)
+    panel = sp.SourcesPanel(engine, engine.config)
+    assert panel.free_ports()
+    base = engine.status
+
+    def busy_without_owner():
+        st = base()
+        st["gecko"].update(listening=[], owner=None, owner_pid=None, error="port 58772 is in use by another program")
+        return st
+    held["on"] = False
+    engine.status = busy_without_owner
+    panel.refresh()
+    assert panel.tree.topLevelItem(1).text(sp.C_STATE) == sp.WAITING_TEXT
+    assert panel.tree.topLevelItem(2).text(sp.C_STATE) == "listening"     # this one has its port
+    assert not panel.old_service_bar.isHidden() and "58772" in panel.old_service_label.text()
+    engine.status = base
+    panel.refresh()
+    assert panel.tree.topLevelItem(1).text(sp.C_STATE) == "listening" and panel._freeing is None
+    assert panel.old_service_bar.isHidden()
+
+
+def test_sources_panel_offer_answered_stop_and_wait_runs_out(make_engine, qapp, monkeypatch):
+    from seiszone.ui import sources_panel as sp
+    engine = make_engine()
+    held = {"on": True}
+    held_by_old_service(engine, held)
+    opened, stops = [], []
+    monkeypatch.setattr(QMessageBox, "open", lambda self: opened.append(self))
+    monkeypatch.setattr(sp.ports, "stop_old_service", lambda: stops.append(1) or True)
+    panel = sp.SourcesPanel(engine, engine.config)
+    panel.show()
+    panel.refresh()
+    pump(qapp)
+    assert len(opened) == 1
+    {b.text(): b for b in opened[0].buttons()}["Stop old service"].click()
+    assert stops == [1] and panel.tree.topLevelItem(1).text(sp.C_STATE) == sp.WAITING_TEXT
+    # the port stays held: after FREE_WAIT the error and the button come back
+    panel._freeing -= sp.FREE_WAIT + 1
+    panel.refresh()
+    assert panel.tree.topLevelItem(1).text(sp.C_STATE).startswith("error - port 58772 is used by the old")
+    assert panel.free_button.isEnabled()
+    pump(qapp)
+    assert len(opened) == 1                       # still only one question per run
+    panel.close()
+
+
+def test_sources_panel_no_offer_for_another_program(make_engine, qapp, monkeypatch):
+    from seiszone.ui import sources_panel as sp
+    engine = make_engine()
+    base = engine.status
+
+    def status():
+        st = base()
+        st["gecko"].update(listening=[], owner="other", owner_pid=99, error="port 58772 is in use by another program")
+        return st
+    engine.status = status
+    monkeypatch.setattr(QMessageBox, "open", lambda self: pytest.fail("asked about another program"))
+    monkeypatch.setattr(sp.ports, "stop_old_service", lambda: pytest.fail("old service stopped"))
+    panel = sp.SourcesPanel(engine, engine.config)
+    panel.show()                                  # on screen, where the question would be asked
+    panel.refresh()
+    pump(qapp)
+    assert panel.tree.topLevelItem(1).text(sp.C_STATE) == "error - port 58772 is in use by another program"
+    assert panel.old_service_bar.isHidden()
+    with pytest.raises(AssertionError):
+        find_action(panel.build_menu(panel.tree.topLevelItem(1)), sp.FREE_ACTION_TEXT)
+    panel.close()
+
+
 # ------------------------------------------------------------------------------------------
 # add source dialog
 # ------------------------------------------------------------------------------------------

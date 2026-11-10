@@ -1,5 +1,6 @@
 """ChannelsPanel: one row per channel the hub holds - rate, newest sample, latency, packets,
-gaps, source - with a "Show" tick that decides which channels the waveform view plots.
+gaps, source - with a "Show" tick that decides which channels the waveform view plots
+(MainWindow shows new channels by itself and remembers the ones the user unticks as hidden).
 
 The table is a model (ChannelModel) behind a sort/filter proxy, so sorting and the filter box
 cost nothing extra. refresh() (every second) only updates the values in place; the model is
@@ -32,6 +33,7 @@ OK_SECONDS = 30.0
 LATE_SECONDS = 300.0
 LEVEL_TEXT = {"ok": "receiving", "late": "late", "old": "no recent data"}
 LEVEL_COLOR = {"ok": "ok", "late": "warn", "old": "danger"}
+AUTO_SHOW = 12          # MainWindow shows new channels by itself while fewer than this are shown
 
 
 def packet_interval(st):
@@ -108,6 +110,9 @@ class ChannelModel(QAbstractTableModel):
                 return COLUMNS[section]
             if role == Qt.ToolTipRole and section == C_LAT:
                 return "Time since the end of the newest sample received"
+            if role == Qt.ToolTipRole and section == C_SHOW:
+                return (f"Ticked channels are plotted. New channels are shown by themselves (up to {AUTO_SHOW}); "
+                        "a channel you untick stays hidden until you tick it again")
         return None
 
     def flags(self, index):

@@ -18,18 +18,17 @@ from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QDockWidget, QGridLayo
 
 from .. import APP_NAME, VERSION, paths
 from . import theme
-from .channels_panel import ChannelsPanel
+from .channels_panel import AUTO_SHOW, ChannelsPanel
 from .export_dialog import ExportDialog
 from .log_panel import LogPanel
 from .record_dialog import RecordDialog
 from .settings_dialog import SettingsDialog
 from .sources_panel import SourcesPanel
 from .spectrum_view import SpectrumDialog
-from .waveform_view import WaveformView
+from .waveform_view import AUTO_LIVE, WaveformView
 
 log = logging.getLogger("seiszone")
 
-FIRST_CHANNELS = 6          # channels shown automatically on the very first start
 DOT = chr(0x25CF)           # status dot in the status bar
 STANDARDS = ("SeedLink 3 (client and server)", "miniSEED 2 (Steim1/Steim2)", "FDSN StationXML",
              "Guralp GCF / Scream protocol (UDP, TCP/BTP)", "Kelunji Gecko telemetry framing")
@@ -122,7 +121,7 @@ class MainWindow(QMainWindow):
         self.quit_callback = None        # set by ui.app: confirm, stop engine, quit
         self.dialogs = {}                # name -> open (non-blocking) dialog
         self._quitting = False
-        self._auto_pick = not config.get("view", "channels")
+        self._seen = set()               # channel ids already met in the hub (new ones are shown)
         self._errors = {}                # timer task -> last time its exception was logged
         self.setWindowTitle(f"{APP_NAME} {VERSION}")
         self.setWindowIcon(theme.app_icon())
@@ -211,7 +210,8 @@ class MainWindow(QMainWindow):
         self.act_about = A("About", self.open_about, "app", f"About {APP_NAME}")
         self.act_quit = A("Quit", self.request_quit, None, f"Stop {APP_NAME} completely", "Ctrl+Q")
         self.act_live = A("Live", lambda: self.view.set_live(self.act_live.isChecked()), "live",
-                          "Follow the newest data (zooming or panning pauses it)")
+                          "Follow the newest data (dragging a plot pauses it; it goes live again by itself "
+                          f"after {AUTO_LIVE / 60:g} minutes)")
         self.act_live.setCheckable(True)
         self.act_live.setChecked(True)
         self.act_guide = A("User guide", self.open_user_guide, None, "Open the SeisZone user guide", "F1")
@@ -284,7 +284,7 @@ class MainWindow(QMainWindow):
         return None
 
     def refresh(self):
-        """Once a second: tables, log, status bar, record button, first-start channel choice."""
+        """Once a second: tables, log, status bar, record button, newly arrived channels."""
         self._safe("sources", self.sources.refresh)
         self._safe("channels", self.channels.refresh)
         self._safe("log", self.log_panel.refresh)
@@ -292,21 +292,27 @@ class MainWindow(QMainWindow):
         sessions = self._safe("sessions", self.engine.recorder.sessions) or []
         self._safe("statusbar", self._update_status, status, sessions)
         self._safe("record", self._update_record_button, sessions)
-        self._safe("first channels", self._first_channels)
+        self._safe("new channels", self._show_new_channels)
         self._safe("source actions", self._update_source_actions)
         if self.act_live.isChecked() != self.view.is_live():
             self.act_live.setChecked(self.view.is_live())
 
-    def _first_channels(self):
-        if not self._auto_pick:
+    def _show_new_channels(self):
+        """Every channel is shown as it first appears in the hub (all channels of a new source,
+        a Gecko joining later, all of them after a start), while fewer than AUTO_SHOW are shown -
+        except those the user has hidden (config view "hidden")."""
+        new = sorted(set(self.engine.hub.stream_ids()) - self._seen)
+        if not new:
             return
-        if self.channels.shown():
-            self._auto_pick = False
-            return
-        sids = sorted(self.engine.hub.stream_ids())[:FIRST_CHANNELS]
-        if sids:
-            log.info("showing the first channels: %s", ", ".join(sids))
-            self.show_channels(sids)
+        self._seen.update(new)
+        hidden = set(self.hidden_channels())
+        shown = self.channels.shown()
+        add = [s for s in new if s not in hidden and s not in shown][:max(0, AUTO_SHOW - len(shown))]
+        if add:
+            log.info("showing new channels: %s", ", ".join(add))
+            sids = shown + add
+            self.channels.set_shown(sids)
+            self._set_shown(sids)
 
     def _update_source_actions(self):
         has = bool(self.sources.selected_source_id())
@@ -377,15 +383,31 @@ class MainWindow(QMainWindow):
     # channels
     # ------------------------------------------------------------------------------------
     def _on_shown_changed(self, sids):
-        self._auto_pick = False
-        self.view.set_channels(list(sids))
-        self.config.set("view", "channels", list(sids))
+        """The user ticked / unticked channels in the Channels panel: unticked ones stay hidden
+        (also after a restart) until the user ticks them again."""
+        self._set_shown(list(sids), user=True, hide_removed=True)
 
     def show_channels(self, sids):
-        """Show exactly these channels in the table ticks and the waveform view."""
+        """Show exactly these channels (the Sources panel asks for a source's channels): table
+        ticks and the waveform view follow; a hidden channel asked for is no longer hidden."""
         sids = list(sids)
-        self._auto_pick = False
         self.channels.set_shown(sids)
+        self._set_shown(sids, user=True)
+
+    def hidden_channels(self):
+        """Channels the user has unticked: never shown again automatically."""
+        return [s for s in (self.config.get("view", "hidden") or []) if isinstance(s, str)]
+
+    def _set_shown(self, sids, user=False, hide_removed=False):
+        """Waveform view and config follow the shown list. user: the channels in it come out of
+        config view "hidden"; hide_removed: the ones taken out of it go in."""
+        if user:
+            before = self.hidden_channels()
+            hidden = [s for s in before if s not in sids]
+            if hide_removed:
+                hidden += [s for s in self.view.channels() if s not in sids and s not in hidden]
+            if hidden != before:
+                self.config.set("view", "hidden", hidden, save=False)
         self.view.set_channels(sids)
         self.config.set("view", "channels", sids)
 

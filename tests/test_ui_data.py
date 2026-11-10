@@ -6,6 +6,7 @@ build/screens/waveforms.png and build/screens/channels.png for a visual check.
 Nothing here touches the network: FakeEngine never connects anywhere.
 """
 
+import math
 import os
 import sys
 import time
@@ -393,7 +394,7 @@ def test_pause_live_and_range(view, qapp):
     vb.setXRange(t0 + 200, t0 + 260, padding=0)
     vb.sigRangeChangedManually.emit([True, False])
     assert not view.is_live()
-    assert view.live_button.text() == "Paused"
+    assert view.live_button.text() == "Paused – back to live"
     pump(qapp, 0.1)                       # the coalesced reload runs
     assert view.visible_range() == pytest.approx((t0 + 200, t0 + 260), abs=0.01)
     assert ranges and ranges[-1] == pytest.approx((t0 + 200, t0 + 260), abs=0.01)
@@ -548,6 +549,276 @@ def test_many_channels_scroll(qapp, tmp_path):
     pump(qapp, 0.1)
     assert v.scroll.verticalScrollBar().maximum() == 0
     v.close()
+
+
+# ------------------------------------------------------------------------------------------
+# live edge follows the data, wheel, pause and auto-return
+# ------------------------------------------------------------------------------------------
+
+def _fresh_live(view, window):
+    """The view as just started (no arrival lag seen yet), with this window length."""
+    view._window = window
+    view._anchored = False
+    view._lags.clear()
+    view._lag = view._latest = None
+    view._relag = False
+
+
+def _fortimus_feed(view, clock, hub, t_start, seconds, offset=18.8, rec=2.56, base=0.4, seed=5, stop=None):
+    """Simulate a Fortimus: 512-sample records at 200 sps (2.56 s each), available `base` s plus
+    0-0.3 s of network jitter after their last sample, seen through a PC clock `offset` s fast,
+    refreshed every 0.25 s. Records ending after `stop` (true time) never come. Returns per
+    refresh (pc time, newest sample end, live right edge, a record arrived, a lag was known)."""
+    rng = np.random.default_rng(seed)
+    ends = t_start + rec * np.arange(1, int(seconds / rec) + 2)
+    arrive = ends + base + rng.uniform(0, 0.3, len(ends))
+    out = []
+    latest = None
+    for k in range(int(seconds / 0.25)):
+        true = t_start + k * 0.25
+        got = ends[(arrive <= true) & (ends <= (stop if stop is not None else np.inf))]
+        new = len(got) and got[-1] != latest
+        if len(got):
+            latest = hub.last_end = float(got[-1])
+        clock.t = true + offset
+        end = view._live_range()[1]
+        out.append((clock.t, latest, end, bool(new), view._lag is not None))
+    return out
+
+
+def test_live_edge_follows_the_data_not_the_pc_clock(view, monkeypatch):
+    """PC clock 18.8 s fast, 2.5 s Fortimus records: the newest sample stays within 1 % of the
+    window from the right edge (it used to sit ~21 s = 7 % left of it) and touches the edge as
+    each record arrives; the view scrolls smoothly in between and never jumps back."""
+    from seiszone.ui import waveform_view as wv
+    clock = _Clock(1.8e9)
+    monkeypatch.setattr(wv, "time", clock)
+    hub = _StatsHub(SIDS[0])
+    monkeypatch.setattr(view, "engine", type("E", (), {"hub": hub})())
+    _fresh_live(view, 300)
+    rows = _fortimus_feed(view, clock, hub, 1.8e9, 180)
+    before = [end - latest for _pc, latest, end, _new, known in rows if latest is not None and not known]
+    assert before and min(before) > 18        # (the PC clock's edge: the data ~21 s left of it)
+    warm = next(i for i, r in enumerate(rows) if r[4]) + 1
+    gaps = [end - latest for _pc, latest, end, _new, _k in rows[warm:]]
+    assert min(gaps) >= -1e-6, "the newest sample must never be past the right edge"
+    assert max(gaps) <= 0.01 * 300, max(gaps)
+    assert max(end - latest for _pc, latest, end, new, _k in rows[warm:] if new) < 0.6
+    steps = np.diff([r[2] for r in rows[warm:]])
+    assert steps.min() > -1e-6 and steps.max() < 1.0, (steps.min(), steps.max())   # smooth, never back
+    assert view._lag == pytest.approx(18.8 + 0.4 + 0.25, abs=0.35)
+    _fresh_live(view, 600)
+
+
+def test_live_edge_pc_clock_slow(view, monkeypatch):
+    """PC clock 18.8 s slow (negative lag): the data are "in the future"; the edge used to stop
+    at the newest sample and jump a whole record (2.56 s) each time one came. Now it scrolls
+    smoothly with the data, never past them and never back."""
+    from seiszone.ui import waveform_view as wv
+    clock = _Clock(1.8e9)
+    monkeypatch.setattr(wv, "time", clock)
+    hub = _StatsHub(SIDS[0])
+    monkeypatch.setattr(view, "engine", type("E", (), {"hub": hub})())
+    _fresh_live(view, 300)
+    rows = _fortimus_feed(view, clock, hub, 1.8e9, 120, offset=-18.8)
+    warm = next(i for i, r in enumerate(rows) if r[4]) + 1
+    gaps = [end - latest for _pc, latest, end, _new, _k in rows[warm:]]
+    assert min(gaps) >= -1e-6 and max(gaps) <= 0.01 * 300, (min(gaps), max(gaps))
+    steps = np.diff([r[2] for r in rows[warm:]])
+    assert steps.min() > -1e-6 and steps.max() < 1.0, (steps.min(), steps.max())
+    assert view._lag == pytest.approx(-18.8 + 0.4 + 0.25, abs=0.35)
+    _fresh_live(view, 600)
+
+
+class _TwoHub:
+    def __init__(self, sids):
+        self.ends = dict.fromkeys(sids, 0.0)
+
+    def stats_snapshot(self):
+        return {sid: {"last_end": end} for sid, end in self.ends.items() if end}
+
+
+def test_live_edge_takes_the_lag_of_a_new_channel_set(view, monkeypatch):
+    """A quick Gecko (0.3 s) and a Fortimus 15 s late shown together: the edge follows the
+    Gecko. Showing only the Fortimus then: within two records its newest sample is at the
+    right edge again (the Gecko's small lag used to leave a 15 s gap for over a minute)."""
+    from seiszone.ui import waveform_view as wv
+    clock = _Clock(1.8e9)
+    monkeypatch.setattr(wv, "time", clock)
+    fort, gecko = SIDS[0], SIDS[1]
+    hub = _TwoHub([fort, gecko])
+    monkeypatch.setattr(view, "engine", type("E", (), {"hub": hub})())
+    monkeypatch.setattr(view, "_rebuild", lambda: None)            # the plots are not needed here
+    monkeypatch.setattr(view, "_update_traces", lambda *a, **k: None)
+    _fresh_live(view, 300)
+    view.set_channels([fort, gecko])
+    t0 = 1.8e9
+    gaps = []
+    for k in range(int(150 / 0.25)):
+        true = t0 + k * 0.25
+        hub.ends[fort] = t0 + 2.56 * math.floor((true - 15.0 - t0) / 2.56) if true - 15.0 > t0 + 2.56 else 0.0
+        hub.ends[gecko] = math.floor(true - 0.3) if k * 0.25 < 90 else hub.ends[gecko]
+        clock.t = true + 18.8
+        if k * 0.25 == 90:
+            view.set_channels([fort])                               # the user shows the Fortimus only
+        end = view._live_range()[1]
+        if k * 0.25 >= 95:
+            gaps.append(end - hub.ends[fort])
+    assert min(gaps) >= -1e-6 and max(gaps) <= 0.01 * 300, (min(gaps), max(gaps))
+    view.set_channels(SIDS)
+    _fresh_live(view, 600)
+
+
+def test_live_edge_keeps_scrolling_when_data_stop(view, monkeypatch):
+    from seiszone.ui import waveform_view as wv
+    clock = _Clock(1.8e9)
+    monkeypatch.setattr(wv, "time", clock)
+    hub = _StatsHub(SIDS[0])
+    monkeypatch.setattr(view, "engine", type("E", (), {"hub": hub})())
+    _fresh_live(view, 300)
+    t0 = 1.8e9
+    rows = _fortimus_feed(view, clock, hub, t0, 200, stop=t0 + 60)     # the link drops after a minute
+    lag = view._lag
+    stopped = [r for r in rows if r[0] - 18.8 > t0 + 62]
+    steps = np.diff([r[2] for r in stopped])
+    assert steps.min() > 0.125 - 1e-6 and steps.max() < 0.25 + 1e-6    # keeps scrolling in real time
+    # (while the last minute's lags expire, a moment at half speed at worst: LAG_GROWTH) ...
+    after = [r for r in rows if r[0] - 18.8 > t0 + 125]
+    assert all(r[2] == pytest.approx(r[0] - lag) for r in after)   # ... then with the last known lag
+    assert after[-1][2] - after[-1][1] > 120               # and the gap grows (visible)
+    assert not view._anchored                               # (less than 80 % of the window: not anchored)
+    # the link comes back and the instrument backfills the missing two minutes faster than
+    # real time: the edge never jumps back (the lag known before stays a candidate)
+    stats_end = after[-1][1]
+    ends = []
+    for k in range(60):
+        clock.t += 0.25
+        hub.last_end = min(stats_end + 20.0 * (k + 1), clock.t - 18.8 - 0.5)   # 80x real time, then live
+        ends.append(view._live_range()[1])
+    assert np.diff(ends).min() > -1e-6
+    assert ends[-1] - hub.last_end < 0.01 * 300
+    _fresh_live(view, 600)
+
+
+def test_live_edge_never_seen_data_arrive_is_now(view, monkeypatch):
+    from seiszone.ui import waveform_view as wv
+    clock = _Clock(1.8e9)
+    monkeypatch.setattr(wv, "time", clock)
+    hub = _StatsHub(SIDS[0])
+    hub.last_end = 1.8e9 - 30
+    monkeypatch.setattr(view, "engine", type("E", (), {"hub": hub})())
+    _fresh_live(view, 600)
+    for _ in range(8):           # data that never moves: no arrival lag, the edge is the PC clock
+        clock.t += 0.25
+        assert view._live_range()[1] == pytest.approx(clock.t)
+    # a backfill after the start races through old data (lags 280 s shrinking to 30 s within
+    # 2.5 s): those lags are not followed
+    clock.t, hub.last_end = 1.8e9 + 100, 1.8e9 + 100 - 280
+    view._live_range()
+    for k in range(10):
+        clock.t += 0.25
+        hub.last_end += 25.0
+        assert view._live_range()[1] == pytest.approx(clock.t)
+    assert view._lag is None
+    _fresh_live(view, 600)
+
+
+class _Wheel:
+    """A wheel event as the ViewBox gets it (delta in eighths of a degree: 120 = one notch)."""
+
+    def __init__(self, delta, vb):
+        self._delta, self._vb, self.accepted = delta, vb, False
+
+    def delta(self):
+        return self._delta
+
+    def pos(self):
+        from PySide6.QtCore import QPointF
+        return QPointF(self._vb.width() / 2, 10)
+
+    def accept(self):
+        self.accepted = True
+
+    def ignore(self):
+        self.accepted = False
+
+
+def test_wheel_while_live_steps_the_window_and_stays_live(view, engine):
+    assert view.is_live() and view._window == 600
+    vb = view._traces[1].vb
+    ev = _Wheel(120, vb)
+    vb.wheelEvent(ev)                                    # wheel up: shorter
+    assert ev.accepted and view.is_live()
+    assert view._window == 300 and view.window_box.currentData() == 300
+    t0, t1 = view.visible_range()
+    assert t1 - t0 == pytest.approx(300, abs=0.01)
+    assert engine.config.get("view", "window_seconds") == 300
+    vb.wheelEvent(_Wheel(-120, vb))                       # wheel down: longer
+    assert view._window == 600 and view.is_live()
+    vb.wheelEvent(_Wheel(-60, vb))                        # half a notch (a touchpad): not yet
+    assert view._window == 600
+    vb.wheelEvent(_Wheel(-60, vb))
+    assert view._window == 1800 and view.is_live()
+    for _ in range(5):                                    # stops at the longest choice
+        vb.wheelEvent(_Wheel(-120, vb))
+    assert view._window == 3600 and view.is_live()
+    view.window_box.setCurrentIndex(view.window_box.findData(600))
+
+
+def test_wheel_while_paused_zooms_and_drag_pauses(view, qapp):
+    vb = view._traces[0].vb
+    t0, t1 = view.visible_range()
+    vb.translateBy(x=-30)                                # a drag (pan) ...
+    vb.sigRangeChangedManually.emit([True, False])
+    assert not view.is_live()                            # ... pauses
+    a, b = view.visible_range()
+    vb.wheelEvent(_Wheel(240, vb))                       # paused: the wheel zooms in
+    c, d = view.visible_range()
+    assert not view.is_live() and d - c < b - a - 1
+    assert view._window == 600 and view.window_box.currentData() == 600
+    view.set_live(True)
+    assert view.visible_range()[1] - view.visible_range()[0] == pytest.approx(600, abs=0.01)
+
+
+def test_paused_is_amber_and_returns_to_live_by_itself(view, qapp):
+    from PySide6.QtTest import QTest
+    from seiszone.ui import waveform_view as wv
+    b = view.live_button
+    assert view.is_live() and b.text() == "Live" and b.styleSheet() == ""
+    view._traces[0].vb.sigRangeChangedManually.emit([True, False])
+    assert not view.is_live() and not b.isChecked()
+    assert b.text() == "Paused – back to live"
+    assert theme.COLORS["warn"] in b.styleSheet() and theme.COLORS["bg"] in b.styleSheet()
+    assert "2 minutes" in b.toolTip()
+    # still paused just before AUTO_LIVE seconds without mouse use, live after them
+    view._touched = time.monotonic() - wv.AUTO_LIVE + 1.0
+    view.refresh()
+    assert not view.is_live()
+    # mouse use on the plots restarts the count
+    view._touched -= 100.0
+    QTest.mousePress(view.glw.viewport(), Qt.LeftButton, Qt.NoModifier, view.glw.viewport().rect().center())
+    QTest.mouseRelease(view.glw.viewport(), Qt.LeftButton, Qt.NoModifier, view.glw.viewport().rect().center())
+    view.refresh()
+    assert not view.is_live()
+    view._touched = time.monotonic() - wv.AUTO_LIVE - 0.1
+    view.refresh()
+    assert view.is_live() and b.isChecked() and b.text() == "Live" and b.styleSheet() == ""
+    t0, t1 = view.visible_range()
+    assert t1 - t0 == pytest.approx(600, abs=0.01) and abs(t1 - time.time()) < 5
+    # light theme: the deeper amber with white text
+    try:
+        view.set_live(False)
+        theme.apply(qapp, "light")
+        pump(qapp)
+        assert theme.LIGHT["warn"] in b.styleSheet() and "#ffffff" in b.styleSheet()
+    finally:
+        theme.apply(qapp, "dark")
+        pump(qapp)
+        view.set_live(True)
+    # a new view always starts live
+    again = WaveformView(view.engine, view.config)
+    assert again.is_live() and again.live_button.isChecked()
+    again.deleteLater()
 
 
 def test_screenshots(view, engine, qapp):

@@ -9,20 +9,37 @@
 refresh() (every second) only updates texts in place - rows are added or removed only when
 sources, stations or links come and go - so the selection, the expanded rows and the scroll
 position survive. All changes go through the engine (plan.md 5.14).
+
+When the old Gecko SeedLink service (an older program, see core/ports.py) holds the Gecko or
+SeedLink port, the rows say so and a bar above the tree (and the rows' context menu) offers to
+free the port: Windows asks for administrator permission once, the service is stopped and
+disabled, and the rows show "Waiting for the port…" until the engine listens. The first time
+in a run that the Gecko port is held by it, SeisZone asks once by itself.
 """
 
 import logging
 import time
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QDialog, QDialogButtonBox, QHBoxLayout, QHeaderView, QLabel,
                                QMenu, QMessageBox, QPushButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
+from ..core import ports
 from . import theme
 from .channels_panel import fmt_latency
 
 log = logging.getLogger("seiszone")
+
+OLD_SERVICE = "old-service"         # engine.status() "owner" of a port held by the old service
+FREE_ACTION_TEXT = "Free the port – stop the old Gecko SeedLink service"
+WAITING_TEXT = "Waiting for the port…"
+FREE_WAIT = 60.0                    # s "Waiting for the port…" is shown before the error comes back
+OFFER_TITLE = "Gecko recorder"
+OFFER_TEXT = ("Your Gecko recorder is connected to the old Gecko SeedLink service, not SeisZone. "
+              "Stop and disable the old service now so the Gecko connects to SeisZone? "
+              "(Windows asks for administrator permission; you can re-enable it in Windows Services.)")
+OFFER_STOP, OFFER_LATER = "Stop old service", "Not now"
 
 COLUMNS = ["Name", "Address", "Kind", "State", "Packets", "Last packet"]
 C_NAME, C_ADDR, C_KIND, C_STATE, C_PACK, C_LAST = range(len(COLUMNS))
@@ -111,6 +128,11 @@ class SourcesPanel(QWidget):
         self._dots = {}
         self._dialogs = []              # open non-blocking dialogs (kept alive until closed)
         self._last_selected = None
+        self._held = []                 # rows whose port the old Gecko SeedLink service holds
+        self._freeing = None            # time the old service was asked to stop (waiting for the port)
+        self._waiting = []              # the rows that wait for their port since then
+        self._offered = False           # the one question per run has been asked
+        self.offer_box = None           # that question while it is open
 
         add = QPushButton(theme.icon("add"), "Add source")
         add.setToolTip("Add an instrument or SeedLink server by its IP address and port")
@@ -143,10 +165,29 @@ class SourcesPanel(QWidget):
         top.addWidget(add)
         top.addStretch(1)
         top.addWidget(self.summary)
+
+        # shown only while the old Gecko SeedLink service holds a port SeisZone needs
+        self.old_service_bar = QWidget()
+        self.old_service_label = QLabel()
+        self.old_service_label.setWordWrap(True)
+        self.old_service_label.setStyleSheet(f"color: {theme.COLORS['warn']};")
+        self.free_button = QPushButton(FREE_ACTION_TEXT)
+        self.free_button.setToolTip("Stops the old Gecko SeedLink service and switches it off (Windows asks for "
+                                    "administrator permission). It is not uninstalled: you can switch it on "
+                                    "again in Windows Services.")
+        self.free_button.clicked.connect(lambda: self.free_ports())
+        bar = QVBoxLayout(self.old_service_bar)
+        bar.setContentsMargins(0, 0, 0, 0)
+        bar.setSpacing(2)
+        bar.addWidget(self.old_service_label)
+        bar.addWidget(self.free_button)
+        self.old_service_bar.setVisible(False)
+
         lay = QVBoxLayout(self)
         lay.setContentsMargins(4, 4, 4, 4)
         lay.setSpacing(4)
         lay.addLayout(top)
+        lay.addWidget(self.old_service_bar)
         lay.addWidget(self.tree, 1)
         self.refresh()
 
@@ -158,13 +199,23 @@ class SourcesPanel(QWidget):
         now = time.time()
         status = self.engine.status() or {}
         stats = self.engine.hub.stats_snapshot()
+        gecko, server = status.get("gecko") or {}, status.get("server") or {}
+        self._update_old_service(gecko, server, now)
         rows = [self._source_row(src, status.get("sources") or {}, stats, now) for src in self.config.sources()]
-        rows.append(self._gecko_row(status.get("gecko") or {}, stats, now))
-        rows.append(self._server_row(status.get("server") or {}, now))
+        rows.append(self._gecko_row(gecko, stats, now))
+        rows.append(self._server_row(server, now))
         self._sync(self.tree.invisibleRootItem(), rows)
         n = len(rows) - 2
         receiving = sum(1 for r in rows[:n] if str(r["texts"][C_STATE]).startswith("receiving"))
         self.summary.setText(f"{receiving} of {n} source{'s' if n != 1 else ''} receiving")
+        if GECKO_KEY in self._held and not self._offered and self._freeing is None and self._window_shown():
+            self._offered = True        # asked once per run; the bar and the menu stay
+            QTimer.singleShot(0, self.offer_stop_old_service)
+
+    def _window_shown(self):
+        """The window is on screen (not in the tray, not minimized): the one question waits for it."""
+        win = self.window()
+        return win.isVisible() and not win.isMinimized()
 
     def selected_source_id(self):
         """Id of the selected configured source (also when one of its station rows is selected)."""
@@ -255,7 +306,9 @@ class SourcesPanel(QWidget):
     def _gecko_row(self, g, stats, now):
         ports = ",".join(str(p) for p in g.get("ports") or []) or "-"
         links = g.get("links") or []
-        if g.get("error"):
+        if GECKO_KEY in self._waiting:
+            state = WAITING_TEXT
+        elif g.get("error"):
             state = f"error - {g['error']}"
         elif g.get("listening"):
             state = "listening"
@@ -276,13 +329,18 @@ class SourcesPanel(QWidget):
                                  f"Connected {fmt_age(link.get('since'), now)}" if link.get("since") else "") if x)})
         tip = (f"Kelunji Gecko recorders connect by themselves to this PC on TCP port {ports}.\n"
                f"Connected now: {len(links)}")
+        if GECKO_KEY in self._held:
+            tip += ("\n\nThe old Gecko SeedLink service holds this port, so the Gecko connects to it and "
+                    f"not to SeisZone. Right-click: {FREE_ACTION_TEXT}.")
         return {"key": GECKO_KEY, "state": state, "fixed": True, "tip": tip,
                 "texts": [f"Gecko receiver :{ports}", "this PC", "Gecko in", state,
                           str(sum(x.get("records", 0) for x in links)), f"{len(links)} linked"],
                 "children": children}
 
     def _server_row(self, s, now):
-        if s.get("error"):
+        if SERVER_KEY in self._waiting:
+            state = WAITING_TEXT
+        elif s.get("error"):
             state = f"error - {s['error']}"
         elif s.get("listening"):
             state = "listening"
@@ -295,8 +353,10 @@ class SourcesPanel(QWidget):
                      "tip": f"{p.get('peer', '')} reads {p.get('stations', '')}"}
                     for i, p in enumerate(peers)]
         k = int(s.get("clients") or len(peers))
-        return {"key": SERVER_KEY, "state": state, "fixed": True,
-                "tip": f"Other programs read every channel from SeisZone here (SeedLink, port {s.get('port')}).",
+        tip = f"Other programs read every channel from SeisZone here (SeedLink, port {s.get('port')})."
+        if SERVER_KEY in self._held:
+            tip += (f"\n\nThe old Gecko SeedLink service holds this port. Right-click: {FREE_ACTION_TEXT}.")
+        return {"key": SERVER_KEY, "state": state, "fixed": True, "tip": tip,
                 "texts": [f"SeedLink server :{s.get('port', '-')}", s.get("bind", "this PC") or "this PC",
                           "SeedLink out", state, str(sum(p.get("packets", 0) for p in peers)),
                           f"{k} client{'s' if k != 1 else ''}"],
@@ -412,9 +472,91 @@ class SourcesPanel(QWidget):
             m.addSeparator()
             m.addAction("Properties...", lambda: self.show_properties(key[1]))
         elif key in (GECKO_KEY, SERVER_KEY) or (key and key[0] in ("gecko-link", "server-peer")):
+            if key in self._held:
+                m.addSeparator()
+                m.addAction(FREE_ACTION_TEXT, self.free_ports).setEnabled(self._freeing is None)
             m.addSeparator()
             m.addAction("Properties...", lambda: self.show_properties(None, key))
         return m
+
+    # ------------------------------------------------------------------------------------
+    # the old Gecko SeedLink service
+    # ------------------------------------------------------------------------------------
+    def _update_old_service(self, gecko, server, now):
+        """Which rows the old service holds; the bar above the tree; the end of the wait."""
+        held = [key for key, st in ((GECKO_KEY, gecko), (SERVER_KEY, server))
+                if st.get("error") and st.get("owner") == OLD_SERVICE]
+        self._held = held
+        if self._freeing is not None:
+            # the wait ends when the engine listens on those ports (no error left), not as soon
+            # as the old service lets go: a port can stay busy a moment longer
+            waiting = [key for key, st in ((GECKO_KEY, gecko), (SERVER_KEY, server))
+                       if key in self._waiting and st.get("error")]
+            if not waiting or now - self._freeing > FREE_WAIT:
+                if waiting:
+                    log.warning("the ports are still not free %.0f s after the old Gecko SeedLink service was "
+                                "asked to stop", now - self._freeing)
+                self._freeing, waiting = None, []
+            self._waiting = waiting
+        if not held and self._freeing is None:
+            self.old_service_bar.setVisible(False)
+            return
+        port_text = " and ".join(str(p) for p in self._held_ports(gecko, server, held or self._waiting))
+        if self._freeing is not None:
+            self.old_service_label.setText(f"{WAITING_TEXT} The old Gecko SeedLink service is being stopped; "
+                                           f"SeisZone takes port {port_text} as soon as it is free.")
+        elif GECKO_KEY in held:
+            self.old_service_label.setText(f"Port {port_text} is used by the old Gecko SeedLink service: your Gecko "
+                                           "recorder connects to it, not to SeisZone.")
+        else:
+            self.old_service_label.setText(f"Port {port_text} is used by the old Gecko SeedLink service, so "
+                                           "SeisZone's SeedLink server cannot start.")
+        self.free_button.setEnabled(self._freeing is None)
+        self.old_service_bar.setVisible(True)
+
+    @staticmethod
+    def _held_ports(gecko, server, keys):
+        out = []
+        if GECKO_KEY in keys:
+            listening = set(gecko.get("listening") or [])
+            out += [p for p in gecko.get("ports") or [] if p not in listening]
+        if SERVER_KEY in keys and server.get("port") is not None:
+            out.append(server["port"])
+        return out
+
+    def offer_stop_old_service(self):
+        """The one question per run: stop the old service so the Gecko connects to SeisZone?
+        (non-blocking; "Stop old service" calls free_ports)."""
+        if not self._held or self._freeing is not None or self.offer_box is not None:
+            return None
+        box = QMessageBox(QMessageBox.Question, OFFER_TITLE, OFFER_TEXT, QMessageBox.NoButton, self)
+        stop = box.addButton(OFFER_STOP, QMessageBox.AcceptRole)
+        box.addButton(OFFER_LATER, QMessageBox.RejectRole)
+        box.setDefaultButton(stop)
+        box.setAttribute(Qt.WA_DeleteOnClose)
+
+        def answered(button):
+            self.offer_box = None
+            if box.buttonRole(button) == QMessageBox.AcceptRole:
+                self.free_ports()
+            else:
+                log.info("the old Gecko SeedLink service keeps running (Not now)")
+        box.buttonClicked.connect(answered)
+        box.rejected.connect(lambda: setattr(self, "offer_box", None))
+        self.offer_box = box
+        box.open()
+        return box
+
+    def free_ports(self):
+        """Stop and disable the old Gecko SeedLink service (Windows asks for administrator
+        permission). True when that was started: the rows then wait for the port."""
+        if self._freeing is not None or not self._held:   # one stop at a time; the port may be free already
+            return False
+        if not ports.stop_old_service():
+            return False
+        self._freeing, self._waiting = time.time(), list(self._held)
+        self.refresh()
+        return True
 
     def _context_menu(self, pos):
         item = self.tree.itemAt(pos)

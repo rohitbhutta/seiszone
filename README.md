@@ -8,7 +8,7 @@ SeedLink so other programs can read it.
 It is built only on open standards: SeedLink 3, Guralp GCF / Scream protocol, Kelunji Gecko
 telemetry framing, miniSEED 2 and FDSN StationXML.
 
-Version 1.0.0. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
+Version 1.0.1. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
 
 ## Features
 
@@ -126,12 +126,31 @@ The installer (`SeisZoneSetup.exe`, 64-bit Windows 10/11):
 * adds one inbound Windows Firewall rule "SeisZone" for `SeisZone.exe` (covers the Gecko port
   58772 and the SeedLink server port);
 * closes a running SeisZone first (it tells the user);
+* task `stopoldservice` (ticked by default, shown only when the Windows service
+  `GeckoSeedLink` exists): stops and disables the old Gecko SeedLink service (`sc stop`,
+  `sc config ... start= disabled`), which holds ports 58772 and 18010; it is not removed;
 * starts SeisZone as the normal user at the end.
 
 Uninstalling removes the program and the firewall rule. **Recordings, exports, settings and
 logs are never deleted.** "Start with Windows" is switched on and off in SeisZone's Settings.
 
-Silent install: `SeisZoneSetup.exe /VERYSILENT /SUPPRESSMSGBOXES [/TASKS="desktopicon"]`.
+Silent install: `SeisZoneSetup.exe /VERYSILENT /SUPPRESSMSGBOXES [/MERGETASKS="desktopicon"]`
+(`/MERGETASKS` keeps the default tasks; `/TASKS=` would switch off `stopoldservice`).
+
+## Gecko recorder does not appear / port in use
+
+The Gecko connects to whatever listens on port 58772 of this PC. While the old Gecko SeedLink
+service (Windows service `GeckoSeedLink` of the earlier Gecko setup) runs, it holds 58772 and
+18010: the Gecko stays connected to it and SeisZone shows `port 58772 is used by the old Gecko
+SeedLink service` on the Gecko receiver and SeedLink server rows (`engine.status()` gives
+`"owner": "old-service"`; `core/ports.py` finds the listening process with
+`GetExtendedTcpTable` and compares it with the service's process id, read-only). SeisZone asks
+once per run, and offers **Free the port – stop the old Gecko SeedLink service** above the
+sources list and in the rows' context menu: one Windows administrator prompt runs
+`sc stop GeckoSeedLink & sc config GeckoSeedLink start= disabled`, the rows show "Waiting for
+the port…", and the engine, which tries a busy port again every 3 s, takes the ports. The
+service is only disabled (Windows Services can switch it on again). A port held by any other
+program is shown as `in use by another program` (the log gives its process id).
 
 ## Version
 

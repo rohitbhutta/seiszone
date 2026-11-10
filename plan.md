@@ -75,6 +75,7 @@ seiszone/
       export.py        export_window()
       dsp.py           filters, demean, envelope (min/max decimation), spectrum
       engine.py        Engine (owns loop thread, links, server, gecko, recorder)
+      ports.py         who holds a listener port; stop the old Gecko SeedLink service (Windows)
       cli.py           headless engine (python -m seiszone --engine)
     ui/
       app.py           main(): QApplication, single instance, tray, start-with-Windows
@@ -251,8 +252,13 @@ starts one task per enabled source), `stop(timeout=5)`; thread-safe:
 `add_source(src) -> src` (validated, saved, started), `remove_source(id)`,
 `update_source(src)`, `set_enabled(id, bool)`, `reconnect(id)`, `apply_settings()` (restart
 listeners after a settings change), `call_soon(fn, *args)`, `status() -> {"sources": {id:
-link.status()}, "gecko": {"ports", "listening", "error", "links": [...]}, "server": {"port",
-"listening", "error", "clients", "peers"}, "started"}`. Attributes `hub`, `config`, `state`,
+link.status()}, "gecko": {"ports", "listening", "error", "owner", "owner_pid", "links": [...]},
+"server": {"port", "listening", "error", "owner", "owner_pid", "clients", "peers"}, "started"}`.
+A listener whose port is in use gets `owner` "old-service" (the old Gecko SeedLink service,
+error text `port N is used by the old Gecko SeedLink service`) or "other" (`port N is in use
+by another program`; the log line adds the process id), else `owner` / `owner_pid` are None
+(`ports.describe_owner`, see 5.16). Busy ports are tried again every `LISTEN_RETRY` = 3 s, so
+a freed port is taken within a few seconds. Attributes `hub`, `config`, `state`,
 `recorder` (RecordingManager), `responses` (ResponseStore). Logging to logger "seiszone".
 The SeedLink server's packet numbers continue across runs: `State["server_seq"]` is saved every
 second and at stop; at start `hub.seq = saved + 100000` (the packets numbered after the last
@@ -276,10 +282,46 @@ exists, so a source or build-folder run never takes over the installed SeisZone'
 Spectrum, Settings), left dock `SourcesPanel`, centre `WaveformView`, bottom docks
 `ChannelsPanel` and `LogPanel`, status bar (sources receiving, Gecko links, SeedLink server
 clients, recording state, free disk). Timers: waveforms 250 ms, tables 1 s.
-Window geometry saved in `config["ui"]`.
+Window geometry saved in `config["ui"]`. Every channel id the hub has not shown before in this
+run is added to the view by itself (`_show_new_channels`, up to `channels_panel.AUTO_SHOW` = 12)
+unless it is in `config["view"]["hidden"]`; unticking a channel in the Channels panel adds it to
+`"hidden"`, ticking it removes it; the Sources panel's "show these channels" only un-hides.
+
+`WaveformView`, Live: the right edge is "now minus the smallest arrival lag seen in the last
+`LAG_MEMORY` = 60 s" (follows the data, not the PC clock; lags over `LAG_LIMIT` = 300 s and
+backfill faster than real time are ignored; a growing lag grows at most `LAG_GROWTH` = 0.5 s/s so
+the edge never steps back; a changed channel set takes its first lag at once). The wheel while
+Live steps the window length and stays Live; while Paused it zooms; a drag pauses. Paused is an
+amber "Paused – back to live" button and returns to Live after `AUTO_LIVE` = 120 s without mouse
+use on the plots. The view always starts Live.
 
 Panels read only `engine.status()`, `engine.hub.stats_snapshot()`, `engine.hub.window()`,
-`engine.recorder.sessions()` and change things only through Engine/RecordingManager methods.
+`engine.recorder.sessions()` and change things only through Engine/RecordingManager methods
+(the one exception: `SourcesPanel.free_ports()` calls `ports.stop_old_service()`).
+
+`SourcesPanel`: when `status()["gecko"|"server"]["owner"] == "old-service"` the rows show the
+reason, a bar above the tree and the rows' context menu offer "Free the port – stop the old
+Gecko SeedLink service" (`free_ports()`); the first time per run that the Gecko port is held
+by it while the window is on screen (not in the tray), one non-blocking question ("Your Gecko recorder is connected to the old Gecko SeedLink
+service, not SeisZone. ..." [Stop old service] [Not now]). After a successful launch the rows
+show "Waiting for the port…" until the engine listens on them, also while the port is still busy
+a moment after the old service let go (at most `FREE_WAIT` = 60 s, then the
+error and the button come back).
+
+### 5.16 Ports — `core/ports.py`
+Windows only (ctypes, no extra package); elsewhere every call is a no-op (None / [] / False).
+Read-only: `listeners() -> [(port, pid)]` (GetExtendedTcpTable, TCP_TABLE_OWNER_PID_LISTENER,
+IPv4 + IPv6; `parse_tcp_table(buf, family)` decodes it), `port_owner(port) -> pid | None`,
+`service_pid(name) -> pid | None` (OpenSCManager connect + OpenService query-status +
+QueryServiceStatusEx), `OLD_SERVICE = "GeckoSeedLink"`, `describe_owner(port) ->
+("old-service", pid) | ("other", pid) | (None, None)`. `stop_old_service() -> bool`: one
+ShellExecuteW "runas" of `System32\cmd.exe /c sc stop GeckoSeedLink & sc config GeckoSeedLink
+start= disabled` (hidden); True when launched, False when the user said No (ERROR_CANCELLED)
+or it failed. A clean stop is not a failure, so the service's restart-on-failure actions do
+not start it again; it is never deleted. Program or process names are never looked up or
+shown. The installer has the same step as task `stopoldservice` (on by default, offered only
+when `HKLM\SYSTEM\CurrentControlSet\Services\GeckoSeedLink` exists; `sc.exe stop`, then
+`sc.exe config ... start= disabled` in ssPostInstall).
 
 ## 6. Testing
 
