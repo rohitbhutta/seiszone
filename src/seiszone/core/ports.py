@@ -1,8 +1,9 @@
 """Who holds a listener port, and freeing the ports of the old Gecko SeedLink service (Windows).
 
 An older program, the Windows service "GeckoSeedLink" (the old Gecko SeedLink service), listens
-on the same ports as SeisZone (Gecko 58772, SeedLink 18010). While it runs, the Kelunji Gecko
-connects to it and SeisZone's own Gecko receiver and SeedLink server cannot open their ports.
+on the Gecko port 58772 (and its own SeedLink port 18010). While it runs, the Kelunji Gecko
+connects to it and SeisZone's own Gecko receiver cannot open its port. SeisZone's SeedLink server
+uses 18000 by default; it clashes with the old service only if it is set to 18010.
 
   * port_owner(port)      process id of the program listening on a TCP port (IPv4 or IPv6)
   * service_pid(name)     process id of a running Windows service

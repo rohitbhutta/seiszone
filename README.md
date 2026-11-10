@@ -8,7 +8,7 @@ SeedLink so other programs can read it.
 It is built only on open standards: SeedLink 3, Guralp GCF / Scream protocol, Kelunji Gecko
 telemetry framing, miniSEED 2 and FDSN StationXML.
 
-Version 1.0.1. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
+Version 1.0.2. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
 
 ## Features
 
@@ -31,8 +31,8 @@ Version 1.0.1. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
   data that the instrument sends late (backfill after a VPN drop) goes into the right file.
 * **Export** a time window of chosen channels (one file per channel or one combined file),
   with a report of samples and gaps.
-* **SeedLink server** (port 18010) that offers every channel SeisZone receives to other
-  programs, on this PC (`127.0.0.1:18010`) or on the network.
+* **SeedLink server** (port 18000, the standard SeedLink port) that offers every channel SeisZone receives to other
+  programs, on this PC (`127.0.0.1:18000`) or on the network.
 * **Spectrum** of the visible data, tray icon, start with Windows, dark and light colours,
   program log file.
 * Runs as a normal Windows user; only the installer needs administrator rights.
@@ -102,7 +102,7 @@ python -m pytest tests -q
 
 The tests use only local fake servers on `127.0.0.1` with random ports, real captured data in
 `tests/data`, a temporary `SEISZONE_HOME`, and Qt in offscreen mode. They never contact real
-instruments and never listen on the real ports 58772 or 18010. ObsPy is used only by the tests,
+instruments and never listen on the real ports 58772, 18000 or 18010. ObsPy is used only by the tests,
 to cross-check the miniSEED files SeisZone writes.
 
 ## Build the installer
@@ -128,7 +128,7 @@ The installer (`SeisZoneSetup.exe`, 64-bit Windows 10/11):
 * closes a running SeisZone first (it tells the user);
 * task `stopoldservice` (ticked by default, shown only when the Windows service
   `GeckoSeedLink` exists): stops and disables the old Gecko SeedLink service (`sc stop`,
-  `sc config ... start= disabled`), which holds ports 58772 and 18010; it is not removed;
+  `sc config ... start= disabled`), which holds ports 58772 and 18010 (SeisZone's own SeedLink server uses 18000); it is not removed;
 * starts SeisZone as the normal user at the end.
 
 Uninstalling removes the program and the firewall rule. **Recordings, exports, settings and
@@ -140,9 +140,9 @@ Silent install: `SeisZoneSetup.exe /VERYSILENT /SUPPRESSMSGBOXES [/MERGETASKS="d
 ## Gecko recorder does not appear / port in use
 
 The Gecko connects to whatever listens on port 58772 of this PC. While the old Gecko SeedLink
-service (Windows service `GeckoSeedLink` of the earlier Gecko setup) runs, it holds 58772 and
-18010: the Gecko stays connected to it and SeisZone shows `port 58772 is used by the old Gecko
-SeedLink service` on the Gecko receiver and SeedLink server rows (`engine.status()` gives
+service (Windows service `GeckoSeedLink` of the earlier Gecko setup) runs, it holds 58772 (and its
+own SeedLink port 18010): the Gecko stays connected to it and SeisZone shows `port 58772 is used
+by the old Gecko SeedLink service` on the Gecko receiver row (`engine.status()` gives
 `"owner": "old-service"`; `core/ports.py` finds the listening process with
 `GetExtendedTcpTable` and compares it with the service's process id, read-only). SeisZone asks
 once per run, and offers **Free the port – stop the old Gecko SeedLink service** above the

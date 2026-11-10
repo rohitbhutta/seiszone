@@ -115,7 +115,7 @@ def test_window_builds_and_timers_tick(qapp, window):
     assert window.config.get("view", "channels") == list(shown)
     assert "1/1 sources receiving" in window.st["sources"].text()
     assert "Gecko links: 1" in window.st["gecko"].text()
-    assert ":18010" in window.st["server"].text() and "1 client" in window.st["server"].text()
+    assert ":18000" in window.st["server"].text() and "1 client" in window.st["server"].text()
     assert window.st["recording"].text() == "Not recording"
     assert window.st["disk"].text().startswith("Free 100.0 GB")
 

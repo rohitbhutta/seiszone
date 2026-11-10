@@ -35,7 +35,7 @@ Contents
 4. At the end leave **Launch SeisZone** ticked and click Finish.
 
 The firewall rule is called **SeisZone**. It lets a Kelunji Gecko (port 58772) and other
-programs (the SeisZone SeedLink server, port 18010) connect to this PC.
+programs (the SeisZone SeedLink server, port 18000) connect to this PC.
 
 **Uninstall** (Windows Settings > Apps > SeisZone) removes the program and the firewall rule.
 Your recordings, exports, settings and log files are **not** deleted.
@@ -234,13 +234,13 @@ other seismology programs can read it at the same time.
 
 In the other program, add a SeedLink source with:
 
-* on this PC: **`127.0.0.1`**, port **18010**
-* from another PC on the network: **this PC's IP address**, port **18010**
+* on this PC: **`127.0.0.1`**, port **18000**
+* from another PC on the network: **this PC's IP address**, port **18000**
   (the installer's firewall rule allows it)
 
 The other program can ask for recent data again after it was closed (standard SeedLink
 sequence numbers), as long as SeisZone still holds it in memory. The Sources list shows the
-connected programs under **SeedLink server :18010**.
+connected programs under **SeedLink server :18000**.
 
 ## 11. Settings
 
@@ -250,7 +250,7 @@ Click **Settings**. Changes take effect when you click OK; ports are reopened at
   commas), and a naming table to give a Gecko's data other network / station / location codes
   (by serial number).
 * **SeedLink server**: on/off, listen address (0.0.0.0 = all networks, 127.0.0.1 = only this
-  PC), port (default 18010), organization name.
+  PC), port (default 18000; SeisZone 1.0.0 used 18010 and moves it to 18000 by itself), organization name.
 * **Recording**: default folder, file length, one file per channel or per station.
 * **Display**: how many minutes of live data are kept in memory per channel, dark or light
   colours, default time window.
@@ -294,8 +294,8 @@ SeisZone starts again.
 
 The Gecko connects to whatever program listens on port 58772 of this PC. If the **old Gecko
 SeedLink service** (the Windows service "GeckoSeedLink" of the earlier Gecko setup) still runs,
-it holds port 58772 (Gecko) and 18010 (SeedLink), the Gecko stays connected to it, and SeisZone
-shows on the **Gecko receiver** and **SeedLink server** rows:
+it holds port 58772 (Gecko) and its own SeedLink port 18010, the Gecko stays connected to it,
+and SeisZone shows on the **Gecko receiver** row:
 `error - port 58772 is used by the old Gecko SeedLink service`.
 
 * The first time this happens while the SeisZone window is open, SeisZone asks: *"Your Gecko

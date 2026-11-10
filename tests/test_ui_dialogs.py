@@ -186,7 +186,7 @@ def test_sources_panel_lists_sources_gecko_and_server(make_engine):
     assert gecko.childCount() == 1
     assert gecko.child(0).text(C_NAME) == "0000A1B2  SS.SMR03"
     assert gecko.child(0).text(C_ADDR) == "10.10.100.254:50123" and gecko.child(0).text(C_PACK) == "4567"
-    assert server.text(C_NAME) == "SeedLink server :18010" and server.text(C_LAST) == "1 client"
+    assert server.text(C_NAME) == "SeedLink server :18000" and server.text(C_LAST) == "1 client"
     assert server.child(0).text(C_NAME) == "127.0.0.1:50555"
     assert panel.summary.text() == "1 of 1 source receiving"
 
@@ -231,7 +231,7 @@ def test_sources_panel_context_actions_call_the_engine(make_engine, qapp, monkey
     find_action(gecko_menu, "Show channels (1)").trigger()
     assert requested[-1] == ["SS.SMR03..HHZ"]
     assert panel.properties(None, ("gecko",))[1]["ports"] == [58772]
-    assert panel.properties(None, ("server",))[1]["port"] == 18010
+    assert panel.properties(None, ("server",))[1]["port"] == 18000
 
     # Remove asks first: No keeps the source, Yes removes it through the engine
     panel.tree.setCurrentItem(panel.tree.topLevelItem(0))
@@ -263,7 +263,7 @@ def test_sources_panel_add_button_opens_the_add_dialog(make_engine, qapp, monkey
 
 def held_by_old_service(engine, held):
     """engine.status() as while the old Gecko SeedLink service holds 58772 and 18010 (as long
-    as held["on"] is true)."""
+    as held["on"] is true), with the SeisZone SeedLink server set to 18010 in Settings."""
     base = engine.status
 
     def status():
@@ -271,7 +271,7 @@ def held_by_old_service(engine, held):
         if held["on"]:
             st["gecko"].update(listening=[], links=[], owner="old-service", owner_pid=4321,
                                error="port 58772 is used by the old Gecko SeedLink service")
-            st["server"].update(listening=False, clients=0, peers=[], owner="old-service", owner_pid=4321,
+            st["server"].update(port=18010, listening=False, clients=0, peers=[], owner="old-service", owner_pid=4321,
                                 error="port 18010 is used by the old Gecko SeedLink service")
         return st
     engine.status = status
@@ -751,7 +751,7 @@ def test_settings_dialog_validates_ports(make_engine, qapp):
     from seiszone.ui.settings_dialog import TAB_GECKO, TAB_SERVER, SettingsDialog
     engine = make_engine()
     dlg = SettingsDialog(engine, engine.config)
-    assert dlg.gecko_ports.text() == "58772" and dlg.server_port.text() == "18010"
+    assert dlg.gecko_ports.text() == "58772" and dlg.server_port.text() == "18000"
 
     bad_gecko = {"0": "not possible", "70000": "not possible", "abc": "not a number", "": "at least one port",
                  "58772, 58772": "listed twice", "58772;x": "not a number"}
@@ -771,7 +771,7 @@ def test_settings_dialog_validates_ports(make_engine, qapp):
         assert dlg.result() != QDialog.Accepted, text
         assert words in dlg.error.text(), (text, dlg.error.text())
         assert dlg.tabs.currentIndex() == TAB_SERVER
-    dlg.server_port.setText("18010")
+    dlg.server_port.setText("18005")
     dlg.server_bind.setCurrentText("my pc")
     dlg.accept()
     assert "is not an IP address" in dlg.error.text()
@@ -803,7 +803,7 @@ def test_settings_dialog_validates_ports(make_engine, qapp):
     cfg = Config(engine.config.path)                              # saved to disk
     assert cfg.get("gecko", "ports") == [58772, 58773]
     assert cfg.get("gecko", "rename") == {"0000A1B2": {"net": "SS", "sta": "SMR3", "loc": ""}}
-    assert cfg.get("seedlink_server", "port") == 18010 and cfg.get("buffer_minutes") == 120
+    assert cfg.get("seedlink_server", "port") == 18005 and cfg.get("buffer_minutes") == 120
     assert cfg.get("ui", "theme") == "dark"
 
 

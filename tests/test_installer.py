@@ -48,7 +48,7 @@ def test_task_stops_and_disables_the_old_gecko_service():
     assert len(tasks) == 1
     task = tasks[0]
     assert ('Description: "Stop and disable the old Gecko SeedLink service, so your Gecko recorder connects '
-            'to SeisZone (frees ports 58772 and 18010)"') in task
+            'to SeisZone (frees ports 58772 and 18010; the SeisZone SeedLink server uses port 18000)"') in task
     assert "Check: OldServiceInstalled" in task
     assert "unchecked" not in task                     # on by default
     code = code_section()

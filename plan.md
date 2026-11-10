@@ -24,7 +24,7 @@ are carried over and cleaned up.
 | G7 | Channel table: rate, latest sample, latency, gaps, packets, status colour | `ui/channels_panel.py` |
 | G8 | Continuous recording to miniSEED, user start/stop only, **never deletes data**, survives restarts | `core/recorder.py` |
 | G9 | Export any time window (per-channel or combined file + report) | `core/export.py`, `ui/export_dialog.py` |
-| G10 | Own SeedLink server (default port 18010) so other programs can read all data | `core/seedlink_server.py` |
+| G10 | Own SeedLink server (default port 18000; 18010 until 1.0.1) so other programs can read all data | `core/seedlink_server.py` |
 | G11 | StationXML per station; show counts or physical units | `core/stationxml.py` |
 | G12 | Logs, tray icon, start with Windows, one installer | `ui/app.py`, `installer/` |
 

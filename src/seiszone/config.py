@@ -7,7 +7,7 @@ overwritten: Config.read_only is then set and save() writes nothing (load_error 
 user interface warns). state.json is handled the same way (State.load_error / read_only).
 
 {
-  "version": 1,
+  "version": 2,                                  # 2: SeedLink server default 18000 (was 18010)
   "sources": [                                   # instruments / servers SeisZone connects to
     {"id": "4f1c...", "name": "KUMARI", "kind": "seedlink" | "gcf-udp" | "gcf-tcp",
      "host": "10.8.0.182", "port": 18000, "enabled": true, "added": 1762500000.0,
@@ -17,7 +17,7 @@ user interface warns). state.json is handled the same way (State.load_error / re
      "details": {...what the instrument probe found: hostname, serial, firmware, lat, lon...}}
   ],
   "gecko":   {"enabled": true, "bind": "0.0.0.0", "ports": [58772], "rename": {}},   # Kelunji Gecko links connect IN
-  "seedlink_server": {"enabled": true, "bind": "0.0.0.0", "port": 18010, "organization": "SeisZone"},
+  "seedlink_server": {"enabled": true, "bind": "0.0.0.0", "port": 18000, "organization": "SeisZone"},
   "recording": {"folder": "<Documents>\\SeisZone\\Recordings", "file_minutes": 60, "layout": "channel"},
   "buffer_minutes": 60,                          # live data kept in memory per channel
   "view": {"window_seconds": 300, "filter": "none", "units": "counts", "scale": "auto",
@@ -45,11 +45,14 @@ log = logging.getLogger("seiszone")
 
 SOURCE_KINDS = ("seedlink", "gcf-udp", "gcf-tcp")
 
+CONFIG_VERSION = 2
+OLD_SERVER_PORT = 18010     # the SeedLink server default of version 1 (the old service's port)
+
 DEFAULTS = {
-    "version": 1,
+    "version": CONFIG_VERSION,
     "sources": [],
     "gecko": {"enabled": True, "bind": "0.0.0.0", "ports": [58772], "rename": {}},
-    "seedlink_server": {"enabled": True, "bind": "0.0.0.0", "port": 18010, "organization": "SeisZone"},
+    "seedlink_server": {"enabled": True, "bind": "0.0.0.0", "port": 18000, "organization": "SeisZone"},
     "recording": {"folder": "", "file_minutes": 60, "layout": "channel"},
     "buffer_minutes": 60,
     "view": {"window_seconds": 300, "filter": "none", "units": "counts", "scale": "auto",
@@ -183,6 +186,20 @@ class Config:
         self.load_error = ""
         self._warned = False
         self.data = self._load()
+        self._migrate()
+
+    def _migrate(self):
+        """Version 1 files: the SeedLink server moves from the old default 18010 (also the old Gecko
+        SeedLink service's port) to the standard SeedLink port 18000. Saved at once."""
+        if self.data.get("version", 1) >= CONFIG_VERSION:
+            return
+        server = self.data["seedlink_server"]
+        if server.get("port") == OLD_SERVER_PORT:
+            server["port"] = DEFAULTS["seedlink_server"]["port"]
+            log.info("SeedLink server port changed from %d to %d (new default)", OLD_SERVER_PORT, server["port"])
+        self.data["version"] = CONFIG_VERSION
+        if os.path.exists(self.path):
+            self.save()
 
     def _load(self):
         try:

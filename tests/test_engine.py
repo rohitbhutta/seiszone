@@ -433,6 +433,15 @@ def test_cli_output_file(remote, tmp_path, capsys, quiet_log):
                    for h in logging.getLogger("seiszone").handlers)
 
 
+def test_cli_output_into_a_folder_that_does_not_exist_yet(tmp_path, capsys):
+    """The windowed exe showed an "Unhandled exception" box when --output named a new folder."""
+    out = str(tmp_path / "new" / "folder" / "version.txt")
+    assert cli.main(["--version", "--output", out]) == 0
+    assert capsys.readouterr().out == ""
+    text = open(out, encoding="utf-8").read()
+    assert "SeisZone" in text and text.rstrip().endswith("exit code 0")
+
+
 # ---------------------------------------------------------------------- review fixes
 
 def test_server_packet_numbers_continue_after_a_restart(tmp_path, remote):

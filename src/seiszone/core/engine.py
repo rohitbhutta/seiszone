@@ -418,9 +418,9 @@ class Engine:
     def _server_settings(self):
         s = self.config.get("seedlink_server") or {}
         try:
-            port = int(s.get("port", 18010))
+            port = int(s.get("port", 18000))
         except (TypeError, ValueError):
-            port = 18010
+            port = 18000
         return bool(s.get("enabled", True)), s.get("bind") or "0.0.0.0", port
 
     def _gecko_owner(self):

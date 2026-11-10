@@ -210,7 +210,7 @@ class SettingsDialog(QDialog):
         self.server_bind.addItem("0.0.0.0")
         self.server_bind.addItem("127.0.0.1")
         self.server_bind.setCurrentText(str(s.get("bind") or "0.0.0.0"))
-        self.server_port = QLineEdit(str(s.get("port") or 18010))
+        self.server_port = QLineEdit(str(s.get("port") or 18000))
         self.server_org = QLineEdit(str(s.get("organization") or "SeisZone"))
         form = QFormLayout()
         form.addRow("", self.server_enabled)

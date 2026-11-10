@@ -1,5 +1,5 @@
 """SeisZone's own SeedLink 3 server: every record in the DataHub is offered again to other
-programs (other viewers, SeisComP, ObsPy, Swarm, ...), by default on port 18010.
+programs (other viewers, SeisComP, ObsPy, Swarm, ...), by default on port 18000.
 
 Protocol (SeedLink 3.1, as libslink and standard servers use it):
 

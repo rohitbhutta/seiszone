@@ -43,15 +43,15 @@ Gecko add-on code was ported into it.
 
 Fortimus: SeedLink on 18000 (channels 0J.HN? 200 sps, 9J.MN? 5 sps), GCF Scream UDP 1567, web page
 port 80 (status, data streams, StationXML ~0.9 MB — about a minute over the slow VPN).
-Tests must never contact these or listen on 58772/18010 (the real Gecko would connect).
+Tests must never contact these or listen on 58772, 18000 or 18010 (the real Gecko connects to
+58772; the old service holds 18010; SeisZone's own server runs on 18000).
 
-## Status (2026-11-10, version 1.0.1)
+## Status (2026-11-10, version 1.0.2)
 
 * Project at `C:\D Drive\Only Coding\seiszone` (git repository, local only - not pushed).
-* **Version 1.0.1** (see "Version 1.0.1" below) is built but NOT committed yet: the working tree
-  holds the 1.0.1 changes on top of commit 625b5b1. The user has 1.0.0 installed and running
-  (`C:\Program Files\SeisZone`); `build/dist/SeisZoneSetup.exe` (1.0.1, 68.4 MB) upgrades it in
-  place (same AppId).
+* **Version 1.0.2** (see "Version 1.0.2" below): SeisZone's SeedLink server moves to port 18000.
+  1.0.1 is commit 5c60396. The user installed 1.0.0 and was installing 1.0.1 when asking for
+  the port change; `build/dist/SeisZoneSetup.exe` (1.0.2) upgrades either in place (same AppId).
 * All modules written and integrated: spine, SeedLink client/server, Gecko receiver, GCF link,
   probe, StationXML, recorder, export, DSP, engine + CLI, every UI panel/dialog, icon, installer,
   README, user guide. `python -m pytest tests -q`: 211 passed (about 2 min; 188 in 1.0.0 after
@@ -78,7 +78,21 @@ Tests must never contact these or listen on 58772/18010 (the real Gecko would co
 * Field test 2026-11-10 after the review fixes (rebuilt frozen exe, same scratch home, 90 s): the
   new resume command `DATA n <time>` is accepted by all three Fortimus servers; each backfilled
   ~22-24 h of history (~5,850 packets per source) with 0 gaps and no errors.
-* Not yet done: Gecko field test; user installs and accepts 1.0.1.
+* Not yet done: Gecko field test; user installs and accepts 1.0.2.
+
+### Version 1.0.2 (2026-11-10)
+
+Why: on the 1.0.1 installer's task page the user asked that SeisZone's SeedLink server use port
+**18000** (the port their earlier viewer setup used), not 18010, and that 18010 be released
+(it is the old Gecko SeedLink service's port; stopping that service frees it). 58772 stays.
+
+* Default `seedlink_server.port` = 18000 (`config.py` DEFAULTS, engine fallback, Settings field).
+* Config version 2: `Config._migrate()` moves a version-1 file whose server port is the old
+  default 18010 to 18000 once and saves it at once; a port the user chose stays (test
+  `test_version_1_server_port_moves_to_18000`).
+* Installer task text: "... (frees ports 58772 and 18010; the SeisZone SeedLink server uses port
+  18000)". The firewall rule is per program, so it needs no port change.
+* Docs (README, user guide, plan.md G10) say 18000. `python -m pytest tests -q`: 212 passed.
 
 ### Version 1.0.1 (2026-11-10)
 
@@ -203,9 +217,9 @@ User files: `%APPDATA%\SeisZone` (config.json, state.json, stationxml\), `%LOCAL
 
 ## Open items / next steps
 
-1. Commit the 1.0.1 working tree (not committed by the build step).
-2. User installs build/dist/SeisZoneSetup.exe 1.0.1 over 1.0.0 (UAC) and checks that the view is
-   live and shows all channels.
+1. (done) 1.0.1 committed as 5c60396; 1.0.2 committed after its build.
+2. User installs build/dist/SeisZoneSetup.exe 1.0.2 (UAC) and checks that the view is live, shows
+   all channels, and "SeedLink server :18000" is listening.
 3. The user chooses to stop the old GeckoSeedLink service: installer task "stopoldservice" or
    the Sources panel's "Free the port" / "Stop old service". Then check that "Gecko receiver"
    shows the SMR03 link (W610 redial time unknown, usually within a minute) - the SMR03 field test.

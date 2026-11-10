@@ -4,7 +4,7 @@
     address, kind, state with a colour dot, packets, age of the last packet; child rows per
     station with the packets the hub holds for it
   * "Gecko receiver :58772": the Kelunji Gecko recorders that connected IN to this PC
-  * "SeedLink server :18010": the programs reading data FROM SeisZone
+  * "SeedLink server :18000": the programs reading data FROM SeisZone
 
 refresh() (every second) only updates texts in place - rows are added or removed only when
 sources, stations or links come and go - so the selection, the expanded rows and the scroll

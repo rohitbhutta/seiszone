@@ -109,3 +109,29 @@ def test_damaged_config_copies_never_overwrite_each_other(tmp_path):
         assert not cfg.read_only and "kept as" in cfg.load_error
         cfg.save()
     assert len(glob.glob(path + ".*.bad")) == 2
+
+
+def test_version_1_server_port_moves_to_18000(tmp_path):
+    """1.0.0 saved the old default 18010 (also the old Gecko SeedLink service's port): it becomes
+    18000 once, on disk too; a port the user chose stays; new files start on 18000."""
+    path = str(tmp_path / "config.json")
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump({"version": 1, "seedlink_server": {"enabled": True, "port": 18010},
+                   "sources": [{"id": "a", "kind": "seedlink", "host": "10.0.0.1", "port": 18000}]}, fh)
+    cfg = Config(path)
+    assert cfg.get("seedlink_server", "port") == 18000 and cfg.get("version") == 2
+    with open(path, encoding="utf-8") as fh:
+        disk = json.load(fh)
+    assert disk["version"] == 2 and disk["seedlink_server"]["port"] == 18000
+    assert [s["id"] for s in disk["sources"]] == ["a"]
+
+    cfg.set("seedlink_server", "port", 18010)           # chosen in Settings after the move: kept
+    assert Config(path).get("seedlink_server", "port") == 18010
+
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump({"version": 1, "seedlink_server": {"port": 18123}}, fh)
+    assert Config(path).get("seedlink_server", "port") == 18123
+
+    fresh = Config(str(tmp_path / "new" / "config.json"))
+    assert fresh.get("seedlink_server", "port") == 18000
+    assert not os.path.exists(fresh.path)               # nothing written until something changes

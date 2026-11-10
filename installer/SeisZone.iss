@@ -6,13 +6,14 @@
 ;
 ; Administrator rights are needed only to write to Program Files, to add the one Windows
 ; Firewall rule and (task "stopoldservice") to stop and disable the old Gecko SeedLink service,
-; which holds the Gecko port 58772 and the SeedLink port 18010. That service is not removed: it
+; which holds the Gecko port 58772 and its own SeedLink port 18010 (SeisZone's SeedLink server
+; uses 18000). That service is not removed: it
 ; can be switched on again in Windows Services. SeisZone itself always runs as the normal user.
 ; Recordings, exports, settings and logs live in the user's own folders and are never touched
 ; by setup or uninstall.
 
 #ifndef AppVer
-  #define AppVer "1.0.1"
+  #define AppVer "1.0.2"
 #endif
 #define AppName "SeisZone"
 #define Exe "SeisZone.exe"
@@ -58,7 +59,7 @@ UninstalledAll=%1 was removed from your computer.%n%nYour recordings, exports, s
 [Tasks]
 Name: desktopicon; Description: "Create a desktop icon"; GroupDescription: "Shortcuts:"; Flags: unchecked
 ; on by default, offered only when the old Gecko SeedLink service is installed on this PC
-Name: stopoldservice; Description: "Stop and disable the old Gecko SeedLink service, so your Gecko recorder connects to SeisZone (frees ports 58772 and 18010)"; GroupDescription: "Old Gecko SeedLink service:"; Check: OldServiceInstalled
+Name: stopoldservice; Description: "Stop and disable the old Gecko SeedLink service, so your Gecko recorder connects to SeisZone (frees ports 58772 and 18010; the SeisZone SeedLink server uses port 18000)"; GroupDescription: "Old Gecko SeedLink service:"; Check: OldServiceInstalled
 
 [InstallDelete]
 ; program library of an older version: replaced as a whole so no stale module is left behind
@@ -78,7 +79,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 ; one inbound rule for the program covers every port it listens on: the Gecko port (58772) and
-; the SeisZone SeedLink server (18010), also after the user changes them in Settings
+; the SeisZone SeedLink server (18000), also after the user changes them in Settings
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""SeisZone"""; Flags: runhidden waituntilterminated; StatusMsg: "Adding the Windows Firewall rule..."
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""SeisZone"" dir=in action=allow program=""{app}\{#Exe}"" enable=yes"; Flags: runhidden waituntilterminated; StatusMsg: "Adding the Windows Firewall rule..."
 ; runasoriginaluser: SeisZone must run with the normal user's rights, not the installer's

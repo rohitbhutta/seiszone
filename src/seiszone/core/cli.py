@@ -67,6 +67,8 @@ def main(argv=None):
     if not args.output:
         return _run(args)
     saved = sys.stdout, sys.stderr
+    folder = os.path.dirname(os.path.abspath(args.output))
+    os.makedirs(folder, exist_ok=True)   # a windowed exe has no other way to report a missing folder
     with open(args.output, "w", encoding="utf-8", buffering=1) as out:
         sys.stdout = sys.stderr = out
         try:

@@ -111,6 +111,6 @@ class FakeEngine:
                 "gecko": {"ports": [58772], "listening": [58772], "error": "",
                           "links": [{"peer": "10.10.100.254:50123", "serial": "0000A1B2", "station": "SS.SMR03",
                                      "sitename": "SMR03", "records": 4567, "bytes": 2338304, "since": now - 7200}]},
-                "server": {"port": 18010, "listening": True, "error": "", "clients": 1,
+                "server": {"port": 18000, "listening": True, "error": "", "clients": 1,
                            "peers": [{"peer": "127.0.0.1:50555", "since": now - 60, "stations": "*", "packets": 99}]},
                 "started": self.started}
