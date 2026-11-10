@@ -21,6 +21,8 @@ times a second on an ordinary office PC):
 
 Gaps in the data are NaN between the hub's segments, so the line breaks there. Zooming or
 panning with the mouse pauses the live view; the Live button (or a double-click) returns.
+Every trace keeps at least MIN_ROW pixels: when more channels are shown than fit, the plots
+scroll vertically (the time axis is under the last trace).
 """
 
 import logging
@@ -32,7 +34,8 @@ import pyqtgraph as pg
 from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QDoubleValidator, QFont
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QGraphicsGridLayout, QGraphicsWidget, QHBoxLayout,
-                               QLabel, QLineEdit, QStackedWidget, QToolButton, QVBoxLayout, QWidget)
+                               QLabel, QLineEdit, QScrollArea, QStackedWidget, QToolButton, QVBoxLayout,
+                               QWidget)
 
 from ..core import dsp
 from . import theme
@@ -50,6 +53,7 @@ SENS_TTL = 30.0         # seconds a looked-up StationXML sensitivity is trusted 
 AXIS_WIDTH = 66         # left axis width: the same on every plot so the traces line up
 TIME_AXIS_HEIGHT = 26   # the time axis under the bottom plot
 ROW_GAP = 4             # space between two plots (the hidden bottom axis of the upper one)
+MIN_ROW = 24            # pixels of a trace at least (more channels than fit: the plots scroll)
 UNIT_NAMES = {"M/S": "m/s", "M/S**2": "m/s²", "M/S2": "m/s²", "M/SEC": "m/s", "M": "m", "PA": "Pa",
               "V": "V", "COUNTS": "counts"}
 
@@ -145,6 +149,7 @@ class WaveformView(QWidget):
             self._fixed = 1000.0
         self._demean = bool(v.get("demean", True))
         self._live = True
+        self._anchored = False     # live range ends at the newest (old) data, not at now
         self._sids = []
         self._traces = []
         self._version = 0          # bumped by every setting change: every trace recomputes
@@ -176,8 +181,15 @@ class WaveformView(QWidget):
         self.glw.setCentralItem(root)
         self.glw.installEventFilter(self)
         self.glw.scene().sigMouseClicked.connect(self._on_click)
+        self.scroll = QScrollArea()          # the plots scroll when they do not fit
+        self.scroll.setFrameShape(QFrame.NoFrame)
+        self.scroll.setWidgetResizable(False)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.scroll.setWidget(self.glw)
+        self.scroll.viewport().installEventFilter(self)
         self.stack.addWidget(self.empty)
-        self.stack.addWidget(self.glw)
+        self.stack.addWidget(self.scroll)
         lay.addWidget(self.stack, 1)
 
         self._reload = QTimer(self)
@@ -274,8 +286,9 @@ class WaveformView(QWidget):
             last = i == n - 1
             tr.bottom.setStyle(showValues=last, tickLength=5 if last else 0)
             tr.bottom.setHeight(TIME_AXIS_HEIGHT if last else ROW_GAP)
-        self.stack.setCurrentWidget(self.glw if self._traces else self.empty)
+        self.stack.setCurrentWidget(self.scroll if self._traces else self.empty)
         self._color_traces()
+        self._size_canvas()
         self._fit_rows()
         self.grid.activate()   # geometry now, not at the next event: the decimation needs the width
 
@@ -304,6 +317,20 @@ class WaveformView(QWidget):
         self.grid.addItem(bottom, 2 * row + 1, 1)
         return _Trace(vb, left, bottom, curve, _TraceLabel(vb))
 
+    def _size_canvas(self, width=None, height=None):
+        """The plot canvas fills the scroll area, and is taller when the rows need more room
+        (then the vertical scroll bar appears). width/height: the new viewport size."""
+        vp = self.scroll.viewport()
+        width = vp.width() if width is None else width
+        height = vp.height() if height is None else height
+        n = len(self._traces)
+        _l, top, _r, bottom = self.grid.getContentsMargins()
+        need = (n * MIN_ROW + ROW_GAP * max(0, n - 1) + TIME_AXIS_HEIGHT + top + bottom
+                + 2 * self.glw.frameWidth()) if n else 0
+        w, h = max(1, width), max(1, height, math.ceil(need))
+        if (self.glw.width(), self.glw.height()) != (w, h):
+            self.glw.setFixedSize(w, h)
+
     def _fit_rows(self, height=None):
         """Equal data heights for every trace; the time axis and the gaps keep their fixed height.
         `height` is the new viewport height during a resize (the viewport itself is resized
@@ -314,7 +341,7 @@ class WaveformView(QWidget):
         lay = self.grid
         _l, top, _r, bottom = lay.getContentsMargins()
         avail = (self.glw.viewport().height() if height is None else height) - top - bottom
-        each = max(24.0, (avail - TIME_AXIS_HEIGHT - ROW_GAP * (n - 1)) / n)
+        each = max(float(MIN_ROW), (avail - TIME_AXIS_HEIGHT - ROW_GAP * (n - 1)) / n)
         for i in range(max(2 * n, lay.rowCount())):   # rows of removed plots give their height back
             if i >= 2 * n:
                 h = 0
@@ -392,6 +419,7 @@ class WaveformView(QWidget):
         live = bool(live)
         changed = live != self._live
         self._live = live
+        self._anchored = False
         self._update_live_button()
         if live and changed:
             self._set_range(*self._live_range())
@@ -415,6 +443,7 @@ class WaveformView(QWidget):
 
     def _set_window(self, _index):
         self._window = int(self.window_box.currentData())
+        self._anchored = False
         if self._live:
             self._set_range(*self._live_range())
         else:  # keep the right edge the user chose, change only the length
@@ -471,17 +500,20 @@ class WaveformView(QWidget):
     # time range
     # ------------------------------------------------------------------------------------
     def _live_range(self):
-        """The window ending now. If the shown channels' newest sample is far from the PC clock
-        (instrument clock ahead, or only old data held) it ends at that sample instead, so the
-        traces are never off screen."""
+        """The window ending now, or at the shown channels' newest sample when that is ahead of
+        the PC clock (instrument clock ahead: continuous, no jump when it crosses now). When only
+        old data is held (newest sample more than 80 % of the window ago) it ends just after
+        that sample, so the traces are never off screen; it follows now again once the data is
+        back within half a window (hysteresis: a latency near the threshold never flips it)."""
         now = time.time()
         stats = self.engine.hub.stats_snapshot()
         ends = [stats[s]["last_end"] for s in self._sids if s in stats]
         end = now
         if ends:
             latest = max(ends)
-            if latest > now or latest < now - 0.8 * self._window:
-                end = latest + 0.02 * self._window
+            limit = 0.5 if self._anchored else 0.8
+            self._anchored = latest < now - limit * self._window
+            end = latest + 0.02 * self._window if self._anchored else max(now, latest)
         return end - self._window, end
 
     def _set_range(self, t0, t1):
@@ -659,7 +691,8 @@ class WaveformView(QWidget):
         mode = self._scale
         spans = [tr.hi - tr.lo for tr in self._traces if tr.lo is not None]
         half_common = max(spans) / 2 if spans else 1.0
-        centred = self._demean or dsp.FILTERS[self._filter]["type"] is not None
+        # only these filters take the mean out (a low-pass keeps it when 'Remove mean' is off)
+        centred = self._demean or dsp.FILTERS[self._filter]["type"] in ("highpass", "bandpass")
         for tr in self._traces:
             if tr.lo is None:
                 lo, hi = -1.0, 1.0
@@ -700,6 +733,8 @@ class WaveformView(QWidget):
         if obj is self.glw and ev.type() == QEvent.Resize:
             self._fit_rows(ev.size().height() - 2 * self.glw.frameWidth())
             self._version += 1   # more / fewer pixels: decimate again
+        elif obj is self.scroll.viewport() and ev.type() == QEvent.Resize:
+            self._size_canvas(ev.size().width(), ev.size().height())
         return super().eventFilter(obj, ev)
 
     def changeEvent(self, ev):

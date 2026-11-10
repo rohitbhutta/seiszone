@@ -9,6 +9,13 @@ backfill after a VPN outage) go into the older file they belong to. Nothing is d
 re-encoded (lossless) and nothing is ever deleted: a recording only starts and stops when the
 user says so, survives restarts of SeisZone (State["recordings"]) and only warns on low disk.
 
+A file that already existed when this run first appends to it (SeisZone restarted after a
+crash or power cut) is read once: records it already holds are not appended again, so the
+SeedLink resume (whose position is saved every few seconds) never duplicates data. Records that
+cannot be written (disk full, drive gone) wait in memory up to PENDING_MAX_BYTES and are
+retried; any still unwritten when SeisZone closes are reported in the log with their time span,
+and the channel's end is set back so the next start logs the hole as a GAP.
+
 Each recording folder has recording_log.txt (UTF-8, local time and UTC): start, every new file,
 gaps per channel, streams going silent and coming back, write errors, stop.
 
@@ -17,6 +24,7 @@ called from the user interface. One lock protects everything; a small background
 idle files, watches for silent streams and saves the state.
 """
 
+import collections
 import datetime as dt
 import logging
 import os
@@ -105,7 +113,7 @@ class _Session:
         self.sid_set = set(self.sids) if self.sids is not None else None
         self.last_error = ""
         self.error_logged = 0.0
-        self.pending = []                                 # [(path, raw)] not written yet (write error)
+        self.pending = collections.deque()                # (path, raw) not written yet (write error)
         self.pending_bytes = 0
         self.dropped = 0                                  # records lost because pending was full
         self.arrival = {}                                 # station -> wall time of the newest record
@@ -155,6 +163,8 @@ class RecordingManager:
         self._disk_checked = 0.0
         self._disk_warned = {}        # folder -> wall time of the last warning in its log
         self._unreadable = []         # state entries that are not understood: saved back unchanged
+        self._seen_paths = set()      # files this run has appended to (or created)
+        self._existing = {}           # path -> record keys already in a file that existed before
         for d in state.get("recordings", []) or []:
             try:
                 s = _Session(**d)
@@ -248,12 +258,20 @@ class RecordingManager:
 
     def close(self):
         """Close all files and save the state. Active recordings stay active: they continue the
-        next time SeisZone starts."""
+        next time SeisZone starts. Records that still cannot be written are reported (program
+        log and recording_log.txt) and the channel ends set back, so the next start logs the hole."""
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout=5)
         self.hub.remove_listener(self.on_record)
         with self.lock:
+            for s in self._sessions:
+                if s.active and s.pending:
+                    self._retry_pending(s)
+                if s.active and s.pending:
+                    self._report_lost(s, list(s.pending), "SeisZone closing")
+                    s.pending.clear()
+                    s.pending_bytes = 0
             self._close_handles()
             self._persist(force=True)
 
@@ -298,6 +316,11 @@ class RecordingManager:
             gone = now - s.arrival.get(station, now)
             self._rec_log(s, f"{station}: data back after {gone / 60:.1f} min without data")
         s.arrival[station] = now
+        path = s.path_for(rec)
+        if self._already_in(path, rec):   # resent after a crash: in the file already
+            if rec.end > s.last_end.get(sid, rec.end - 1):
+                s.last_end[sid] = rec.end
+            return
         prev = s.last_end.get(sid)
         if prev is None:
             self._rec_log(s, f"{sid}: first data, {rec.rate:g} sps, from {mseed.fmt_time(rec.start, ms=True)}")
@@ -307,59 +330,111 @@ class RecordingManager:
                              f"{mseed.fmt_time(prev, ms=True)} to {mseed.fmt_time(rec.start, ms=True)}")
         if prev is None or rec.end > prev:
             s.last_end[sid] = rec.end
-        path = s.path_for(rec)
         if path in written:
             return
         written.add(path)
         self._write(s, [(path, rec.raw)], now)
 
     def _write(self, s, items, now):
-        """Append items [(path, raw)] after any still pending ones. On a write error the session
-        keeps running: the unwritten records wait in memory (bounded) and are retried with the
-        next record."""
-        if s.pending:
-            items = s.pending + items
-        done = 0
+        """Append items [(path, raw)] after any still pending ones (oldest first). On a write
+        error the session keeps running: the unwritten records wait in memory (bounded) and are
+        retried with the next record. O(1) per record however many are waiting."""
+        for item in items:
+            s.pending.append(item)
+            s.pending_bytes += len(item[1])
         try:
-            for path, raw in items:
+            while s.pending:
+                path, raw = s.pending[0]
                 self._append(s, path, raw, now)
-                done += 1
-        except OSError as e:
-            rest = items[done:]
-            s.pending_bytes = sum(len(r) for _p, r in rest)
-            while s.pending_bytes > PENDING_MAX_BYTES and len(rest) > 1:
-                s.pending_bytes -= len(rest.pop(0)[1])
-                s.dropped += 1
-            s.pending = rest
+                s.pending.popleft()
+                s.pending_bytes -= len(raw)
+        except (OSError, ValueError) as e:
             s.last_error = f"{type(e).__name__}: {e}"
+            lost = []
+            while s.pending_bytes > PENDING_MAX_BYTES and len(s.pending) > 1:
+                item = s.pending.popleft()
+                s.pending_bytes -= len(item[1])
+                s.dropped += 1
+                lost.append(item)
+            if lost:
+                self._report_lost(s, lost, "no memory left for unwritten records", quiet=True)
             if now - s.error_logged >= ERROR_LOG_EVERY:
                 s.error_logged = now
                 log.error("recording %r: writing failed (%s) - will retry with the next data; "
-                          "%d records waiting", s.name, s.last_error, len(rest))
+                          "%d records waiting", s.name, s.last_error, len(s.pending))
                 self._rec_log(s, f"WRITE FAILED: {s.last_error} - retrying with the next data")
             return
         if s.last_error:
             log.info("recording %r: writing works again", s.name)
             self._rec_log(s, "writing works again" + (f" ({s.dropped} records were lost while it failed)"
                                                       if s.dropped else ""))
-        s.pending, s.pending_bytes, s.last_error = [], 0, ""
+        s.pending_bytes, s.last_error = 0, ""
+
+    def _report_lost(self, s, items, why, quiet=False):
+        """Records that will never be written: say which time span is missing per channel and
+        set the channel's end back, so the hole is logged as a GAP by the next record (also
+        after a restart, as last_end is saved). quiet: only the first loss of a write error
+        is logged (records are dropped one by one while the memory stays full)."""
+        spans = {}
+        for _path, raw in items:
+            res = mseed.parse_record(raw, 0, check=False)
+            if not isinstance(res, tuple):
+                continue
+            r = res[0]
+            a, b = spans.get(r.sid, (r.start, r.end))
+            spans[r.sid] = (min(a, r.start), max(b, r.end))
+        for sid, (a, _b) in spans.items():
+            if sid in s.last_end:
+                s.last_end[sid] = min(s.last_end[sid], a)
+        self._dirty = True
+        if quiet and s.dropped > len(items):
+            return
+        text = "; ".join(f"{sid} {mseed.fmt_time(a, ms=True)} to {mseed.fmt_time(b, ms=True)}"
+                         for sid, (a, b) in sorted(spans.items()))
+        msg = f"{why}: {len(items)} records could not be written and are lost ({s.last_error}): {text}"
+        log.error("recording %r: %s", s.name, msg)
+        self._rec_log(s, "LOST " + msg)
 
     def _retry_pending(self, s):
         if s.pending:
             self._write(s, [], time.time())
+
+    def _already_in(self, path, rec):
+        """True when `rec` is already in a file that existed before this run appended to it."""
+        if path not in self._seen_paths:
+            self._seen_paths.add(path)
+            if len(self._seen_paths) > 20000:
+                self._seen_paths = {path}
+            keys = set()
+            try:
+                with open(path, "rb") as fh:
+                    data = fh.read()
+                keys = {(r.sid, round(r.start, 3), r.nsamp) for r in mseed.iter_records(data)}
+            except OSError:
+                pass   # a new file (or unreadable: appending then fails and is reported)
+            if keys:
+                self._existing[path] = keys
+        keys = self._existing.get(path)
+        if keys is None:
+            return False
+        key = (rec.sid, round(rec.start, 3), rec.nsamp)
+        if key in keys:
+            return True
+        keys.add(key)
+        return False
 
     def _append(self, s, path, raw, now):
         h = self._handles.get(path)
         if h is None:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             is_new = not os.path.exists(path)
+            if len(self._handles) >= MAX_OPEN:   # make room first: the new handle is never closed
+                oldest = min(self._handles, key=lambda p: self._handles[p][1])
+                self._close_handle(oldest)
             # unbuffered: every write goes to the operating system at once, so a crash of
             # SeisZone loses nothing that was received
             fh = open(path, "ab", buffering=0)
             h = self._handles[path] = [fh, now]
-            if len(self._handles) > MAX_OPEN:
-                oldest = min(self._handles, key=lambda p: self._handles[p][1])
-                self._close_handle(oldest)
             if is_new:
                 s.files += 1
                 s.last_file = path
@@ -429,6 +504,7 @@ class RecordingManager:
 
     def _close_handle(self, path, truncate_to=None):
         h = self._handles.pop(path, None)
+        self._existing.pop(path, None)   # the resend after a restart is over by then
         if h is None:
             return
         try:

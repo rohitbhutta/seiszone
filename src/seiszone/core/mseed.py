@@ -2,8 +2,11 @@
 (Steim2, lossless; a record whose differences do not fit Steim2 is stored as int32) and read files.
 
 Pure Python + numpy. A record taken from the network is only accepted when its header is
-plausible and (for Steim data) its samples decode and the reverse integration constant matches,
-so random bytes are never taken for data.
+plausible and (for Steim data) its samples decode to exactly the sample count of the header, so
+random bytes are never taken for data. A reverse integration constant (Xn) that does not match
+the last sample is only counted (xn_mismatches), like libmseed does: some writers get it wrong
+while every sample is right. Steim differences are summed with int32 wraparound, as the C
+reference decoders do.
 """
 
 import datetime as dt
@@ -15,6 +18,7 @@ import numpy as np
 UTC = dt.timezone.utc
 FIELD_OK = re.compile(rb"^[A-Za-z0-9 \x00_]*$")
 _EPOCH_CACHE = {}
+xn_mismatches = 0     # Steim records whose Xn did not match their last sample (kept anyway)
 
 
 def _txt(b):
@@ -36,20 +40,36 @@ def rate_from(factor, mult):
 
 
 def seed_rate(rate):
-    """(factor, multiplier) for a sample rate (exact for integer rates and 1/n rates)."""
+    """(factor, multiplier) for a sample rate, both fitting int16 (exact for integer rates,
+    1/n rates and decimal rates like 40.5; otherwise the closest pair that fits)."""
+    candidates = []
     if rate >= 1:
-        if abs(rate - round(rate)) < 1e-9 and round(rate) <= 32767:
-            return int(round(rate)), 1
-        return int(round(rate * 1000)), -1000
-    return -int(round(1 / rate)), 1
+        r = round(rate)
+        if abs(rate - r) < 1e-9:
+            candidates += [(r, 1)] + [(r // m, m) for m in (10, 100, 1000) if r % m == 0]
+        candidates += [(round(rate * m), -m) for m in (1, 10, 100, 1000, 10000)]
+    else:
+        period = 1 / rate
+        candidates += [(-round(period), 1)] + [(-round(period / m), -m) for m in (10, 100, 1000)]
+        candidates += [(round(rate * m), -m) for m in (10, 100, 1000, 10000)]
+    fits = [(f, m) for f, m in candidates if f and -32768 <= f <= 32767]
+    for f, m in fits:
+        if abs(rate_from(f, m) - rate) <= 1e-9 * rate:
+            return int(f), int(m)
+    if not fits:
+        raise ValueError(f"sample rate {rate} cannot be written to miniSEED")
+    f, m = min(fits, key=lambda p: abs(rate_from(*p) - rate))
+    return int(f), int(m)
 
 
 def _sext(v, bits):
     return v - (1 << bits) if v & (1 << (bits - 1)) else v
 
 
-def steim_decode(data, nsamp, version, endian=">"):
-    """Steim1/Steim2 frames -> list of int. ValueError if damaged (count or XN mismatch)."""
+def steim_decode(data, nsamp, version, endian=">", strict_xn=False):
+    """Steim1/Steim2 frames -> list of int. ValueError if damaged (sample count, dnib, no
+    frames); an Xn mismatch is an error only with strict_xn, otherwise it is counted."""
+    global xn_mismatches
     out = []
     x0 = xn = None
     last = 0
@@ -98,7 +118,8 @@ def steim_decode(data, nsamp, version, endian=">"):
             for d in diffs:
                 if len(out) >= nsamp:
                     break
-                last = x0 if not out else last + d
+                # int32 wraparound, like the C decoders (a clip from 2^31-1 to -2^31 is diff +1)
+                last = x0 if not out else ((last + d + 0x80000000) & 0xFFFFFFFF) - 0x80000000
                 out.append(last)
             if len(out) >= nsamp:
                 break
@@ -109,7 +130,9 @@ def steim_decode(data, nsamp, version, endian=">"):
     if len(out) != nsamp:
         raise ValueError(f"Steim: {len(out)} samples, header says {nsamp}")
     if nsamp and last != xn:
-        raise ValueError("Steim: reverse integration constant mismatch")
+        if strict_xn:
+            raise ValueError("Steim: reverse integration constant mismatch")
+        xn_mismatches += 1
     return out
 
 
@@ -236,7 +259,7 @@ def parse_record(buf, off=0, check=True):
             return None
         try:
             rec._samples = decode_samples(rec)
-        except (ValueError, struct.error):
+        except (ValueError, struct.error, OverflowError):
             return None
     return rec, reclen
 
@@ -334,6 +357,8 @@ def encode_segment(net, sta, loc, cha, rfac, rmul, start, samples, seq_start=1, 
             encoding = 11
         except OverflowError:  # a jump too large for Steim2 (sensor glitch): int32, still lossless
             frames, n, encoding = None, min(len(samples) - pos, (reclen - 64) // 4), 3
+            if any(not -0x80000000 <= v <= 0x7FFFFFFF for v in samples[pos:pos + n]):
+                raise ValueError("sample values beyond int32 cannot be written to miniSEED")
         t0 = start + pos / rate
         hdr = (f"{seq % 1000000:06d}".encode() + quality.encode()[:1] + b" " + sta.encode().ljust(5)[:5]
                + loc.encode().ljust(2)[:2] + cha.encode().ljust(3)[:3] + net.encode().ljust(2)[:2]

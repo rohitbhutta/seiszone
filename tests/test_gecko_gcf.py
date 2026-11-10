@@ -387,3 +387,77 @@ def test_gcf_tcp_btp():
     assert samples_by_sid(received) == expected_tedt_samples()
     assert status["state"] == RECEIVING and status["kind"] == "gcf-tcp"
     assert elapsed < 2 and link.state == STOPPED
+
+
+# ============================================================================ review fixes
+
+def test_gecko_stray_sync_byte_does_not_hold_back_frames():
+    """A stray 0x55 with a plausible length used to stall the parser for ~10 KB (no frames, no
+    acks); now the complete, valid frame behind it is delivered at once."""
+    rec = mseed.encode_records("SS", "SMR03", "", "HNZ", 100, 1762500000.0, list(range(300)))[0]
+    frame = gecko.make_frame(gecko.T_MSEED, gecko.HUB_ID, 7, rec.raw, src=GECKO_SERIAL)
+    stray = bytes([0x55, gecko.T_MSEED, 0x00, 0x0F]) + bytes(17)    # length 3840, never completed
+    p = gecko.FrameParser()
+    got = p.feed(stray + frame)
+    assert [(f[0], f[3]) for f in got] == [(gecko.T_MSEED, 7)] and p.bad == 1
+    p = gecko.FrameParser()                                         # unknown type: no frame start
+    assert len(p.feed(bytes([0x55, 0x13, 0x00, 0x26]) + bytes(17) + frame)) == 1
+    p = gecko.FrameParser()                     # a real frame cut by a read boundary still waits
+    assert p.feed(frame[:300]) == [] and p.feed(frame[300:]) == got
+
+
+def test_gecko_serial_with_the_top_bit_set():
+    serial = 0x82000143
+    f = gecko.make_frame(gecko.T_TEXT, gecko.HUB_ID, 1, b"station_name=SS.00.X", src=serial)
+    [(_t, src, _d, _s, _p)] = gecko.FrameParser().feed(f)
+    assert src == serial and f"{src:08X}" == "82000143"
+    assert gecko.serial_key(src) == gecko.serial_key("82000143") == "82000143"
+    recv = gecko.GeckoReceiver(DataHub(), rename={"82000143": {"sta": "NEW"}})
+    rec = mseed.encode_records("SS", "SMR03", "", "HNZ", 100, 1762500000.0, [1, 2, 3])[0]
+    assert recv._renamed(src, rec).sta == "NEW"
+
+
+def tedt_link(names, details=None):
+    src = validate_source({"id": "g1", "kind": "gcf-udp", "host": "127.0.0.1", "port": 1567,
+                           "gcf": names, "details": details or {}})
+    hub = DataHub()
+    return GcfLink(src, hub, None), hub
+
+
+def test_gcf_link_uses_only_the_selected_streams():
+    link, hub = tedt_link({"net": "CI", "sta": "TEDT", "map": {"ACCZ0": ["0J", "HNZ"]}})
+    for d in datagrams():
+        link.handle_block(gcf.parse_datagram(d))
+    assert hub.stream_ids() == ["CI.TEDT.0J.HNZ"]
+    assert link.skipped > 0 and link.blocks == 12 and link.status()["skipped"] == link.skipped
+    link, hub = tedt_link({"net": "CI", "sta": "TEDT", "map": {}})   # no channel list: every stream
+    for d in datagrams():
+        link.handle_block(gcf.parse_datagram(d))
+    assert "CI.TEDT.00.HNN" in hub.stream_ids() and len(hub.stream_ids()) == 5
+
+
+def _block(sysid, start_secs, samples, stream="ACCZ0"):
+    sysv = int(sysid, 36) | 0xC0000000
+    diffs = [0] + [b - a for a, b in zip(samples, samples[1:])]
+    body = struct.pack(">i", samples[0]) + struct.pack(">%di" % len(diffs), *diffs) + struct.pack(">i", samples[-1])
+    raw = struct.pack(">III", sysv, int(stream, 36), (13500 << 17) | start_secs) + bytes([0, 100, 1, len(samples)])
+    return gcf.parse_block(raw + body)
+
+
+def test_gcf_link_keeps_to_one_digitiser():
+    """Two units behind one Scream server, same stream names and start seconds: only the
+    configured one is used; nothing is dropped as a false duplicate or mixed into a channel."""
+    names = {"net": "XX", "sta": "SCR", "map": {"ACCZ0": ["00", "HNZ"]}, "system_id": "AAAA"}
+    link, hub = tedt_link(names)
+    for b in (_block("AAAA", 10, [10, 11, 12]), _block("BBBB", 10, [-50, -51, -52]),
+              _block("AAAA", 11, [13, 14, 15]), _block("BBBB", 12, [-53, -54, -55])):
+        link.handle_block(b)
+    assert link.blocks == 2 and link.duplicates == 0 and link.foreign == 2
+    assert samples_by_sid([r for _s, r in hub.snapshot_packets()]) == {"XX.SCR.00.HNZ": [10, 11, 12, 13, 14, 15]}
+    # an older source without a system id: the probe's single one, else the first one seen
+    link, _hub = tedt_link({"net": "XX", "sta": "SCR", "map": {}}, details={"system_id": "BBBB"})
+    assert link.system_id == "BBBB"
+    link, hub = tedt_link({"net": "XX", "sta": "SCR", "map": {}})
+    link.handle_block(_block("BBBB", 10, [1, 2, 3]))
+    link.handle_block(_block("AAAA", 10, [7, 8, 9]))
+    assert link.system_id == "BBBB" and link.blocks == 1 and link.foreign == 1

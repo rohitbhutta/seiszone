@@ -10,7 +10,12 @@ The user interface calls the public methods from its own thread. They change con
 once (the config is the truth) and then ask the loop to bring the running links in line with
 it, so calls in quick succession (disable, enable, edit) always end in the configured state.
 A listener port that is busy (another program, an old SeisZone still closing) is shown in
-status() and tried again every LISTEN_RETRY seconds; it never stops the engine.
+status() and tried again every LISTEN_RETRY seconds (with the settings the listeners were
+opened with: a settings change is applied by apply_settings only); it never stops the engine.
+
+The SeedLink server's packet numbers continue from the previous run (state "server_seq" plus
+SEQ_SAFETY_GAP for the packets numbered after the last save), so a number a downstream client
+saved is never given to another packet after SeisZone restarts.
 """
 
 import asyncio
@@ -40,6 +45,7 @@ STATUS_LOG_EVERY = 60.0   # s between one-line status messages in the log
 LISTEN_RETRY = 30.0       # s between new tries of a listener port that could not be opened
 ADDR_IN_USE = {errno.EADDRINUSE, 10048}   # 10048 = WSAEADDRINUSE
 ADDR_DENIED = {errno.EACCES, 10013}       # 10013 = WSAEACCES (port excluded / reserved by Windows)
+SEQ_SAFETY_GAP = 100000   # server packet numbers skipped at start (numbered after the last save)
 
 
 def listen_error(port, exc):
@@ -78,6 +84,10 @@ class Engine:
         self.state = state if state is not None else cfg_mod.State()
         self.hub = hub if hub is not None else DataHub()
         self.hub.set_buffer_seconds(self._buffer_seconds())
+        saved = self.state.get("server_seq")
+        if isinstance(saved, int) and not self.hub.packets:
+            self.hub.seq = (saved + SEQ_SAFETY_GAP) & 0xFFFFFF
+        self._saved_seq = None        # hub.seq last written to the state
         self.responses = ResponseStore()
         self.recorder = RecordingManager(self.hub, self.state, self.config.get("recording", "folder"))
         self._recorder_open = True
@@ -136,6 +146,7 @@ class Engine:
                 log.warning("engine thread did not end within %s s - continuing the shutdown", timeout)
             else:
                 log.info("engine stopped")
+        self._save_seq()
         with self._lock:
             if self._recorder_open:
                 self._recorder_open = False
@@ -205,7 +216,15 @@ class Engine:
         await self._wait_links(running)
         await self._close_gecko(list(self._gecko_servers))
         await self._close_server()
+        self._save_seq()
         self.state.flush()
+
+    def _save_seq(self):
+        """Keep the newest server packet number in the state (see SEQ_SAFETY_GAP)."""
+        seq = self.hub.seq
+        if seq != self._saved_seq:
+            self._saved_seq = seq
+            self.state.set("server_seq", seq)
 
     @staticmethod
     async def _wait_links(running):
@@ -379,9 +398,13 @@ class Engine:
     def _gecko_ports(self):
         return [srv.sockets[0].getsockname()[1] for srv in list(self._gecko_servers.values()) if srv.sockets]
 
-    async def _open_gecko(self, only=None):
-        """Open the Gecko listeners (all configured ports, or the ports in `only`)."""
-        enabled, bind, ports = self._gecko_cfg = self._gecko_settings()
+    async def _open_gecko(self, only=None, cfg=None):
+        """Open the Gecko listeners (all configured ports, or the ports in `only`). With `cfg`
+        (a retry) the settings the listeners were opened with are used and kept, so a retry
+        never takes over a settings change that apply_settings has still to make."""
+        if cfg is None:
+            cfg = self._gecko_cfg = self._gecko_settings()
+        enabled, bind, ports = cfg
         if not enabled:
             return
         for port in ports:
@@ -403,9 +426,14 @@ class Engine:
             self._gecko_errors.pop(p, None)
         await self._close_servers(servers)
 
-    async def _open_server(self):
-        enabled, bind, port = self._sl_cfg = self._server_settings()
-        if not enabled or self._sl_server is not None:
+    async def _open_server(self, cfg=None):
+        if cfg is None:
+            cfg = self._sl_cfg = self._server_settings()
+        enabled, bind, port = cfg
+        if not enabled:
+            self._sl_error = ""      # an old "port in use" does not apply to a server that is off
+            return
+        if self._sl_server is not None:
             return
         org = self.config.get("seedlink_server", "organization") or "SeisZone"
         server = SeedLinkServer(self.hub, organization=org)
@@ -462,6 +490,7 @@ class Engine:
         while True:
             await asyncio.sleep(TICK)
             try:
+                self._save_seq()
                 self.state.maybe_flush()
                 now = time.time()
                 if now - self._last_retry >= LISTEN_RETRY:
@@ -480,10 +509,10 @@ class Engine:
         if not (self._gecko_errors or self._sl_error):
             return
         async with self._changes:
-            if self._gecko_errors:
-                await self._open_gecko(only=set(self._gecko_errors))
-            if self._sl_error:
-                await self._open_server()
+            if self._gecko_errors and self._gecko_cfg is not None:
+                await self._open_gecko(only=set(self._gecko_errors), cfg=self._gecko_cfg)
+            if self._sl_error and self._sl_cfg is not None:
+                await self._open_server(cfg=self._sl_cfg)
 
     def _gecko_text(self):
         enabled, _bind, ports = self._gecko_cfg or self._gecko_settings()

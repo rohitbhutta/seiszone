@@ -442,8 +442,14 @@ class MainWindow(QMainWindow):
 
     def _settings_applied(self):
         """The settings dialog saved and applied everything; follow the theme and the
-        start-with-Windows choice here."""
+        start-with-Windows choice and the default time window here (the view would otherwise
+        keep its old window and save it back over the new choice)."""
         self.refresh_icons()
+        from .waveform_view import nearest_window
+        w = nearest_window(self.config.get("view", "window_seconds", 300))
+        i = self.view.window_box.findData(w)
+        if i >= 0 and i != self.view.window_box.currentIndex():
+            self.view.window_box.setCurrentIndex(i)   # the view takes and saves the same value
         from .app import autostart_enabled, set_autostart  # app imports this module
         want = bool(self.config.get("ui", "start_with_windows", False))
         if want != autostart_enabled():

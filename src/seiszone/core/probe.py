@@ -140,6 +140,17 @@ def banner_host(software):
     return m.group(1).strip() if m else ""
 
 
+GURALP_HOSTS = ("FMUS-", "MIN-", "MINP-", "MINI-", "AFF-", "RAD-", "CMG-", "EAM-")
+
+
+def looks_guralp(banner):
+    """True when a SeedLink banner (software, organization) is a Guralp unit's: only then is the
+    web page worth the full wait (it holds the names and the StationXML)."""
+    host = banner_host((banner or ("",))[0]).upper()
+    text = " ".join(banner or ()).lower()
+    return host.startswith(GURALP_HOSTS) or "guralp" in text or "güralp" in text
+
+
 # --------------------------------------------------------------------------
 # GCF (Scream protocol)
 # --------------------------------------------------------------------------
@@ -225,12 +236,27 @@ def gcf_tcp_sample(host, port, seconds=10):
 
 
 def summarize_blocks(blocks):
-    """{stream_id: {'system_id', 'rate', 'last'}}"""
+    """{stream_id: {'system_id', 'rate', 'last'}} (blocks of one digitiser: see pick_system)"""
     out = {}
     for b in blocks:
         e = out.setdefault(b.stream_id, {"system_id": b.system_id, "rate": b.rate, "last": b.end})
         e["last"] = max(e["last"], b.end)
     return out
+
+
+def pick_system(blocks, web=None):
+    """(system id, [the others]) of the digitisers seen: a Scream server can relay several, and
+    their stream ids may be the same. The one the web page names wins, else the one with the
+    most blocks."""
+    counts = {}
+    for b in blocks:
+        counts[b.system_id] = counts.get(b.system_id, 0) + 1
+    if not counts:
+        return "", []
+    named = " ".join(str((web or {}).get(k) or "") for k in ("hostname", "serial")).upper()
+    hits = [k for k in sorted(counts) if k and k.upper() in named]   # e.g. host name FMUS-A46D
+    chosen = hits[0] if hits else max(sorted(counts), key=counts.get)
+    return chosen, sorted(k for k in counts if k != chosen)
 
 
 # --------------------------------------------------------------------------
@@ -319,11 +345,15 @@ def guralp_web(host, log=lambda m: None, need_xml=None, box=None):
     them."""
     page = None
     for attempt in range(WEB_TRIES):  # over a VPN one request can be lost; the names come from here
+        if box is not None and box.get("abandoned"):   # the probe no longer waits for it
+            return None
         try:
             page = http_get(host, "/").decode("utf-8", "replace")
             break
         except Exception as e:  # URLError, timeouts, broken HTTP: all mean "no page this time"
             logger.debug("web page of %s, try %d: %s", host, attempt + 1, e)
+            if box is not None:
+                box["first_failed"] = True
             if attempt + 1 < WEB_TRIES:
                 time.sleep(WEB_RETRY_PAUSE)
     if page is None:
@@ -445,10 +475,12 @@ class Instrument:
         if not chosen:
             raise ValueError("no channel is chosen")
         gmap = {c["gcf"]: [c["loc"], c["cha"]] for c in chosen if c.get("gcf")}
+        g = {"net": st["net"], "sta": st["sta"], "desc": st["desc"], "map": gmap}
+        if self.details.get("system_id"):
+            g["system_id"] = self.details["system_id"]
         return {"kind": self.method, "host": self.host, "port": self.port,
                 "name": st["desc"] or self.details.get("hostname") or self.host,
-                "gcf": {"net": st["net"], "sta": st["sta"], "desc": st["desc"], "map": gmap},
-                "details": self._details()}
+                "gcf": g, "details": self._details()}
 
     def summary_lines(self):
         """Plain lines for the Add source dialog: what was found and how SeisZone connects.
@@ -525,9 +557,20 @@ def probe(text, log=None, prefer_direct=True, need_xml=None, web=_UNREAD):
     else:
         web_box["web"] = web
 
-    def finish():
-        if t:
+    def finish(full=True):
+        """The web page result. full=False (a SeedLink server whose banner is not a Guralp
+        unit's): stop waiting once the first try of the page has failed, unless it answered."""
+        if t and full:
             t.join(WEB_WAIT)
+        elif t:
+            end = time.monotonic() + WEB_WAIT
+            while t.is_alive() and time.monotonic() < end and not web_box.get("first_failed"):
+                if web_box.get("web"):   # a Guralp page after all: let it finish
+                    t.join(max(0.0, end - time.monotonic()))
+                    break
+                t.join(0.1)
+            if t.is_alive() and not web_box.get("web"):
+                web_box["abandoned"] = True   # no more tries in the background
         web = web_box.get("web")
         if web:
             web = dict(web)  # a copy: the reader may still be adding the StationXML to it
@@ -559,7 +602,7 @@ def probe(text, log=None, prefer_direct=True, need_xml=None, web=_UNREAD):
             inst.notes.append(f"The SeedLink server answered but did not list its stations ({err}).")
         if stations and (level == "STATIONS" or all(not st["streams"] for st in stations)):
             inst.details["no_streams"] = True  # channel list not read: all channels are requested
-        web = finish()
+        web = finish(looks_guralp(banner))
         for st in stations:
             chans = []
             web_ch = {(c["loc"], c["cha"]): c for c in (web or {}).get("streams", [])} \
@@ -604,10 +647,14 @@ def probe(text, log=None, prefer_direct=True, need_xml=None, web=_UNREAD):
 
 
 def _finish_gcf(inst, res, web, log):
-    streams = summarize_blocks(res["blocks"])
+    chosen, others = pick_system(res["blocks"], web)
+    streams = summarize_blocks([b for b in res["blocks"] if b.system_id == chosen])
     inst.details["gcf_status"] = res.get("status", [])[-3:]
-    sysids = sorted({s["system_id"] for s in streams.values()})
-    inst.details["system_id"] = ", ".join(sysids)
+    sysids = [chosen] if chosen else []
+    inst.details["system_id"] = chosen
+    if others:
+        inst.notes.append(f"This port also sends data of digitiser(s) {', '.join(others)}; SeisZone "
+                          f"uses {chosen} only. Add the others through their own address if needed.")
     web_by_gcf = {s["gcf"]: s for s in (web or {}).get("streams", [])}
     net = (web or {}).get("net") or "XX"
     sta = (web or {}).get("sta") or (sysids[0][:5] if sysids else "GCF")

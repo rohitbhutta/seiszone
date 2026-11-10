@@ -19,6 +19,9 @@ TCP / serial links may wrap each block in the Block Transfer Protocol (BTP):
 import datetime as dt
 import struct
 
+SHORT = "short"          # parse_block: the header is plausible, the rest has not arrived yet
+MAX_BLOCK = 24 + 255 * 4  # largest block (data: 24 + 4 * records)
+
 B36 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 GCF_EPOCH = dt.datetime(1989, 11, 17, tzinfo=dt.timezone.utc).timestamp()
 
@@ -67,7 +70,8 @@ class Block:
 
 
 def parse_block(buf, off=0):
-    """Decode one GCF block at buf[off]. Returns Block or None (not a valid block).
+    """Decode one GCF block at buf[off]. Returns Block, None (not a valid block) or SHORT (the
+    header is plausible but buf ends before the block does: wait for more bytes).
     The FIC/RIC integration check must pass, so random bytes are never taken for data."""
     if len(buf) - off < 24:
         return None
@@ -90,7 +94,7 @@ def parse_block(buf, off=0):
     if rate_code == 0:  # status block: text
         size = 16 + nrec * 4
         if len(buf) - off < size:
-            return None
+            return SHORT
         b.samples = []
         b.status_text = bytes(buf[off + 16:off + size]).decode("latin-1").rstrip("\x00 \r\n")
         b.size = size
@@ -100,7 +104,7 @@ def parse_block(buf, off=0):
         return None
     size = 24 + nrec * 4
     if len(buf) - off < size:
-        return None
+        return SHORT
     fic = struct.unpack_from(">i", buf, off + 16)[0]
     n = cc * nrec
     diffs = struct.unpack_from({1: ">%di", 2: ">%dh", 4: ">%db"}[cc] % n, buf, off + 20)
@@ -124,14 +128,27 @@ def parse_datagram(d):
         size = struct.unpack_from(">H", d, 2)[0]
         if 24 <= size <= len(d) - 4:
             b = parse_block(d, 4)
-            if b is not None:
+            if isinstance(b, Block):
                 return b
-    return parse_block(d, 0)
+    b = parse_block(d, 0)
+    return b if isinstance(b, Block) else None
+
+
+def plausible_status(b):
+    """A status block found in a bare byte stream (no BTP checksum) is believed only when its
+    text is mostly printable: a status header is easy to hit by chance (rate byte 0)."""
+    text = b.status_text or ""
+    if not text:
+        return False
+    good = sum(1 for c in text if " " <= c <= "~" or c in "\r\n\t")
+    return good >= 0.9 * len(text)
 
 
 class StreamParser:
     """TCP / serial byte stream: BTP frames or bare blocks. feed() returns
-    [(Block, ack_bytes or None)]; send the ack bytes back for BTP frames."""
+    [(Block, ack_bytes or None)]; send the ack bytes back for BTP frames. A block cut by a read
+    boundary waits for the rest (at most MAX_BLOCK bytes); bare status blocks are only taken
+    when plausible_status() says so."""
 
     def __init__(self):
         self.buf = bytearray()
@@ -150,13 +167,15 @@ class StreamParser:
                     chk = struct.unpack_from(">H", self.buf, end - 2)[0]
                     if sum(self.buf[pos:end - 2]) & 0xFFFF == chk:
                         b = parse_block(self.buf, pos + 4)
-                        if b is not None:
+                        if isinstance(b, Block):
                             sid = struct.unpack_from(">I", self.buf, pos + 8)[0]
                             out.append((b, ack(sid)))
                             pos = end
                             continue
             b = parse_block(self.buf, pos)
-            if b is not None:
+            if b is SHORT:
+                break  # the rest of the block is on its way (a block is never longer than MAX_BLOCK)
+            if b is not None and (not b.is_status or plausible_status(b)):
                 out.append((b, None))
                 pos += b.size
                 continue

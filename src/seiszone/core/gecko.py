@@ -6,7 +6,7 @@ software is needed: SeisZone speaks the Gecko's native telemetry framing itself.
 behaviour below (hello, `sampling 1`, `? "sitename"`, acknowledgement rhythm, 120 s silence)
 was reverse engineered and proven against a real SMR03 - change it only with a new capture.
 
-Frame:  0x55 | type u8 | len u16 | src i32 | dst i32 | time u32 | seq u8 |
+Frame:  0x55 | type u8 | len u16 | src u32 | dst u32 | time u32 | seq u8 |
         payload[len] | xor32 u32          (all little-endian)
 time = seconds since 2000-01-01, xor32 = for each byte: a ^= b; a = ror(a, 8)
 Gecko -> hub: 0xFC hello, 0x8A text (station_name=..., settings answers, SOH lines),
@@ -28,7 +28,9 @@ log = logging.getLogger("seiszone")
 RAS_EPOCH = 946684800  # 2000-01-01T00:00:00Z
 T_MSEED, T_TEXT, T_HELLO, T_HUB_HELLO, T_HELLO_REPLY, T_ACK = 0x88, 0x8A, 0xFC, 0xFB, 0xFD, 0xFF
 HUB_ID = 1
-HDR = struct.Struct("<BBHiiIB")  # 17 bytes
+HDR = struct.Struct("<BBHIIIB")  # 17 bytes (serials are unsigned: 0x82000143 stays positive)
+FRAME_TYPES = frozenset((T_MSEED, T_TEXT, T_HELLO, T_HUB_HELLO, T_HELLO_REPLY, T_ACK))
+MAX_PAYLOAD = 4096     # real 0x88 frames carry 512 bytes; a longer length is a false sync byte
 SILENCE = 120          # s without any byte before the link is closed (the Gecko calls again)
 START_COMMANDS = (b"sampling 1", b'? "sitename"')
 NAME_OK = re.compile(r"^[A-Za-z0-9]*$")
@@ -52,11 +54,51 @@ def make_frame(ftype, dst, seq=0, payload=b"", src=HUB_ID):
 
 class FrameParser:
     """Byte stream -> [(type, src, dst, seq, payload)]. Bytes between frames and frames with a
-    bad checksum are skipped (counted in `bad`), so a noisy radio link resynchronises itself."""
+    bad checksum are skipped (counted in `bad`), so a noisy radio link resynchronises itself:
+    a 0x55 with an unknown type or an impossible length is no frame start, and a frame start
+    that is still incomplete is given up as soon as a complete, valid frame follows it (a stray
+    0x55 can never hold back the real frames behind it)."""
 
     def __init__(self):
         self.buf = bytearray()
         self.bad = 0
+        self._scan = 0      # where the search past an incomplete frame start continues
+
+    def _start(self, i):
+        """Payload length when buf[i] can start a frame, else None."""
+        buf = self.buf
+        if buf[i] != 0x55 or buf[i + 1] not in FRAME_TYPES:
+            return None
+        ln = buf[i + 2] | (buf[i + 3] << 8)
+        return ln if ln <= MAX_PAYLOAD else None
+
+    def _complete(self, i, ln):
+        """The frame at i when it is complete and its checksum is right, else None."""
+        buf = self.buf
+        if i + 21 + ln > len(buf):
+            return None
+        body = bytes(buf[i:i + 17 + ln])
+        if xor32(body) != struct.unpack_from("<I", buf, i + 17 + ln)[0]:
+            return None
+        return body
+
+    def _next_valid(self, i):
+        """Index of the next complete, valid frame after i (None if there is none yet)."""
+        buf = self.buf
+        j = buf.find(0x55, max(i + 1, self._scan))
+        waiting = None      # first later frame start that is itself still incomplete
+        while j >= 0 and len(buf) - j >= 21:
+            ln = self._start(j)
+            if ln is not None:
+                if self._complete(j, ln) is not None:
+                    self._scan = 0
+                    return j
+                if waiting is None and j + 21 + ln > len(buf):
+                    waiting = j
+            j = buf.find(0x55, j + 1)
+        # next time continue where a frame may still complete (checked bytes stay checked)
+        self._scan = waiting if waiting is not None else max(i + 1, len(buf) - 20)
+        return None
 
     def feed(self, data):
         self.buf += data
@@ -64,18 +106,20 @@ class FrameParser:
         i = 0
         buf = self.buf
         while len(buf) - i >= 21:
-            if buf[i] != 0x55:
-                i += 1
-                continue
-            ln = buf[i + 2] | (buf[i + 3] << 8)
-            if ln > 10000:
+            ln = self._start(i)
+            if ln is None:
                 i += 1
                 continue
             end = i + 21 + ln
             if end > len(buf):
-                break  # wait for the rest of the frame
-            body = bytes(buf[i:i + 17 + ln])
-            if xor32(body) != struct.unpack_from("<I", buf, i + 17 + ln)[0]:
+                j = self._next_valid(i)
+                if j is None:
+                    break  # wait for the rest of the frame
+                self.bad += 1  # a false frame start: go on with the valid frame behind it
+                i = j
+                continue
+            body = self._complete(i, ln)
+            if body is None:
                 self.bad += 1
                 i += 1
                 continue
@@ -83,7 +127,9 @@ class FrameParser:
             out.append((ftype, src, dst, seq, body[17:]))
             i = end
         del buf[:i]
+        self._scan = max(0, self._scan - i)
         if len(buf) > 65536:
+            self._scan = max(0, self._scan - (len(buf) - 32768))
             del buf[:-32768]
         return out
 
@@ -92,7 +138,7 @@ def serial_key(serial):
     """Rename-table key for a serial: hex, upper case, no 0x and no leading zeros
     (so "0x02000143", "02000143" and "2000143" all name the same recorder)."""
     if isinstance(serial, int):
-        serial = f"{serial:08X}"
+        serial = f"{serial & 0xFFFFFFFF:08X}"
     return str(serial).upper().lstrip("0X")
 
 

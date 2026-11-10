@@ -3,13 +3,19 @@
 The data comes from the recording folders first and, for what they do not hold, from the live
 buffer. The export runs in a QThread (reading hours of recordings takes a while); its progress
 lines and then the report appear in the dialog.
+
+The channel list holds the live channels, the shown ones, the channels of the recordings and
+every channel the recording folders hold files of for the chosen window ("recorded only": a
+station that is offline now can still be exported). The window is whole seconds: what the
+fields show is exactly what is exported.
 """
 
 import logging
+import math
 import os
 import time
 
-from PySide6.QtCore import QDateTime, Qt, QThread, QTimeZone, Signal
+from PySide6.QtCore import QDateTime, Qt, QThread, QTimer, QTimeZone, Signal
 from PySide6.QtWidgets import (QButtonGroup, QDateTimeEdit, QDialog, QFileDialog, QFormLayout, QGroupBox,
                                QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPlainTextEdit,
                                QPushButton, QRadioButton, QVBoxLayout)
@@ -73,15 +79,16 @@ class ExportDialog(QDialog):
         self.channel_list = QListWidget()
         self.channel_list.setAlternatingRowColors(True)
         self.channel_list.setUniformItemSizes(True)
-        pre = set(sids or [])
-        for sid in sorted(set(engine.hub.stream_ids()) | pre):
-            desc = engine.hub.descriptions.get(".".join(sid.split(".")[:2]), "")
-            item = QListWidgetItem(f"{sid}    {desc}" if desc else sid)
-            item.setData(ID_ROLE, sid)
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Checked if sid in pre else Qt.Unchecked)
-            self.channel_list.addItem(item)
+        self._pre = pre = set(sids or [])
+        self._live = set(engine.hub.stream_ids())
+        recorded = {x for s in engine.recorder.sessions() for x in (s.get("sids") or [])}
+        for sid in sorted(self._live | pre | recorded):
+            self._add_channel(sid)
         self.channel_list.itemChanged.connect(lambda *_: self._update_count())
+        self._scan_timer = QTimer(self)        # channels found in the recording folders
+        self._scan_timer.setSingleShot(True)
+        self._scan_timer.setInterval(400)
+        self._scan_timer.timeout.connect(self.add_recorded_channels)
         all_b = QPushButton("All")
         all_b.clicked.connect(lambda: self._tick(True))
         none_b = QPushButton("None")
@@ -100,8 +107,9 @@ class ExportDialog(QDialog):
         # window
         self.start = self._dt_edit()
         self.end = self._dt_edit()
-        self.start.dateTimeChanged.connect(lambda *_: self._update_length())
-        self.end.dateTimeChanged.connect(lambda *_: self._update_length())
+        for e in (self.start, self.end):
+            e.dateTimeChanged.connect(lambda *_: self._update_length())
+            e.dateTimeChanged.connect(lambda *_: self._scan_timer.start())
         self.length = QLabel()
         self.length.setStyleSheet(f"color: {c['muted']};")
         quick = QHBoxLayout()
@@ -179,6 +187,8 @@ class ExportDialog(QDialog):
             self.set_window(*self.view_range)
         else:
             self.set_last(600)
+        self._scan_timer.stop()
+        self.add_recorded_channels()
         self._update_count()
 
     # ------------------------------------------------------------------------------------
@@ -189,16 +199,46 @@ class ExportDialog(QDialog):
         e.setCalendarPopup(True)
         return e
 
+    def _add_channel(self, sid):
+        desc = self.engine.hub.descriptions.get(".".join(sid.split(".")[:2]), "")
+        extra = "" if sid in self._live or sid in self._pre else "    (recorded only)"
+        item = QListWidgetItem((f"{sid}    {desc}" if desc else sid) + extra)
+        item.setData(ID_ROLE, sid)
+        item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+        item.setCheckState(Qt.Checked if sid in self._pre else Qt.Unchecked)
+        self.channel_list.addItem(item)
+
+    def add_recorded_channels(self):
+        """Add the channels the recording folders hold for the chosen window (sorted in)."""
+        try:
+            from ..core.export import recorded_sids
+            t0, t1 = self.window()
+            found = recorded_sids(self.recording_folders(), t0, t1) if t1 > t0 else []
+        except Exception:   # an unreadable folder must never break the dialog
+            log.exception("listing the recorded channels failed")
+            return
+        have = {self.channel_list.item(i).data(ID_ROLE) for i in range(self.channel_list.count())}
+        new = [sid for sid in found if sid not in have]
+        if not new:
+            return
+        for sid in new:
+            self._add_channel(sid)
+        self.channel_list.sortItems()
+        self._update_count()
+
     def set_window(self, t0, t1):
-        self.start.setDateTime(to_qdt(t0))
-        self.end.setDateTime(to_qdt(t1))
+        """Whole seconds (start rounded down, end up, so the given range stays covered): the
+        fields show no milliseconds, so none may hide in them."""
+        self.start.setDateTime(to_qdt(math.floor(t0)))
+        self.end.setDateTime(to_qdt(math.ceil(t1)))
 
     def set_last(self, seconds):
         now = float(int(time.time()))
         self.set_window(now - seconds, now)
 
     def window(self):
-        return from_qdt(self.start.dateTime()), from_qdt(self.end.dateTime())
+        return (float(math.floor(from_qdt(self.start.dateTime()))),
+                float(math.floor(from_qdt(self.end.dateTime()))))
 
     def _update_length(self):
         t0, t1 = self.window()

@@ -1,6 +1,10 @@
 """SeisZone settings and sources (config.json) and small runtime state (state.json).
 
-config.json (written atomically; a damaged file is kept as config.json.bad and defaults are used):
+config.json (written atomically). A file that is locked for a moment (virus scanner, backup) is
+read again for about a second. A damaged file is kept as config.json.<stamp>.bad and defaults
+are used; a file that stays unreadable, or a damaged one that could not be kept, is never
+overwritten: Config.read_only is then set and save() writes nothing (load_error says why, the
+user interface warns). state.json is handled the same way (State.load_error / read_only).
 
 {
   "version": 1,
@@ -8,7 +12,8 @@ config.json (written atomically; a damaged file is kept as config.json.bad and d
     {"id": "4f1c...", "name": "KUMARI", "kind": "seedlink" | "gcf-udp" | "gcf-tcp",
      "host": "10.8.0.182", "port": 18000, "enabled": true, "added": 1762500000.0,
      "stations": [{"net": "WB", "sta": "KUM", "desc": "KUMARI", "selectors": []}],   # seedlink
-     "gcf": {"net": "WB", "sta": "KUM", "desc": "KUMARI", "map": {"ACCZ0": ["0J", "HNZ"]}},  # gcf-*
+     "gcf": {"net": "WB", "sta": "KUM", "desc": "KUMARI", "map": {"ACCZ0": ["0J", "HNZ"]},  # gcf-*
+             "system_id": "A46D"},   # optional: the digitiser used (map = the selected streams)
      "details": {...what the instrument probe found: hostname, serial, firmware, lat, lon...}}
   ],
   "gecko":   {"enabled": true, "bind": "0.0.0.0", "ports": [58772], "rename": {}},   # Kelunji Gecko links connect IN
@@ -29,6 +34,7 @@ import copy
 import json
 import logging
 import os
+import shutil
 import threading
 import time
 import uuid
@@ -69,6 +75,43 @@ def atomic_write_json(path, obj, tries=20):
             if i == tries - 1:
                 raise
             time.sleep(0.05)
+
+
+READ_TRIES = 20          # reads of a locked file (0.05 s apart), like atomic_write_json
+
+
+def read_json(path, tries=READ_TRIES):
+    """The JSON object in `path`. FileNotFoundError when missing; OSError when it stays
+    unreadable (locked) after the retries; ValueError when it is damaged or not an object."""
+    for i in range(tries):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+            break
+        except FileNotFoundError:
+            raise
+        except OSError:
+            if i == tries - 1:
+                raise
+            time.sleep(0.05)
+    if not isinstance(data, dict):
+        raise ValueError("not a JSON object")
+    return data
+
+
+def keep_bad(path):
+    """Keep an unreadable file under a new, unique name (path.<stamp>.bad); returns that name,
+    or None when the copy failed (the original must then not be overwritten)."""
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    bad, n = f"{path}.{stamp}.bad", 1
+    while os.path.exists(bad):
+        n += 1
+        bad = f"{path}.{stamp}-{n}.bad"
+    try:
+        shutil.copy2(path, bad)
+        return bad
+    except OSError:
+        return None
 
 
 def _merge(defaults, data):
@@ -136,22 +179,31 @@ class Config:
     def __init__(self, path=None):
         self.path = path or paths.config_file()
         self.lock = threading.RLock()
+        self.read_only = False     # the file could not be read and is kept as it is: no save()
+        self.load_error = ""
+        self._warned = False
         self.data = self._load()
 
     def _load(self):
         try:
-            with open(self.path, encoding="utf-8") as fh:
-                data = json.load(fh)
-            if not isinstance(data, dict):
-                raise ValueError("not a JSON object")
+            data = read_json(self.path)
         except FileNotFoundError:
             data = {}
-        except (OSError, ValueError) as e:
-            log.error("config file %s unreadable (%s) - kept as .bad, using defaults", self.path, e)
-            try:
-                os.replace(self.path, self.path + ".bad")
-            except OSError:
-                pass
+        except ValueError as e:     # damaged (bad JSON, not an object, not UTF-8)
+            bad = keep_bad(self.path)
+            if bad:
+                log.error("config file %s is damaged (%s) - kept as %s, using defaults", self.path, e, bad)
+            else:
+                self.read_only = True
+                log.error("config file %s is damaged (%s) and could not be copied - using defaults, "
+                          "settings are not saved", self.path, e)
+            self.load_error = f"{self.path} is damaged ({e})" + (f"; kept as {bad}" if bad else "")
+            data = {}
+        except OSError as e:        # locked by another program even after the retries
+            self.read_only = True
+            self.load_error = f"{self.path} could not be read ({e})"
+            log.error("config file %s could not be read (%s) - using defaults, settings are not "
+                      "saved until SeisZone is started again", self.path, e)
             data = {}
         cfg = _merge(DEFAULTS, data)
         if not cfg["recording"].get("folder"):
@@ -161,6 +213,11 @@ class Config:
 
     def save(self):
         with self.lock:
+            if self.read_only:   # never replace a config.json that could not be read
+                if not self._warned:
+                    self._warned = True
+                    log.warning("settings not saved: %s", self.load_error)
+                return
             atomic_write_json(self.path, self.data)
 
     # --- generic -----------------------------------------------------------------
@@ -232,8 +289,11 @@ class Config:
 
 
 class State:
-    """Small runtime state (state.json): SeedLink resume sequence numbers, recordings.
-    Saved at most every `every` seconds unless flush() is called."""
+    """Small runtime state (state.json): SeedLink resume positions (sequence number and end
+    time of the last record), the server's packet number, recordings.
+    Saved at most every `every` seconds unless flush() is called. A state.json that cannot be
+    read is copied to .bad before it is ever replaced; while even that copy fails nothing is
+    written (read_only), so a short lock never wipes recordings or resume positions."""
 
     def __init__(self, path=None, every=5.0):
         self.path = path or paths.state_file()
@@ -241,13 +301,20 @@ class State:
         self.lock = threading.RLock()
         self.dirty = False
         self.saved = 0.0
+        self.load_error = ""
+        self.read_only = False
         try:
-            with open(self.path, encoding="utf-8") as fh:
-                self.data = json.load(fh)
-            if not isinstance(self.data, dict):
-                self.data = {}
-        except (OSError, ValueError):
+            self.data = read_json(self.path)
+        except FileNotFoundError:
             self.data = {}
+        except (OSError, ValueError) as e:
+            self.data = {}
+            bad = keep_bad(self.path)
+            self.read_only = bad is None
+            self.load_error = (f"{self.path} could not be read ({e}); "
+                               + (f"kept as {bad}" if bad else "it is left unchanged"))
+            log.error("state file: %s - recordings in progress and SeedLink resume positions "
+                      "were not restored", self.load_error)
 
     def get(self, key, default=None):
         with self.lock:
@@ -263,17 +330,26 @@ class State:
         with self.lock:
             return self.data.get("seedlink_seq", {}).get(f"{source_id}|{station}")
 
-    def set_seq(self, source_id, station, seq):
+    def get_seq_time(self, source_id, station):
+        """End time (epoch s) of the last record received at that resume position, or None."""
         with self.lock:
-            self.data.setdefault("seedlink_seq", {})[f"{source_id}|{station}"] = seq
+            return self.data.get("seedlink_time", {}).get(f"{source_id}|{station}")
+
+    def set_seq(self, source_id, station, seq, end=None):
+        with self.lock:
+            key = f"{source_id}|{station}"
+            self.data.setdefault("seedlink_seq", {})[key] = seq
+            if end is not None:
+                self.data.setdefault("seedlink_time", {})[key] = end
             self.dirty = True
         self.maybe_flush()
 
     def drop_source(self, source_id):
         with self.lock:
-            seqs = self.data.get("seedlink_seq", {})
-            for k in [k for k in seqs if k.startswith(source_id + "|")]:
-                del seqs[k]
+            for name in ("seedlink_seq", "seedlink_time"):
+                d = self.data.get(name, {})
+                for k in [k for k in d if k.startswith(source_id + "|")]:
+                    del d[k]
             self.dirty = True
         self.flush()
 
@@ -285,6 +361,10 @@ class State:
         with self.lock:
             if not self.dirty:
                 return
+            if self.read_only:   # the unreadable original is not kept yet: try the copy again
+                if os.path.exists(self.path) and keep_bad(self.path) is None:
+                    return
+                self.read_only = False
             try:
                 atomic_write_json(self.path, self.data)
                 self.dirty = False

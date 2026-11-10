@@ -378,7 +378,8 @@ def test_probe_gcf_offline(fake, fast):
     src = inst.to_source()
     assert src["kind"] == "gcf-udp" and (src["host"], src["port"]) == ("127.0.0.1", fake.udp_port)
     assert src["name"] == "Tetar Dam Top CH1050"
-    assert src["gcf"] == {"net": "CI", "sta": "TEDT", "desc": "Tetar Dam Top CH1050", "map": TEDT_MAP}
+    assert src["gcf"] == {"net": "CI", "sta": "TEDT", "desc": "Tetar Dam Top CH1050", "map": TEDT_MAP,
+                          "system_id": "A46D"}   # the one digitiser this source uses
     assert src["details"]["serial"] == "0A46D" and "stationxml" not in src["details"]
     clean = validate_source(src)
     assert clean["gcf"]["map"] == TEDT_MAP
@@ -504,3 +505,65 @@ def test_mseed_from_probe_blocks_matches_gcf():
             want.setdefault(f"CI.TEDT.{loc}.{cha}", []).extend(b.samples)
     assert by == want
     assert all(isinstance(mseed.parse_record(rec.raw, 0), tuple) for _s, rec in hub.snapshot_packets())
+
+
+# --------------------------------------------------------------------------
+# review fixes
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("piece", [536, 1000, 1460])
+def test_gcf_tcp_bare_blocks_split_by_reads(piece):
+    """Bare blocks (no BTP) arrive in ordinary TCP segments: a block cut by a read boundary waits
+    for its rest, and the leftover bytes are never taken for status blocks."""
+    stream = b"".join(d[:gcf.parse_datagram(d).size] for d in datagrams() if len(d) > 100)
+    p = gcf.StreamParser()
+    got = []
+    for i in range(0, len(stream), piece):
+        got += p.feed(stream[i:i + piece])
+    assert len([b for b, _a in got if not b.is_status]) == 12
+    assert [b for b, _a in got if b.is_status] == []
+
+
+MAX_PAD = gcf.MAX_BLOCK + 64
+
+
+def test_gcf_status_blocks_in_a_stream_are_checked():
+    text = b"GPS lock OK, temp 31.5 C".ljust(28, b"\x00")
+    head = struct.pack(">III", int("ABCD", 36) | 0xC0000000, int("ABCD00", 36), 13500 << 17)
+    status = head + bytes([0, 0, 0, len(text) // 4]) + text
+    got = gcf.StreamParser().feed(status + make_block())
+    assert [b.status_text for b, _a in got if b.is_status] == ["GPS lock OK, temp 31.5 C"]
+    junk = head + bytes([0, 0, 0, 7]) + bytes(range(1, 29))       # a status header, binary text
+    got = gcf.StreamParser().feed(junk + make_block() + bytes(MAX_PAD))   # (more bytes follow)
+    assert [b.is_status for b, _a in got] == [False]
+
+
+def test_probe_uses_one_digitiser_of_a_scream_server():
+    """Two units behind one Scream server with the same stream names: one system id is used."""
+    a = [gcf.parse_block(make_block(stream="ACCZ0", sysid="AAAA", secs=s)) for s in (10, 20, 30)]
+    b = [gcf.parse_block(make_block(stream="ACCZ0", sysid="BBBB", secs=s)) for s in (10, 20)]
+    assert ip.pick_system(a + b) == ("AAAA", ["BBBB"])
+    assert ip.pick_system(a + b, {"hostname": "FMUS-BBBB"}) == ("BBBB", ["AAAA"])
+    inst = ip.Instrument("127.0.0.1")
+    inst.method, inst.port = "gcf-udp", 1567
+    inst = ip._finish_gcf(inst, {"blocks": b + a, "status": []}, None, lambda m: None)
+    assert inst.details["system_id"] == "AAAA" and any("BBBB" in n for n in inst.notes)
+    assert validate_source(inst.to_source())["gcf"]["system_id"] == "AAAA"
+
+
+def test_probe_does_not_wait_for_the_web_page_of_a_plain_seedlink_server(fast):
+    """A SeedLink server that is not a Guralp unit, whose port 80 drops packets: the result is
+    there once the first try of the web page has failed, not after all tries."""
+    def dropped(host, path, port=None, timeout=20, limit=0):
+        time.sleep(1.0)
+        raise socket.timeout("timed out")
+    fast.setattr(ip, "http_get", dropped)
+    fast.setattr(ip, "WEB_TRIES", 4)
+    assert not ip.looks_guralp(("SeedLink v3.1 (SeisZone v1.0.0) :: SLPROTO:3.1", "SeisZone"))
+    assert ip.looks_guralp(("SeedLink v3.0 (FMUS-5469 KUMARI) :: SLPROTO:3.0", "Guralp"))
+    with seedlink_server(tedt_hub()) as port:
+        t = time.monotonic()
+        inst = ip.probe(f"127.0.0.1:{port}", log=lambda m: None)
+        took = time.monotonic() - t
+    assert inst.found and inst.method == "seedlink"
+    assert took < 2.5, f"the probe waited {took:.1f} s for a web page that is not there"

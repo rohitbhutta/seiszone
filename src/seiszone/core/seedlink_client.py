@@ -6,13 +6,14 @@ Negotiation (multi-station mode, one block per configured station):
     HELLO                       -> 2 lines (software, organization)
     STATION sta net             -> OK | ERROR (station not on this server: skipped, noted)
     SELECT x                    -> OK | ERROR, one per selector of the station
-    DATA <last seq + 1>         -> OK | ERROR (some servers refuse a sequence: plain DATA)
+    DATA <last seq + 1> <time>  -> OK | ERROR (some servers refuse it: DATA <seq>, then DATA)
     END                         -> the server streams "SL" + 6 hex digits + 512-byte record
 
 With no stations configured the uni-station form is used (SELECTs, then DATA starts the
-stream at once). The last sequence number received per station is kept in State, so after a
-restart of SeisZone or a lost VPN the server sends exactly what was missed (while it still
-holds it). Keep-alive "INFO ID" after KEEPALIVE seconds without data; the connection is
+stream at once). The last sequence number received per station and the end time of that
+record are kept in State, so after a restart of SeisZone or a lost VPN the server sends
+exactly what was missed (while it still holds it); the time ("DATA n begin", as libslink
+sends it) lets a server whose numbers no longer match start at the right packet. Keep-alive "INFO ID" after KEEPALIVE seconds without data; the connection is
 dropped and made again after SILENT_RECONNECT seconds without any byte. run() never raises.
 """
 
@@ -65,7 +66,7 @@ class SeedLinkClient(Link):
         self.missing = []         # configured stations the server does not have
         self._keys = {}           # "NET.STA" of a record -> State key (configured station)
         self._patterns = []       # [(net, sta, key)] of the stations accepted by the server
-        self._uni_retry = False   # uni-station "DATA <seq>" sent, an ERROR means: plain DATA
+        self._uni_retry = []      # uni-station: DATA commands to send after an ERROR
         self._last_data = self._last_byte = self._last_keepalive = 0.0
 
     def set_state(self, state, detail=""):
@@ -172,11 +173,19 @@ class SeedLinkClient(Link):
             out.append(line.decode("latin-1", "replace").strip())
         return out[0] if lines == 1 else out
 
-    def _data_command(self, key):
-        seq = self.state_store.get_seq(self.id, key) if self.state_store is not None else None
+    def _data_commands(self, key):
+        """DATA commands to try in turn: with the resume sequence number and the end time of the
+        last record, with the number only, plain DATA (servers that refuse the arguments)."""
+        store = self.state_store
+        seq = store.get_seq(self.id, key) if store is not None else None
         if seq is None:
-            return "DATA", False
-        return f"DATA {(int(seq) + 1) & MASK:06X}", True
+            return ["DATA"]
+        cmd = f"DATA {(int(seq) + 1) & MASK:06X}"
+        t = store.get_seq_time(self.id, key)
+        if t is None:
+            return [cmd, "DATA"]
+        stamp = time.strftime("%Y,%m,%d,%H,%M,%S", time.gmtime(int(t)))
+        return [f"{cmd} {stamp}", cmd, "DATA"]
 
     async def _negotiate(self, reader, writer):
         banner = await self._command(reader, writer, "HELLO", lines=2)
@@ -184,7 +193,7 @@ class SeedLinkClient(Link):
             raise SeedLinkError(f"{self.address} is not a SeedLink server (answer {banner[0][:60]!r})")
         self.server, self.organization = banner
         self._patterns, self._keys = [], {}
-        self._uni_retry = False
+        self._uni_retry = []
         stations = self.src.get("stations") or []
         if not stations:
             await self._negotiate_uni(reader, writer)
@@ -201,12 +210,14 @@ class SeedLinkClient(Link):
                 cmd = f"SELECT {sel}"
                 if not _ok(await self._command(reader, writer, cmd), cmd):
                     log.warning("SeedLink %s: %s refused selector %s for %s", self.name, self.address, sel, key)
-            cmd, with_seq = self._data_command(key)
-            accepted = _ok(await self._command(reader, writer, cmd), cmd)
-            if not accepted and with_seq:
-                log.info("SeedLink %s: %s refused %s for %s; asking for live data", self.name,
-                         self.address, cmd, key)
-                accepted = _ok(await self._command(reader, writer, "DATA"), "DATA")
+            accepted = False
+            for cmd in self._data_commands(key):
+                if accepted:
+                    break
+                accepted = _ok(await self._command(reader, writer, cmd), cmd)
+                if not accepted and cmd != "DATA":
+                    log.info("SeedLink %s: %s refused %s for %s; asking again with less", self.name,
+                             self.address, cmd, key)
             if not accepted:
                 log.warning("SeedLink %s: %s refused DATA for %s", self.name, self.address, key)
                 self.missing.append(key)
@@ -223,7 +234,7 @@ class SeedLinkClient(Link):
             cmd = f"SELECT {sel}"
             if not _ok(await self._command(reader, writer, cmd), cmd):
                 log.warning("SeedLink %s: %s refused selector %s", self.name, self.address, sel)
-        cmd, self._uni_retry = self._data_command(UNI)
+        cmd, *self._uni_retry = self._data_commands(UNI)
         writer.write(cmd.encode("ascii") + b"\r\n")   # no answer: the data follows at once
         await writer.drain()
         self.set_state(CONNECTED, self.server)
@@ -290,15 +301,15 @@ class SeedLinkClient(Link):
 
     def _text(self, line, writer):
         if line.upper().startswith("ERROR") and self._uni_retry:
-            self._uni_retry = False
-            log.info("SeedLink %s: %s refused the sequence number; asking for live data",
-                     self.name, self.address)
-            writer.write(b"DATA\r\n")
+            cmd = self._uni_retry.pop(0)
+            log.info("SeedLink %s: %s refused the resume position; sending %s",
+                     self.name, self.address, cmd)
+            writer.write(cmd.encode("ascii") + b"\r\n")
         else:
             log.debug("SeedLink %s: server says %r", self.name, line)
 
     def _packet(self, seq, body):
-        self._uni_retry = False
+        self._uni_retry = []
         self._last_data = time.time()
         res = mseed.parse_record(body, 0, check=True)
         if not isinstance(res, tuple):
@@ -314,7 +325,7 @@ class SeedLinkClient(Link):
         if self.failures:
             self.failures = 0
         if self.state_store is not None:
-            self.state_store.set_seq(self.id, self._key(rec.station, rec.net, rec.sta), seq)
+            self.state_store.set_seq(self.id, self._key(rec.station, rec.net, rec.sta), seq, rec.end)
 
     def _key(self, station, net, sta):
         """State key of a record: the configured station it belongs to (wildcards allowed)."""

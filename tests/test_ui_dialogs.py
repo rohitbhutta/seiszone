@@ -7,6 +7,7 @@ nothing. Screenshots of the dialogs go to build/screens/.
 """
 
 import copy
+import math
 import os
 import sys
 import time
@@ -513,13 +514,13 @@ def test_export_dialog_runs_the_export_in_a_thread(make_engine, qapp, monkeypatc
         return files + [info], "REPORT: 2 channels, no gaps"
     monkeypatch.setattr(export_mod, "export_window", fake_export)
 
-    t1 = time.time() - 5
+    t1 = int(time.time()) - 5 + 0.4                  # the view's range has fractions of a second
     dlg = ExportDialog(engine, engine.config, sids=["WB.KUM.0J.HNZ", "WB.KUM.0J.HNN"], t0=t1 - 120, t1=t1)
     assert sorted(dlg.ticked()) == ["WB.KUM.0J.HNN", "WB.KUM.0J.HNZ"]
     assert dlg.outdir.text() == paths.exports_dir()
     w0, w1 = dlg.window()
-    assert abs(w0 - (t1 - 120)) < 0.002 and abs(w1 - t1) < 0.002
-    assert dlg.length.text() == "Length: 2 min"
+    assert (w0, w1) == (math.floor(t1 - 120), math.ceil(t1))   # whole seconds covering the view
+    assert dlg.length.text() == "Length: 2 min 1 s"
 
     out = str(tmp_path / "out")
     dlg.outdir.setText(out)
@@ -549,6 +550,27 @@ def test_export_dialog_runs_the_export_in_a_thread(make_engine, qapp, monkeypatc
     dlg.set_window(t1, t1 - 10)
     dlg.export()
     assert "end of the window must be after its start" in dlg.message.text() and len(seen) == 1
+    dlg.reject()
+
+
+def test_export_dialog_offers_recorded_channels_of_an_offline_station(make_engine, qapp, tmp_path):
+    from seiszone.core import mseed, recorder
+    from seiszone.ui.export_dialog import ID_ROLE, ExportDialog
+    engine = make_engine()
+    folder = str(tmp_path / "rec")
+    engine.config.set("recording", "folder", folder)
+    t0 = int(time.time()) - 3 * 86400                 # yesterday's event, station offline now
+    rec = mseed.encode_records("XX", "OFF", "", "HHZ", 100, t0, list(range(500)))[0]
+    path = recorder.file_path(folder, rec.sid, rec.start, 60, "channel")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as fh:
+        fh.write(rec.raw)
+    assert "XX.OFF..HHZ" not in engine.hub.stream_ids()
+    dlg = ExportDialog(engine, engine.config, sids=["WB.KUM.0J.HNZ"], t0=t0 - 60, t1=t0 + 60)
+    items = {dlg.channel_list.item(i).data(ID_ROLE): dlg.channel_list.item(i)
+             for i in range(dlg.channel_list.count())}
+    assert "XX.OFF..HHZ" in items and "recorded only" in items["XX.OFF..HHZ"].text()
+    assert items["XX.OFF..HHZ"].checkState() == Qt.Unchecked and dlg.ticked() == ["WB.KUM.0J.HNZ"]
     dlg.reject()
 
 

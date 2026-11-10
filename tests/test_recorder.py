@@ -3,6 +3,7 @@ identical contents (cross-checked with ObsPy), backfill, channel selection, stop
 gap / silence logging, write errors, disk warning. Nothing here touches the network."""
 
 import collections
+import logging
 import os
 import shutil
 import time
@@ -289,3 +290,104 @@ def test_background_thread_and_unreadable_state_entry(tmp_path):
     assert not mgr._thread.is_alive() and mgr.on_record not in hub.listeners
     saved = State(state.path).get("recordings")
     assert saved[0] == {"name": "no id"} and saved[1]["id"] == rid   # never dropped
+
+
+# ---------------------------------------------------------------------- review fixes
+
+def break_folder(mgr, folder):
+    """The drive is gone: the folder is replaced by a file (handles closed first: Windows)."""
+    mgr.tick(time.time() + recorder.IDLE_CLOSE + 1)
+    shutil.rmtree(folder)
+    folder.write_bytes(b"not a folder")
+
+
+def test_many_waiting_records_cost_little_per_record(tmp_path):
+    hub, state, mgr = make(tmp_path)
+    folder = tmp_path / "rec"
+    sid = "WB.KUM.0J.HNZ"
+    mgr.start("full", str(folder), sids=[sid])
+    recs, _ = records(sid, HOUR, 3000)
+    feed(hub, recs[:2])
+    break_folder(mgr, folder)
+    s = mgr._sessions[0]
+    path = recorder.file_path(str(folder), sid, HOUR, 60, "channel")
+    s.pending.extend([(path, recs[0].raw)] * 50000)     # the disk has been full for a while
+    s.pending_bytes += 50000 * len(recs[0].raw)
+    t = time.perf_counter()
+    feed(hub, recs[2:202])
+    took = time.perf_counter() - t
+    assert len(recs) >= 202 and mgr.sessions()[0]["pending"] == 50200
+    assert took < 0.5, f"{took / 200 * 1000:.1f} ms per record while writes fail"
+    mgr.close()
+
+
+def test_new_handle_never_evicts_itself(tmp_path, monkeypatch):
+    """More than MAX_OPEN files open and the clock steps back: the record still gets written."""
+    monkeypatch.setattr(recorder, "MAX_OPEN", 4)
+    hub, state, mgr = make(tmp_path)
+    folder = str(tmp_path / "rec")
+    mgr.start("lru", folder)
+    for k, cha in enumerate(("HNZ", "HNN", "HNE", "BNZ")):
+        feed(hub, records(f"WB.KUM.0J.{cha}", HOUR, 10, seed=k)[0])
+    assert len(mgr._handles) == 4
+    rec = records("WB.KUM.0J.BNN", HOUR, 10, seed=9)[0][0]
+    s = mgr._sessions[0]
+    mgr._take(s, rec, time.time() - 18.8, set())        # PC clock stepped back 18.8 s
+    path = recorder.file_path(folder, rec.sid, rec.start, 60, "channel")
+    with open(path, "rb") as fh:
+        assert fh.read() == rec.raw
+    assert not s.pending and s.last_error == "" and len(mgr._handles) == 4
+    mgr.close()
+
+
+def test_resend_after_a_crash_is_not_appended_twice(tmp_path):
+    """The SeedLink resume position is saved every few seconds: after a crash the server sends
+    records again that are already in the files."""
+    hub, state, mgr = make(tmp_path)
+    folder = str(tmp_path / "rec")
+    sid = "WB.KUM.0J.HNZ"
+    mgr.start("crash", folder, sids=[sid])
+    recs, _ = records(sid, HOUR + 5, 240)
+    feed(hub, recs[:6])
+    mgr._persist(force=True)                    # the state saved before the last records ...
+    feed(hub, recs[6:12])                       # ... these are written, then SeisZone crashes
+    stale = State(state.path)
+    for h in list(mgr._handles.values()):
+        h[0].close()
+    mgr._handles.clear()
+
+    hub2 = DataHub()
+    mgr2 = RecordingManager(hub2, stale, str(tmp_path / "default"), background=False)
+    feed(hub2, recs[6:20])                      # resent from the stale position, then new data
+    path = recorder.file_path(folder, sid, HOUR + 5, 60, "channel")
+    with open(path, "rb") as fh:
+        assert fh.read() == b"".join(r.raw for r in recs[:20])
+    assert "GAP" not in rec_log(folder)
+    mgr2.close()
+
+
+def test_unwritten_records_at_close_are_reported_and_logged_as_gap(tmp_path):
+    hub, state, mgr = make(tmp_path)
+    folder = tmp_path / "rec"
+    sid = "WB.KUM.0J.HNZ"
+    mgr.start("usb", str(folder), sids=[sid])
+    recs, _ = records(sid, HOUR, 300)
+    feed(hub, recs[:4])
+    break_folder(mgr, folder)
+    feed(hub, recs[4:8])                         # wait in memory
+    log_lines = []
+    handler = logging.Handler()
+    handler.emit = lambda r: log_lines.append(r.getMessage())
+    logging.getLogger("seiszone").addHandler(handler)
+    try:
+        mgr.close()                              # SeisZone ends while the drive is still gone
+    finally:
+        logging.getLogger("seiszone").removeHandler(handler)
+    assert any("4 records could not be written and are lost" in m and sid in m for m in log_lines)
+    os.remove(folder)
+    folder.mkdir()
+    mgr2 = RecordingManager(DataHub(), State(state.path), str(tmp_path / "default"), background=False)
+    mgr2.hub.add_record(recs[8], "test")
+    gap = recs[8].start - recs[4].start
+    assert f"GAP {sid}: {gap:.3f} s" in rec_log(str(folder))
+    mgr2.close()

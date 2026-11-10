@@ -78,12 +78,15 @@ python -m pip install -r requirements.txt
 python run_seiszone.py                           # the application
 python run_seiszone.py --minimized               # start in the tray
 python run_seiszone.py --probe 10.8.0.182:18000  # detect an instrument (read-only) and print it
-python run_seiszone.py --engine                  # engine without a window, with the saved sources
+python run_seiszone.py --engine                  # engine without a window, with the saved sources (*)
 python run_seiszone.py --engine --seconds 60     # ... for 60 s only
-python run_seiszone.py --add 10.8.0.182:18000    # detect and add a source (close the window first)
+python run_seiszone.py --add 10.8.0.182:18000    # detect and add a source (*)
 python run_seiszone.py --list                    # the configured sources
 python run_seiszone.py --version
 ```
+
+(*) Only while SeisZone itself is not running: quit it from the tray icon (Quit) first -
+closing the window only hides it. Otherwise these commands stop with exit code 3.
 
 `python -m seiszone` (with `src` on `PYTHONPATH`) does the same as `run_seiszone.py`. The
 installed `SeisZone.exe` takes the same options; started from cmd or PowerShell it prints into

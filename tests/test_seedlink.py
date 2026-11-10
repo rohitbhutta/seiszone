@@ -3,7 +3,9 @@ instrument): end-to-end delivery, selectors, resume after a stop / server restar
 protocol of the server, and the client against a foreign server that refuses sequence numbers."""
 
 import asyncio
+import socket
 import struct
+import threading
 import time
 import xml.etree.ElementTree as ET
 
@@ -572,6 +574,282 @@ def test_not_a_seedlink_server(tmp_path):
             async with Running(link):
                 await wait_until(lambda: link.state == links.ERROR)
                 assert "not a SeedLink server" in link.detail
+        finally:
+            await stop_server(aserver)
+
+    asyncio.run(main())
+
+
+# ---------------------------------------------------------------------- review fixes
+
+def test_server_commands_ending_in_bare_cr():
+    """libslink, slinktool, slarchive and ObsPy end every command with a bare CR."""
+    async def main():
+        hub = filled_hub()
+        srv, aserver, port = await start_server(hub)
+        hnz = [(s, rec.raw) for s, rec in hub.snapshot_packets() if rec.cha == "HNZ"]
+        try:
+            r, w = await asyncio.open_connection("127.0.0.1", port)
+            for text, lines in (("HELLO", 2), ("STATION KUM WB", 1), ("SELECT HNZ", 1),
+                                (f"DATA {hnz[0][0]:06X}", 1)):
+                w.write(text.encode() + b"\r")
+                await w.drain()
+                got = [await asyncio.wait_for(r.readline(), 2) for _ in range(lines)]
+                assert got[-1].strip() in (b"OK", b"Test Org")
+            w.write(b"END\r")
+            assert await read_packets(r, len(hnz)) == hnz
+            w.write(b"INFO ID\r")                      # keep-alive while streaming
+            root = await read_info(r)
+            assert root.get("software") == f"SeisZone v{VERSION}"
+            w.write(b"BYE\r")
+            assert await read_to_end(r) == b""
+            w.close()
+            await wait_until(lambda: srv.clients == 0)
+        finally:
+            await stop_server(aserver)
+
+    asyncio.run(main())
+
+
+def test_obspy_client_gets_data():
+    """ObsPy's own SeedLink client (libslink framing: bare CR) against the server."""
+    from obspy import UTCDateTime
+    from obspy.clients.seedlink.client.seedlinkconnection import SeedLinkConnection
+    from obspy.clients.seedlink.slpacket import SLPacket
+
+    hub = filled_hub()
+    loop = asyncio.new_event_loop()
+    ready = []
+
+    async def start():
+        ready.append(await start_server(hub))
+
+    def serve():
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(start())
+        loop.run_forever()
+
+    th = threading.Thread(target=serve, daemon=True)
+    th.start()
+    end = time.monotonic() + 5
+    while not ready and time.monotonic() < end:
+        time.sleep(0.02)
+    _srv, aserver, port = ready[0]
+    got = []
+    conn = SeedLinkConnection(timeout=5)
+    conn.netto, conn.netdly = 5, 1
+    conn.set_sl_address(f"127.0.0.1:{port}")
+    conn.add_stream("WB", "KUM", "HNZ", -1, None)
+    conn.begin_time = UTCDateTime(T0)
+
+    def collect():
+        while len(got) < 3:
+            pkt = conn.collect()
+            if pkt is None or pkt == SLPacket.SLTERMINATE:
+                return
+            if pkt != SLPacket.SLNOPACKET and pkt.get_type() not in (SLPacket.TYPE_SLINF,
+                                                                     SLPacket.TYPE_SLINFT):
+                got.append(pkt)
+
+    worker = threading.Thread(target=collect, daemon=True)
+    worker.start()
+    worker.join(15)
+    try:
+        assert len(got) == 3, "ObsPy got no data from the SeisZone SeedLink server"
+        trace = got[0].get_trace()
+        assert (trace.stats.network, trace.stats.station, trace.stats.channel) == ("WB", "KUM", "HNZ")
+    finally:
+        conn.terminate()
+        conn.close()
+
+        async def stop():
+            await stop_server(aserver)
+        asyncio.run_coroutine_threadsafe(stop(), loop).result(5)
+        loop.call_soon_threadsafe(loop.stop)
+        th.join(5)
+
+
+def test_resume_across_a_restart_of_the_server_app(tmp_path):
+    """The upstream SeisZone restarted: its packet numbers continue after the old ones (the
+    engine restores hub.seq), so the downstream's saved number is not held and it gets every
+    packet of the new run (also those received before it reconnected), not live data only."""
+    async def main():
+        state = new_state(tmp_path)
+        state.set_seq("src1", "WB.KUM", 36)       # saved during the upstream's previous run
+        hub1 = DataHub()
+        hub1.seq = 100036 + 1                     # what the engine restores: saved + gap
+        for rec in make_records(T0, 4):
+            hub1.add_record(rec, "test")
+        srv, aserver, port = await start_server(hub1)
+        hub2 = DataHub()
+        try:
+            async with Running(client(port, hub2, state)):
+                await wait_until(lambda: len(hub2.packets) == len(hub1.packets))
+                assert raws(hub2) == raws(hub1)
+        finally:
+            await stop_server(aserver)
+
+    asyncio.run(main())
+
+
+def test_client_sends_the_time_and_gets_what_the_ring_still_holds(tmp_path):
+    async def main():
+        hub1 = DataHub(ring_size=50)
+        recs = make_records(T0, 60)               # 75 packets: the ring keeps the newest 50
+        for rec in recs:
+            hub1.add_record(rec, "test")
+        held = [r.raw for _s, r in hub1.snapshot_packets()]
+        state = new_state(tmp_path)
+        last = recs[10]                          # received long ago (pushed out of the ring)
+        state.set_seq("src1", "WB.KUM", 11, last.end)
+        srv, aserver, port = await start_server(hub1)
+        hub2 = DataHub()
+        try:
+            link = client(port, hub2, state)
+            stamp = time.strftime("%Y,%m,%d,%H,%M,%S", time.gmtime(int(last.end)))
+            assert link._data_commands("WB.KUM") == [f"DATA {12:06X} {stamp}", f"DATA {12:06X}", "DATA"]
+            async with Running(link):
+                await wait_until(lambda: len(hub2.packets) == len(held))
+                assert raws(hub2) == held
+                assert state.get_seq_time("src1", "WB.KUM") == hub1.snapshot_packets()[-1][1].end
+        finally:
+            await stop_server(aserver)
+
+    asyncio.run(main())
+
+
+def steim2_wrapped():
+    """A Steim2 record as a C encoder writes it: samples [2^31-1, -2^31, 2^31-1], int32-wrapped
+    differences [0, +1, -1]."""
+    rec = mseed.encode_records("WB", "KUM", "0J", "HNZ", 100, T0, [0, 1, 0])[0]
+    raw = bytearray(rec.raw)
+    struct.pack_into(">i", raw, 64 + 4, 2 ** 31 - 1)    # X0
+    struct.pack_into(">i", raw, 64 + 8, 2 ** 31 - 1)    # Xn
+    return bytes(raw)
+
+
+def test_steim_differences_wrap_like_int32():
+    res = mseed.parse_record(steim2_wrapped(), 0, check=True)
+    assert isinstance(res, tuple)
+    assert res[0].samples.tolist() == [2 ** 31 - 1, -2 ** 31, 2 ** 31 - 1]
+
+
+def test_xn_mismatch_keeps_the_samples(tmp_path):
+    y = list(range(200))
+    rec = mseed.encode_records("WB", "KUM", "0J", "HNZ", 100, T0, y)[0]
+    raw = bytearray(rec.raw)
+    struct.pack_into(">i", raw, 64 + 8, y[-1] + 1)       # wrong Xn, every sample right
+    before = mseed.xn_mismatches
+    res = mseed.parse_record(bytes(raw), 0, check=True)
+    assert isinstance(res, tuple) and res[0].samples.tolist() == y
+    assert mseed.xn_mismatches == before + 1
+    with pytest.raises(ValueError):
+        mseed.steim_decode(bytes(raw[64:]), 200, 2, strict_xn=True)
+    hub = DataHub()
+    link = client(1, hub, new_state(tmp_path))
+    link._packet(5, bytes(raw))
+    assert len(hub.packets) == 1 and link.bad == 0
+
+
+class BadPacketServer:
+    """Sends packets 1 (good), 2 (a Steim2 record whose differences wrap) and 3 (good), from
+    the sequence number the client asks for."""
+
+    def __init__(self, records):
+        self.records = records
+
+    async def handle(self, reader, writer):
+        start = 1
+        try:
+            while True:
+                line = await reader.readline()
+                if not line:
+                    return
+                c = line.decode().strip()
+                if c == "HELLO":
+                    writer.write(b"SeedLink v3.1 (test) :: SLPROTO:3.1\r\ntest\r\n")
+                elif c.startswith(("STATION", "SELECT")):
+                    writer.write(b"OK\r\n")
+                elif c.startswith("DATA"):
+                    parts = c.split()
+                    start = int(parts[1], 16) if len(parts) > 1 else 1
+                    writer.write(b"OK\r\n")
+                elif c == "END":
+                    for i, raw in enumerate(self.records, 1):
+                        if i >= start:
+                            writer.write(b"SL%06X" % i + raw)
+                await writer.drain()
+        except ConnectionError:
+            pass
+        finally:
+            writer.close()
+
+
+def test_client_passes_a_record_with_wrapping_differences(tmp_path):
+    async def main():
+        good = make_records(T0, 4, chans=("HNZ",))
+        fake = BadPacketServer([good[0].raw, steim2_wrapped(), good[1].raw])
+        aserver = await asyncio.start_server(fake.handle, "127.0.0.1", 0)
+        port = aserver.sockets[0].getsockname()[1]
+        hub = DataHub()
+        try:
+            async with Running(client(port, hub, new_state(tmp_path))) as link:
+                await wait_until(lambda: len(hub.packets) == 3)
+                assert link.failures == 0 and link.bad == 0
+                assert hub.packets[-1][1].raw == good[1].raw
+        finally:
+            await stop_server(aserver)
+
+    asyncio.run(main())
+
+
+def test_wire_never_stops_a_client():
+    """Records of another length are re-encoded: a non-integer rate above 32.767 sps fits int16
+    now, and samples beyond int32 are skipped instead of disconnecting every client."""
+    assert mseed.seed_rate(40.5) == (405, -10)
+    assert mseed.rate_from(*mseed.seed_rate(0.4)) == pytest.approx(0.4)
+    hub = DataHub()
+    big = mseed.encode_records("WB", "BIG", "", "HHZ", 40.5, T0, list(range(3000)), reclen=4096)
+    hub.add_record(big[0], "test")
+    srv = SeedLinkServer(hub)
+    seq, rec = hub.snapshot_packets()[0]
+    pkts = srv._wire(seq, rec)
+    assert pkts and all(len(p) == 520 for p in pkts)
+    back = np.concatenate([mseed.parse_record(p[8:], 0, check=True)[0].samples for p in pkts])
+    assert back.tolist() == rec.samples.tolist()
+    huge = mseed.encode_records("WB", "BIG", "", "HHZ", 40.5, T0 + 100, [1, 2, 3], reclen=1024)[0]
+    raw = bytearray(huge.raw)
+    raw[52] = 5                                          # blockette 1000 encoding: float64
+    struct.pack_into(">3d", raw, 64, 5e9, 1.0, 2.0)
+    res = mseed.parse_record(bytes(raw), 0, check=True)[0]
+    assert srv._wire(99, res) == []                       # skipped, no exception
+
+
+def test_idle_client_closed_and_keepalive(monkeypatch):
+    from seiszone.core import seedlink_server as sls
+    monkeypatch.setattr(sls, "IDLE_TIMEOUT", 0.3)
+    seen = []
+    orig = sls._keepalive
+
+    def spy(writer):
+        orig(writer)
+        sock = writer.get_extra_info("socket")
+        seen.append(sock.getsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE))
+        if hasattr(socket, "TCP_KEEPIDLE"):   # a vanished peer is noticed after about a minute
+            seen.append(sock.getsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE))
+    monkeypatch.setattr(sls, "_keepalive", spy)
+
+    async def main():
+        srv, aserver, port = await start_server(DataHub())
+        try:
+            r, w = await asyncio.open_connection("127.0.0.1", port)
+            await wait_until(lambda: srv.clients == 1)
+            assert await asyncio.wait_for(r.read(100), 3) == b""   # silent: closed by the server
+            await wait_until(lambda: srv.clients == 0 and not srv.peers)
+            w.close()
+            assert seen and seen[0] != 0
+            if hasattr(socket, "TCP_KEEPIDLE"):
+                assert seen[1] == 60
         finally:
             await stop_server(aserver)
 

@@ -105,7 +105,10 @@ seiszone/
 `parse_record(buf, off=0, check=True) -> (Record, reclen) | None | "short"`.
 `iter_records(buf, check=False)`, `read_file(path)`, `encode_segment(net, sta, loc, cha, rfac,
 rmul, start, samples, seq_start=1, reclen=512) -> (bytes, next_seq)`, `encode_records(net, sta,
-loc, cha, rate, start, samples, reclen=512) -> [Record]`, `seed_rate(rate)`, `fmt_time(t)`.
+loc, cha, rate, start, samples, reclen=512) -> [Record]`, `seed_rate(rate)` (an int16 pair, exact for
+integer, 1/n and decimal rates), `fmt_time(t)`. Steim differences are summed with int32
+wraparound (like the C decoders); an Xn that does not match the last sample is only counted
+(`xn_mismatches`, `steim_decode(..., strict_xn=False)`), like libmseed.
 
 ### 5.2 DataHub — `core/hub.py` (written)
 Engine thread only: `add_record(rec, source_id) -> bool` (False = duplicate),
@@ -114,8 +117,12 @@ Engine thread only: `add_record(rec, source_id) -> bool` (False = duplicate),
 `next_seq()`, `has_seq(seq)`, `first_seq()`.
 Any thread: `stream_ids()`, `stats_snapshot() -> {sid: {sid, net, sta, loc, cha, rate, source,
 packets, first, last_end, last_arrival, latency, gaps, gap_seconds, last_gap, backfilled,
-last_value}}`, `window(sid, t0, t1) -> [(start, rate, ndarray)]`, `latest_time()`,
+last_value, future_rejected}}`, `window(sid, t0, t1) -> [(start, rate, ndarray)]`, `latest_time()`,
 `descriptions` dict "NET.STA" -> text, `forget_stream(sid)`, `set_buffer_seconds(s)`.
+A record starting more than 600 s ahead of the PC clock and more than the buffer length past
+the channel's newest data goes to the ring and the listeners only (not to the live buffer and
+the statistics). The ring keeps raw bytes only (decoded samples are dropped after use).
+`seq` (newest packet number) is set by the Engine at start, see 5.14.
 
 ### 5.3 Links — `core/links.py` (written)
 `Link(src, hub, state)`; attributes `state detail packets duplicates bytes last_packet since
@@ -127,14 +134,21 @@ drops the connection and reconnects at once when `kick` is set).
 `Config(path)`: `get(section, key=None, default=None)`, `set(section, key, value)`,
 `update_section(section, dict)`, `sources()`, `source(id)`, `add_source(src)`,
 `update_source(src)`, `remove_source(id)`, `find_source(host, port)`, `save()`.
-`State(path)`: `get/set`, `get_seq(source_id, "NET.STA")`, `set_seq(...)`, `drop_source(id)`,
+`State(path)`: `get/set`, `get_seq(source_id, "NET.STA")`, `get_seq_time(...)`,
+`set_seq(source_id, station, seq, end=None)` (end = end time of that record), `drop_source(id)`,
 `flush()`. Source dict schema: see the docstring of `config.py`.
+A file locked for a moment is read again (about 1 s); a damaged one is kept as
+`<name>.<stamp>.bad`. A config.json that stays unreadable is never overwritten (`read_only`,
+`save()` writes nothing); a state.json is replaced only after it was copied to .bad.
+`load_error` says what happened (the user interface warns at start).
 
 ### 5.5 SeedLink client — `core/seedlink_client.py`
 `SeedLinkClient(Link)`, `kind = "seedlink"`. SeedLink 3 protocol: `HELLO` (2 lines), then for each
 configured station `STATION sta net`, one `SELECT x` per selector, `DATA [seq [begin]]`
-(multi-station; resume with **last received seq + 1** in hex from `State.get_seq`, so the
-server backfills what was missed while SeisZone was closed or the VPN was down), `END`; then
+(multi-station; resume with **last received seq + 1** in hex from `State.get_seq` plus the end
+time of that record from `State.get_seq_time`, as libslink does, so the server backfills what
+was missed while SeisZone was closed or the VPN was down - also when its numbers no longer
+match; a server that refuses it gets `DATA seq`, then plain `DATA`), `END`; then
 read 520-byte packets `SL` + 6 hex digits + 512-byte record (also handle `SLINFO` packets and
 servers that answer `ERROR`: retry that station without the sequence number). If `stations` is
 empty use uni-station mode (`SELECT`s then `DATA`). Keep-alive: send `INFO ID` after 60 s
@@ -147,8 +161,13 @@ without data; reconnect after 180 s without any byte. Save the last seq per stat
 STATION, SELECT (with `!` negation, `?`/`*` wildcards, LLCCC / CCC / LL forms, `.D` type),
 DATA, FETCH, TIME, END, INFO ID|CAPABILITIES|STATIONS|STREAMS|CONNECTIONS, BYE. Data packets
 `b"SL%06X" % seq + rec.raw` (512-byte records only; records of another length are re-encoded
-to 512 with `encode_records`). `DATA n` starts at packet n (the standard meaning) when held,
-otherwise live; `TIME`/`DATA n begin` from the oldest held packet matching the time.
+to 512 with `encode_records`; a record that cannot be is skipped). `DATA n` starts at packet n
+(the standard meaning) when held (a begin time then does not count); n = the next packet or
+later: live; any other n (older than the ring, or a number of an earlier run) from the oldest
+held packet (ending after the begin time, if given) - resending is harmless, live would lose
+data. `TIME` from the oldest held packet matching the time. Commands end in CR, LF or CR LF
+(libslink / ObsPy send a bare CR). A client silent for 300 s while negotiating is closed; TCP
+keep-alive is on.
 INFO XML like a standard server (`<seedlink software="SeisZone v1.0.0" organization=...>`,
 `<station name network description begin_seq end_seq>` with `<stream location seedname type
 begin_time end_time>`), packed into `SLINFO *`/`SLINFO  ` 520-byte packets. Station
@@ -168,13 +187,19 @@ to `hub.add_record(rec, "gecko:<serial>")`. Optional rename table {serial: {net,
 refresh GCFSEND:B every 20 s, restart after 60 s without blocks, GCFSTOP (twice) when stopping.
 TCP: BTP/raw stream with acknowledgements. Each data block -> 512-byte Steim2 records with
 `src["gcf"]["net"/"sta"]` and `src["gcf"]["map"]` {gcf stream id: [loc, cha]} (fallback
-`gcf.default_seed_name`), duplicates dropped, then `Link.feed`. Status blocks logged.
+`gcf.default_seed_name` only when the map is empty: a non-empty map is the user's selection and
+other streams are not used), duplicates dropped (key: system id, stream id, start), then
+`Link.feed`. One digitiser per source: `src["gcf"]["system_id"]` (older configs: the probe's,
+else the first seen); blocks of other system ids are dropped. Status blocks logged; in a bare
+TCP stream only plausible (printable) status blocks are believed, and a block cut by a read
+boundary waits for its rest.
 
 ### 5.9 Probe — `core/probe.py`
 Port of `instrument_probe.py` of the earlier Gecko add-on project (read-only detection: SeedLink HELLO/INFO,
 GCF UDP/TCP sample, Güralp web page status/data-stream/StationXML), without any third-party
 viewer names. Adds `Instrument.to_source(selected=None) -> dict` (a valid config source:
-seedlink -> `stations` with selectors from `selectors_for`; gcf -> `gcf` net/sta/desc/map),
+seedlink -> `stations` with selectors from `selectors_for`; gcf -> `gcf` net/sta/desc/map/system_id;
+several digitisers on one port: the one the web page names, else the one with most blocks),
 `Instrument.summary_lines()` for the dialog. `probe(text, log, prefer_direct=True, need_xml=None)`.
 
 ### 5.10 StationXML — `core/stationxml.py`
@@ -195,14 +220,22 @@ clock, UTC) is chosen by each record's start time; the raw record bytes are appe
 (lossless, backfilled records go into the right older file). Each recording writes
 `<folder>/recording_log.txt` (start, stop, new files, gaps per channel, links lost/back).
 Active recordings are kept in `State["recordings"]` and continue after a restart of SeisZone.
-Nothing is ever deleted. Disk-space warning below 5 GB or 5 %.
+A file that existed before this run first appends to it is read once: records already in it
+are not appended again (the SeedLink resume after a crash). Records that cannot be written wait
+in memory (64 MB, O(1) per record); those still unwritten at close are reported (log and
+recording_log.txt, with their time span) and the channel end is set back, so the hole is logged
+as a GAP. Nothing is ever deleted. Disk-space warning below 5 GB or 5 %.
 
 ### 5.12 Export — `core/export.py`
 `export_window(sids, t0, t1, outdir, mode="separate"|"combined", folders=[recording folders],
 hub=None, log=print) -> (written_paths, report_text)`: collects records of each channel in
 [t0, t1) from recording folders (files found by name/date) and, for what is missing, from the
 hub's live buffer (re-encoded), merges, trims exactly, writes Steim2 512-byte miniSEED plus
-`export_info__<stamp>.txt` (samples, expected, gaps per channel).
+`export_info__<stamp>.txt` (samples, expected, gaps per channel). Files are found by their
+period stamp up to 2 h before t0, further back for low sample rates (period + one record).
+`recorded_sids(folders, t0, t1)`: channel ids the recording folders hold for a window (the
+export dialog offers them, so an offline station can be exported). The dialog's window is
+whole seconds.
 
 ### 5.13 DSP — `core/dsp.py`
 `FILTERS` ordered dict name -> label/spec (none, highpass 0.1/1 Hz, lowpass 5/20 Hz, bandpass
@@ -221,14 +254,23 @@ listeners after a settings change), `call_soon(fn, *args)`, `status() -> {"sourc
 link.status()}, "gecko": {"ports", "listening", "error", "links": [...]}, "server": {"port",
 "listening", "error", "clients", "peers"}, "started"}`. Attributes `hub`, `config`, `state`,
 `recorder` (RecordingManager), `responses` (ResponseStore). Logging to logger "seiszone".
+The SeedLink server's packet numbers continue across runs: `State["server_seq"]` is saved every
+second and at stop; at start `hub.seq = saved + 100000` (the packets numbered after the last
+save). A busy-port retry uses the settings the listeners were opened with (only
+`apply_settings` takes new ones). `cli --engine` / `--add` with the user's own config hold the
+single-instance mutex (`seiszone/single_instance.py`) and stop with exit code 3 while SeisZone
+runs; `--engine` with a missing `--config` file: exit code 2; a failed engine: exit code 1.
 
 ### 5.15 User interface — `ui/`
 `ui.app.main(argv)`: QApplication (Fusion style + `theme.apply(app)`), single instance (named
 mutex `Local\SeisZone.SingleInstance`; a second start brings the running window forward via a
 local socket `SeisZone.Activate`), creates Config, State, Engine, MainWindow, tray icon
 (Show / Start-stop recording / Quit); closing the window hides to tray if enabled; Quit stops
-the engine cleanly. `--minimized` starts in the tray. "Start with Windows" writes
-`HKCU\Software\Microsoft\Windows\CurrentVersion\Run\SeisZone`.
+the engine cleanly (it waits for an export that is still writing, after asking, and up to 5 s
+for a detection). `--minimized` starts in the tray. "Start with Windows" writes
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run\SeisZone` (from source: pythonw with
+run_seiszone.py); at start the value is only rewritten when missing or its program no longer
+exists, so a source or build-folder run never takes over the installed SeisZone's entry.
 
 `MainWindow(engine, config)`: toolbar (Add source +, Remove, Reconnect, Record, Export,
 Spectrum, Settings), left dock `SourcesPanel`, centre `WaveformView`, bottom docks

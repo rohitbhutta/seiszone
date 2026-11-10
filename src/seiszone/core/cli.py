@@ -12,8 +12,12 @@
     --output PATH                            write everything printed into this file instead
                                              (the installed SeisZone.exe has no console window)
 
-The window and --engine/--add share config.json: close the SeisZone window before --add, or it
-writes its own copy of the sources back when it ends.
+--engine and --add use the user's config.json and state.json (the active recordings, the
+SeedLink resume positions), so they only run while SeisZone itself does not: quit it from the
+tray icon (Quit) first - closing the window only hides it. They hold the same single-instance
+mutex as the window (exit code 3 when SeisZone is running). --engine --probe and runs with
+another --config file are independent of it. --engine with a --config file that does not exist
+is an error (exit code 2); --engine ends with exit code 1 when the engine failed.
 """
 
 import argparse
@@ -25,7 +29,7 @@ import tempfile
 import threading
 import time
 
-from .. import APP_NAME, VERSION, logsetup
+from .. import APP_NAME, VERSION, logsetup, paths, single_instance
 from .. import config as cfg_mod
 from . import mseed
 
@@ -79,10 +83,34 @@ def main(argv=None):
             sys.stdout, sys.stderr = saved
 
 
+def _uses_user_files(args):
+    """True for the commands that change the user's own config.json / state.json."""
+    if not (args.add or (args.engine and not args.probe)):
+        return False
+    return not args.config or os.path.normcase(os.path.abspath(args.config)) == \
+        os.path.normcase(os.path.abspath(paths.config_file()))
+
+
 def _run(args):
     if args.version:
         emit(f"{APP_NAME} {VERSION}")
         return 0
+    if args.engine and args.config and not os.path.isfile(args.config):   # a typo: no silent defaults
+        emit(f"Error: config file not found: {args.config}")
+        return 2
+    mutex = None
+    if _uses_user_files(args):
+        mutex = single_instance.acquire_single_instance(single_instance.MUTEX_NAME)
+        if mutex is None:
+            emit(f"{APP_NAME} is running - quit it from the tray icon (Quit), then run this again.")
+            return 3
+    try:
+        return _run_unlocked(args)
+    finally:
+        single_instance.release_single_instance(mutex)
+
+
+def _run_unlocked(args):
     logsetup.setup(verbose=args.verbose, console=bool(args.engine and not args.probe))
     config = cfg_mod.Config(args.config) if args.config else cfg_mod.Config()
     if args.list:
@@ -181,7 +209,12 @@ def run_engine(config, seconds, interval, state):
     engine = Engine(config, state)
     done = threading.Event()
     engine.start()
+    if not engine.running:
+        emit("Error: the engine did not start (see the log)")
+        engine.stop()
+        return 1
     emit(f"{APP_NAME} {VERSION} engine running" + (f" for {seconds:g} s" if seconds else " - Ctrl+C ends it"))
+    failed = False
     end = time.monotonic() + seconds if seconds else None
     try:
         while not done.is_set():
@@ -194,8 +227,11 @@ def run_engine(config, seconds, interval, state):
     except KeyboardInterrupt:
         emit("stopping ...")
     finally:
+        failed = not engine.running
         engine.stop()
-    return 0
+    if failed:
+        emit("Error: the engine failed (see the log)")
+    return 1 if failed else 0
 
 
 def status_text(engine, now=None):

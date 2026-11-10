@@ -309,7 +309,10 @@ def test_autostart_registry(monkeypatch):
         assert app_mod.autostart_enabled() is True
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as k:
             value, kind = winreg.QueryValueEx(k, app_mod.RUN_VALUE)
-        assert kind == winreg.REG_SZ and value.endswith("--minimized") and "-m seiszone" in value
+        # from source: pythonw with the source folder's starter ("-m seiszone" cannot start at logon)
+        assert kind == winreg.REG_SZ and value.endswith("--minimized") and "run_seiszone.py" in value
+        prog = app_mod.command_program(value)
+        assert os.path.exists(prog) and os.path.basename(prog).lower().startswith("python")
         assert app_mod.set_autostart(False)
         assert app_mod.autostart_enabled() is False
         assert app_mod.set_autostart(False)  # removing twice is fine
@@ -401,3 +404,67 @@ def test_parse_args():
     args, rest = app_mod.parse_args(["--minimized", "--theme", "light", "-platform", "offscreen"])
     assert args.minimized and args.theme == "light" and not args.verbose
     assert rest == ["-platform", "offscreen"]
+
+
+# --------------------------------------------------------------------------------------------
+# review fixes
+# --------------------------------------------------------------------------------------------
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows registry")
+def test_autostart_refresh_never_takes_over_a_working_entry(monkeypatch):
+    import winreg
+    parent = rf"Software\SeisZoneTest_{uuid.uuid4().hex[:8]}"
+    key = parent + r"\Run"
+    monkeypatch.setattr(app_mod, "RUN_KEY", key)
+    installed = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "notepad.exe")  # "SeisZone.exe"
+
+    def put(value):
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, key, 0, winreg.KEY_SET_VALUE) as k:
+            winreg.SetValueEx(k, app_mod.RUN_VALUE, 0, winreg.REG_SZ, value)
+    try:
+        put(f'"{installed}" --minimized')          # the installed SeisZone's entry
+        assert app_mod.refresh_autostart()       # a run from the source folder ...
+        assert app_mod.current_autostart_command() == f'"{installed}" --minimized'   # ... keeps it
+        put(r'"C:\gone\SeisZone.exe" --minimized')  # moved / uninstalled: repaired
+        assert app_mod.refresh_autostart()
+        assert app_mod.current_autostart_command() == app_mod.autostart_command()
+        assert app_mod.command_program(app_mod.autostart_command()) and \
+            os.path.exists(app_mod.command_program(app_mod.autostart_command()))
+    finally:
+        for k in (key, parent):
+            try:
+                winreg.DeleteKey(winreg.HKEY_CURRENT_USER, k)
+            except OSError:
+                pass
+
+
+def test_quit_lets_a_running_export_finish(qapp, tmp_path):
+    from seiszone.ui import export_dialog
+    marker = tmp_path / "done.txt"
+
+    def slow_export(log=print, **kw):
+        log("writing ...")
+        time.sleep(1.0)
+        marker.write_text("complete")
+        return [str(marker)], "ok"
+    t = export_dialog.ExportThread(slow_export, {})
+    export_dialog._RUNNING.add(t)
+    t.start()
+    try:
+        assert app_mod.running_threads()[0] == [t]
+        left = app_mod.finish_threads(probe_wait=0.1)
+        assert left == [] and t.isFinished() and marker.read_text() == "complete"
+    finally:
+        t.wait()
+        export_dialog._RUNNING.discard(t)
+
+
+def test_settings_default_window_applied_at_once(qapp, window, monkeypatch):
+    monkeypatch.setattr(app_mod, "autostart_enabled", lambda: False)   # never the real registry
+    monkeypatch.setattr(app_mod, "set_autostart", lambda on: True)
+    assert window.view._window != 3600
+    window.config.update_section("view", {"window_seconds": 3600})    # what Settings > OK saves
+    window._settings_applied()
+    assert window.view._window == 3600 and window.view.window_box.currentData() == 3600
+    window.view.filter_box.setCurrentIndex(window.view.filter_box.findData("hp1"))   # saves the view
+    assert Config(window.config.path).get("view", "window_seconds") == 3600

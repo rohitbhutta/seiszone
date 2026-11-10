@@ -6,6 +6,12 @@ window are copied unchanged (fast and lossless); only the records at the window 
 that overlap others (the same data received twice, e.g. live and as backfill) and live-buffer
 data are decoded, trimmed to exactly the samples inside the window and re-encoded as Steim2.
 Nothing is resampled or filtered. Existing files are never overwritten.
+
+A recording file holds the records that START in its period, so for a very low sample rate
+(a 512-byte record of 0.1 sps data spans about 2 hours) files from further back are read too:
+the look-back is the longest file period plus the longest record of that rate.
+recorded_sids() lists the channels the recording folders hold for a window (the export dialog
+offers them even when the station is offline now).
 """
 
 import collections
@@ -21,6 +27,9 @@ from .recorder import FILE_RE, stamp_time
 
 UTC = dt.timezone.utc
 MAX_FILE_SPAN = 2 * 3600.0     # s: a recording file may hold records starting this long before t0
+MAX_LOOKBACK = 48 * 3600.0     # s: the furthest look-back (very low sample rates)
+MAX_PERIOD = 3600.0            # s: the longest recording file period (recorder.FILE_MINUTES)
+MAX_REC_SAMPLES = 1000         # samples in one 512-byte record at most (Steim2: about 735)
 EPS = 0.05                     # in samples: tolerance for "this sample is at / after t0"
 
 
@@ -37,12 +46,13 @@ def _station(sid):
     return ".".join(sid.split(".")[:2])
 
 
-def find_files(folders, sid, t0, t1):
-    """Recording files of the folders that may hold `sid` data in [t0, t1): only the day
-    folders touching the window are listed, so years of recordings do not slow this down."""
+def find_files(folders, sid, t0, t1, lookback=MAX_FILE_SPAN):
+    """Recording files of the folders that may hold `sid` data in [t0, t1) (files starting up
+    to `lookback` s before t0): only the day folders touching that span are listed, so years
+    of recordings do not slow this down."""
     station = _station(sid)
     out, seen = [], set()
-    day = dt.datetime.fromtimestamp(t0 - MAX_FILE_SPAN, UTC).date()
+    day = dt.datetime.fromtimestamp(t0 - lookback, UTC).date()
     last = dt.datetime.fromtimestamp(t1, UTC).date()
     while day <= last:
         for folder in folders:
@@ -57,12 +67,66 @@ def find_files(folders, sid, t0, t1):
                     continue
                 t = stamp_time(m.group("stamp"))
                 key = os.path.normcase(os.path.realpath(e.path))
-                if t0 - MAX_FILE_SPAN <= t < t1 and key not in seen:
+                if t0 - lookback <= t < t1 and key not in seen:
                     seen.add(key)
                     out.append((t, e.path))
         day += dt.timedelta(days=1)
     out.sort()
     return out
+
+
+def _older_files(folders, sid, t0, t1, files, rate):
+    """Files before the usual look-back that can still hold samples of a low-rate channel.
+    rate None (nothing found yet): the newest older file of the channel tells its rate."""
+    if rate is None:
+        older = [f for f in find_files(folders, sid, t0, t1, MAX_LOOKBACK) if f not in files]
+        for _t, path in reversed(older):
+            try:
+                rate = next((r.rate for r in mseed.read_file(path) if r.sid == sid and r.rate > 0), None)
+            except OSError:
+                continue
+            if rate:
+                break
+        if not rate:
+            return []
+    need = min(MAX_PERIOD + MAX_REC_SAMPLES / rate, MAX_LOOKBACK)
+    if need <= MAX_FILE_SPAN:
+        return []
+    return [f for f in find_files(folders, sid, t0, t1, need) if f not in files]
+
+
+def recorded_sids(folders, t0, t1):
+    """Channel ids the recording folders hold files of for the window [t0, t1) (both layouts:
+    the records of a station file are read for their channel ids)."""
+    out = set()
+    first = dt.datetime.fromtimestamp(t0 - MAX_FILE_SPAN, UTC).date()
+    last = dt.datetime.fromtimestamp(t1, UTC).date()
+    for folder in dict.fromkeys(f for f in folders or [] if f):
+        try:
+            stations = [e.name for e in os.scandir(folder) if e.is_dir() and e.name.count(".") == 1]
+        except OSError:
+            continue
+        for station in stations:
+            day = first
+            while day <= last:
+                try:
+                    entries = list(os.scandir(os.path.join(folder, station, day.isoformat())))
+                except OSError:
+                    entries = []
+                for e in entries:
+                    m = FILE_RE.match(e.name)
+                    if not m or not t0 - MAX_FILE_SPAN <= stamp_time(m.group("stamp")) < t1:
+                        continue
+                    code = m.group("code")
+                    if code.count(".") == 3:
+                        out.add(code)
+                    elif code == station:
+                        try:
+                            out.update(r.sid for r in mseed.read_file(e.path))
+                        except OSError:
+                            pass
+                day += dt.timedelta(days=1)
+    return sorted(out)
 
 
 def _collect(files, sid, t0, t1, notes):
@@ -198,7 +262,14 @@ def _channel(sid, t0, t1, folders, hub, log):
     """Everything about one channel: (bytes or b"", report lines)."""
     notes = []
     counts = collections.Counter()
-    recs = _collect(find_files(folders, sid, t0, t1), sid, t0, t1, notes) if folders else []
+    files = find_files(folders, sid, t0, t1) if folders else []
+    recs = _collect(files, sid, t0, t1, notes)
+    if folders:   # a low-rate channel: its records reach further than the usual look-back
+        guess = recs[0].rate if recs else None
+        if guess is None and hub is not None:
+            live = hub.window(sid, t0, t1)
+            guess = live[0][1] if live else None
+        recs += _collect(_older_files(folders, sid, t0, t1, files, guess), sid, t0, t1, notes)
     rate = None
     if recs:
         rate = collections.Counter(round(r.rate, 6) for r in recs).most_common(1)[0][0]

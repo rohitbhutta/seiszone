@@ -14,6 +14,7 @@ import glob
 import logging
 import os
 import socket
+import sys
 import threading
 import time
 
@@ -430,3 +431,79 @@ def test_cli_output_file(remote, tmp_path, capsys, quiet_log):
     # no log handler is left writing into the closed file
     assert not any(getattr(h, "stream", None) is not None and h.stream.closed
                    for h in logging.getLogger("seiszone").handlers)
+
+
+# ---------------------------------------------------------------------- review fixes
+
+def test_server_packet_numbers_continue_after_a_restart(tmp_path, remote):
+    from seiszone.core import engine as engine_mod
+    cfg = make_config(str(tmp_path))
+    state = State(str(tmp_path / "state.json"))
+    state.set("server_seq", 40)
+    e = Engine(cfg, state)
+    assert e.hub.seq == 40 + engine_mod.SEQ_SAFETY_GAP
+    e.start()
+    try:
+        e.add_source(seedlink_source(remote.port))
+        remote.start_feeding()
+        wait_for(lambda: len(e.hub.packets) >= 3, what="packets")
+    finally:
+        e.stop()
+    saved = State(state.path).get("server_seq")
+    assert saved == e.hub.seq and saved > 40 + engine_mod.SEQ_SAFETY_GAP
+
+
+def test_listener_retry_does_not_swallow_a_settings_change(make_engine):
+    """The retry of a busy port runs between the settings save and apply_settings."""
+    busy = socket.socket()
+    busy.bind(("127.0.0.1", 0))
+    busy.listen(1)
+    port = busy.getsockname()[1]
+    try:
+        engine = make_engine(server_port=port, gecko_ports=(port,))
+        assert engine.status()["gecko"]["error"] and engine.status()["server"]["error"]
+        engine.config.update_section("gecko", {"ports": [0]})
+        engine.config.update_section("seedlink_server", {"enabled": False})
+        engine._submit(engine._retry_listeners).result(5)     # the housekeeping retry, in the gap
+        engine.apply_settings().result(5)
+        st = engine.status()
+        assert st["gecko"]["listening"] and st["gecko"]["error"] == ""
+        assert st["server"]["error"] == "" and not st["server"]["listening"]
+    finally:
+        busy.close()
+
+
+def test_cli_refuses_to_run_beside_seiszone(tmp_path, capsys, monkeypatch, quiet_log):
+    from seiszone import single_instance
+    monkeypatch.setattr(single_instance, "MUTEX_NAME", f"Local\\SeisZone.Test.{time.time_ns()}")
+    monkeypatch.setattr(cli, "run_engine", lambda *a, **k: pytest.fail("engine started beside SeisZone"))
+    monkeypatch.setattr(cli, "add", lambda *a, **k: pytest.fail("config changed beside SeisZone"))
+    held = single_instance.acquire_single_instance(single_instance.MUTEX_NAME)   # "SeisZone runs"
+    try:
+        if sys.platform == "win32":
+            assert cli.main(["--engine", "--seconds", "1"]) == 3
+            assert "quit it from the tray icon" in capsys.readouterr().out
+            assert cli.main(["--add", "127.0.0.1:1"]) == 3
+    finally:
+        single_instance.release_single_instance(held)
+    # another config folder (tests, field checks with --config) is independent of it
+    cfg = make_config(str(tmp_path / "other"))
+    monkeypatch.setattr(cli, "run_engine", lambda *a, **k: 0)
+    held = single_instance.acquire_single_instance(single_instance.MUTEX_NAME)
+    try:
+        assert cli.main(["--engine", "--seconds", "1", "--config", cfg.path]) == 0
+    finally:
+        single_instance.release_single_instance(held)
+
+
+def test_cli_exit_codes(tmp_path, capsys, monkeypatch, quiet_log):
+    missing = str(tmp_path / "cfg.jsn")
+    assert cli.main(["--engine", "--seconds", "1", "--config", missing]) == 2
+    assert "config file not found" in capsys.readouterr().out
+    assert not os.path.exists(os.path.join(str(tmp_path), "state.json"))
+    cfg = make_config(str(tmp_path / "cli"))
+
+    async def broken(self):
+        raise RuntimeError("engine start failed (test)")
+    monkeypatch.setattr(Engine, "_main", broken)
+    assert cli.main(["--engine", "--seconds", "1", "--interval", "0.5", "--config", cfg.path]) == 1

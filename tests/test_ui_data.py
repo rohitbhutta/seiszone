@@ -445,6 +445,111 @@ def test_spectrum_dialog(qapp, engine):
 # ------------------------------------------------------------------------------------------
 # screenshots
 # ------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------
+# review fixes
+# ------------------------------------------------------------------------------------------
+
+class _Clock:
+    """time for waveform_view only (the rest of the program keeps the real clock)."""
+
+    def __init__(self, t):
+        self.t = t
+        self.perf_counter, self.strftime, self.gmtime = time.perf_counter, time.strftime, time.gmtime
+
+    def time(self):
+        return self.t
+
+
+class _StatsHub:
+    def __init__(self, sid):
+        self.sid, self.last_end = sid, 0.0
+
+    def stats_snapshot(self):
+        return {self.sid: {"last_end": self.last_end}}
+
+
+def test_live_range_does_not_jump(view, monkeypatch):
+    from seiszone.ui import waveform_view as wv
+    sid = SIDS[0]
+    clock = _Clock(1.8e9)
+    monkeypatch.setattr(wv, "time", clock)
+    hub = _StatsHub(sid)
+    monkeypatch.setattr(view, "engine", type("E", (), {"hub": hub})())
+    # 60-min window, GPS-timed instrument, PC clock 0.5 s behind: a record ends "in the future"
+    view._window = 3600
+    view._anchored = False
+    ends = []
+    for k in range(40):
+        clock.t = 1.8e9 + k * 0.25
+        hub.last_end = 1.8e9 + 0.5 + (k // 4)            # a new record every second
+        ends.append(view._live_range()[1])
+    steps = np.diff(ends)
+    assert steps.max() < 1.5 and steps.min() > -0.01, steps
+    # 30-s window, latency right at the 80 % threshold: no flipping back and forth
+    view._window = 30
+    view._anchored = False
+    clock.t = 2e9
+    picked = []
+    for k in range(20):
+        hub.last_end = clock.t - 24 + (0.2 if k % 2 else -0.2)
+        picked.append(view._live_range()[1] - clock.t)
+    assert max(picked[1:]) - min(picked[1:]) < 1, picked      # (it used to flip by ~24 s)
+    view._window = 600
+    view._anchored = False
+
+
+def test_fixed_scale_low_pass_keeps_the_offset(qapp, tmp_path):
+    eng = FakeEngine(config=Config(str(tmp_path / "config.json")), seconds=60)
+    from seiszone.core import mseed
+    now = time.time()
+    rng = np.random.default_rng(3)
+    y = (50000 + rng.normal(0, 100, 6000)).astype(int)    # a sensor with a DC offset
+    for rec in mseed.encode_records("XX", "OFF", "", "HHZ", 100, now - 60, y):
+        eng.hub.add_record(rec, "test")
+    eng.config.update_section("view", {"filter": "lp5", "demean": False, "scale": "fixed",
+                                       "fixed_scale": 1000.0, "window_seconds": 60})
+    v = WaveformView(eng, eng.config)
+    v.resize(900, 300)
+    v.show()
+    v.set_channels(["XX.OFF..HHZ"])
+    pump(qapp, 0.1)
+    v.refresh()
+    tr = v._traces[0]
+    lo, hi = tr.yrange
+    assert hi - lo == pytest.approx(2000) and lo < tr.lo and tr.hi < hi, (tr.yrange, tr.lo, tr.hi)
+    v.close()
+
+
+def test_many_channels_scroll(qapp, tmp_path):
+    from seiszone.core import mseed
+    eng = FakeEngine(config=Config(str(tmp_path / "config.json")), seconds=60)
+    now = time.time()
+    sids = []
+    for k in range(30):
+        sta = f"S{k:02d}"
+        for rec in mseed.encode_records("XX", sta, "", "HHZ", 10, now - 60, list(range(600))):
+            eng.hub.add_record(rec, "test")
+        sids.append(f"XX.{sta}..HHZ")
+    v = WaveformView(eng, eng.config)
+    v.resize(1200, 650)
+    v.show()
+    v.set_channels(sids)
+    pump(qapp, 0.2)
+    bar = v.scroll.verticalScrollBar()
+    assert bar.maximum() > 0, "30 channels must scroll in a 650 px view"
+    assert v.glw.height() >= 30 * 24 + 26
+    last = v._traces[-1].vb
+    assert last.height() >= 23
+    bar.setValue(bar.maximum())
+    pump(qapp, 0.1)
+    bottom = v.glw.mapTo(v.scroll.viewport(), v.glw.rect().bottomLeft()).y()
+    assert bottom <= v.scroll.viewport().height() + 1          # the time axis can be reached
+    v.set_channels(sids[:3])
+    pump(qapp, 0.1)
+    assert v.scroll.verticalScrollBar().maximum() == 0
+    v.close()
+
+
 def test_screenshots(view, engine, qapp):
     os.makedirs(SCREENS, exist_ok=True)
     pump(qapp, 0.2)

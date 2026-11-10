@@ -4,63 +4,44 @@ One SeisZone per Windows session: a named mutex says whether one already runs; a
 only asks the running one (over a local socket) to show its window and exits. The window can
 hide to the tray so live data, the SeedLink server and recordings keep running.
 
-"Start with Windows" is a value in HKCU\\...\\Run (per user, no administrator rights).
+"Start with Windows" is a value in HKCU\\...\\Run (per user, no administrator rights). At start it
+is only written when it is missing or names a program that no longer exists (a run from the
+source folder or a build folder never takes over the installed SeisZone's entry).
+
+Quit waits for an export that is still writing its files (after asking) and briefly for an
+instrument detection; a detection that is still running then cannot stop the exit either.
 """
 
 import argparse
 import ctypes
 import logging
 import os
+import shlex
 import sys
 import threading
 import time
+from pathlib import Path
 
 from PySide6.QtCore import QAbstractNativeEventFilter, QObject, Qt, QTimer
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
 from .. import APP_NAME, ORGANIZATION, VERSION, logsetup
+from ..single_instance import MUTEX_NAME, acquire_single_instance, release_single_instance  # noqa: F401
 from . import theme
 
 log = logging.getLogger("seiszone")
 
-MUTEX_NAME = "Local\\SeisZone.SingleInstance"
 ACTIVATE_NAME = "SeisZone.Activate"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_VALUE = APP_NAME
-ERROR_ALREADY_EXISTS = 183
+SOURCE_SCRIPT = Path(__file__).resolve().parents[3] / "run_seiszone.py"   # the source folder's starter
+PROBE_QUIT_WAIT = 5.0      # s Quit waits for an instrument detection that is still running
 
 
 # --------------------------------------------------------------------------------------------
-# single instance
+# single instance (seiszone.single_instance: also used by the headless CLI)
 # --------------------------------------------------------------------------------------------
-
-def acquire_single_instance(name=MUTEX_NAME):
-    """Handle of the named mutex when this is the first instance, None when another instance
-    already holds it. Keep the handle for the life of the process: Windows frees the mutex
-    when the process ends, even after a crash. Outside Windows always 'first'."""
-    if sys.platform != "win32":
-        return True
-    from ctypes import wintypes
-    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    k32.CreateMutexW.restype = wintypes.HANDLE
-    k32.CreateMutexW.argtypes = (wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR)
-    handle = k32.CreateMutexW(None, False, name)
-    if not handle:  # cannot tell - rather run twice than refuse to start
-        log.warning("single-instance mutex unavailable (error %d)", ctypes.get_last_error())
-        return True
-    if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
-        release_single_instance(handle)
-        return None
-    return handle
-
-
-def release_single_instance(handle):
-    if sys.platform == "win32" and handle and handle is not True:
-        from ctypes import wintypes
-        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        k32.CloseHandle.argtypes = (wintypes.HANDLE,)
-        k32.CloseHandle(handle)
 
 
 def notify_running_instance(name=ACTIVATE_NAME, timeout_ms=2000):
@@ -123,13 +104,53 @@ class ActivationServer(QObject):
 # --------------------------------------------------------------------------------------------
 
 def autostart_command():
-    """Command line written to the Run key: the installed exe, or pythonw -m seiszone in
-    development (no console window either way)."""
+    """Command line written to the Run key: the installed exe, or pythonw with the source
+    folder's run_seiszone.py in development (no console window either way; the seiszone
+    package is not installed, so "-m seiszone" would not start at logon)."""
     if getattr(sys, "frozen", False):
         return f'"{sys.executable}" --minimized'
     exe = sys.executable
     pyw = os.path.join(os.path.dirname(exe), "pythonw.exe")
-    return f'"{pyw if os.path.exists(pyw) else exe}" -m seiszone --minimized'
+    pyw = pyw if os.path.exists(pyw) else exe
+    if SOURCE_SCRIPT.exists():
+        return f'"{pyw}" "{SOURCE_SCRIPT}" --minimized'
+    return f'"{pyw}" -m seiszone --minimized'
+
+
+def current_autostart_command():
+    """The Run value now in the registry, or None."""
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_READ) as key:
+            return str(winreg.QueryValueEx(key, RUN_VALUE)[0])
+    except OSError:
+        return None
+
+
+def command_program(cmd):
+    """The program a command line starts ('"C:\\x\\SeisZone.exe" --minimized' -> C:\\x\\SeisZone.exe)."""
+    try:
+        parts = shlex.split(cmd, posix=False)
+    except ValueError:
+        return ""
+    return parts[0].strip('"') if parts else ""
+
+
+def refresh_autostart():
+    """At start, with "Start with Windows" on: write the Run value only when it is missing or
+    starts a program that no longer exists (SeisZone moved or reinstalled elsewhere). An
+    installed SeisZone also replaces a development entry (Python). A value that works is never
+    taken over by another copy (the source folder, a build folder)."""
+    cur = current_autostart_command()
+    if cur == autostart_command():
+        return True
+    program = command_program(cur) if cur else ""
+    if not cur or not os.path.exists(program):
+        return set_autostart(True)
+    if getattr(sys, "frozen", False) and os.path.basename(program).lower().startswith("python"):
+        return set_autostart(True)
+    log.info("start with Windows keeps the existing entry (%s)", cur)
+    return True
 
 
 def set_autostart(enabled):
@@ -293,6 +314,13 @@ class Controller(QObject):
     def quit(self):
         if self.window.isHidden() and self.window.active_recordings():
             self.show_window()
+        if running_threads()[0]:
+            self.show_window()
+            answer = QMessageBox.question(
+                self.window, APP_NAME, "An export is still being written.\n\nQuit SeisZone when it "
+                "is finished?", QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+            if answer != QMessageBox.Yes:
+                return
         if not self.window.confirm_quit():
             return
         self.window.prepare_quit()
@@ -332,6 +360,29 @@ class Controller(QObject):
         except Exception:
             log.exception("state save failed")
         self.activation.close()
+        finish_threads()
+
+
+def running_threads():
+    """([export threads], [detection threads]) that are still running."""
+    from . import add_source_dialog, export_dialog
+    return ([t for t in list(export_dialog._RUNNING) if t.isRunning()],
+            [t for t in list(add_source_dialog._RUNNING) if t.isRunning()])
+
+
+def finish_threads(probe_wait=None):
+    """Before the interpreter ends (a QThread destroyed while it runs aborts the process): wait
+    until every export has written its files, and up to `probe_wait` s for detections. Returns
+    the threads still running (then main() ends the process without tearing Python down)."""
+    exports, probes = running_threads()
+    for t in exports:
+        log.info("waiting for an export to finish its files")
+        t.wait()
+    wait = PROBE_QUIT_WAIT if probe_wait is None else probe_wait
+    for t in probes:
+        t.requestInterruption()
+        t.wait(max(0, int(wait * 1000)))
+    return [t for group in running_threads() for t in group]
 
 
 def parse_args(argv):
@@ -387,7 +438,7 @@ def main(argv=None):
         log.exception("engine start failed")
         QMessageBox.critical(None, APP_NAME, f"The data engine could not start:\n\n{e}")
     if config.get("ui", "start_with_windows", False):
-        set_autostart(True)  # keeps the Run entry pointing at this program after an update
+        refresh_autostart()  # repairs a missing / stale entry; never takes over a working one
 
     window = MainWindow(engine, config)
     ctl = Controller(app, config, state, engine, window)
@@ -397,9 +448,23 @@ def main(argv=None):
         window.showMinimized()
     else:
         window.show()
+    problems = [x for x in (config.load_error, state.load_error) if x]
+    if problems:
+        QTimer.singleShot(0, lambda: QMessageBox.warning(
+            window if window.isVisible() else None, APP_NAME,
+            "SeisZone could not read its files at start:\n\n" + "\n\n".join(problems)
+            + ("\n\nSettings are not saved in this session; start SeisZone again later."
+               if config.read_only else "")
+            + ("\n\nRecordings in progress and SeedLink resume positions were not restored."
+               if state.load_error else "")))
     QTimer.singleShot(0, lambda: log.info("%s ready", APP_NAME))
     try:
-        return app.exec()
+        code = app.exec()
     finally:
         ctl.shutdown()
         release_single_instance(mutex)
+    if running_threads()[1]:   # a detection still waits for the network: do not tear Python down
+        log.info("%s ends while a detection is still running", APP_NAME)
+        logging.shutdown()
+        os._exit(code)
+    return code

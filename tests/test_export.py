@@ -192,3 +192,27 @@ def test_speed_one_hour_200sps(data, tmp_path):
     assert took < 10, took
     assert "720000 samples of 720000 expected, 0 gap(s)" in report
     assert os.path.basename(paths[0]) == "WB.KUM.0J.HNZ__20251101T120000Z_60min.mseed"
+
+
+# ---------------------------------------------------------------------- review fixes
+
+def test_low_rate_channel_record_from_an_older_file(tmp_path):
+    """A 0.1 sps record holds ~2 h of samples; it lies in the file of the hour it starts in."""
+    folder = str(tmp_path / "rec")
+    sid = "XX.TEST.00.VMZ"
+    y = np.zeros(2000, dtype=np.int64) + 5                # quiet: many samples per record
+    start = HOUR - 3 * 3600 + 59 * 60                     # 08:59 UTC (HOUR is 12:00)
+    recs = encode(sid, 0.1, start, y)
+    assert recs[0].end - recs[0].start > 2 * 3600
+    record_into(folder, recs[:1], minutes=60)
+    t0, t1 = HOUR - 3600 + 30 * 60, HOUR - 3600 + 50 * 60  # 10:30 -> 10:50
+    written, report = export.export_window([sid], t0, t1, str(tmp_path / "out"), folders=[folder])
+    assert "NO DATA" not in report and "0 gap(s)" in report, report
+    got = read_samples(written[0], sid)
+    assert len(joined(got[sid])) == 120
+
+
+def test_recorded_channels_of_an_offline_station(data):
+    sids = export.recorded_sids([data["folder"]], HOUR - 60, HOUR + 60)
+    assert sids == sorted([Z, N, E])
+    assert export.recorded_sids([data["folder"]], HOUR + 86400 * 10, HOUR + 86400 * 10 + 60) == []

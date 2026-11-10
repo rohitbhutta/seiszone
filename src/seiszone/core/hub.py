@@ -6,6 +6,16 @@ hands its miniSEED records to DataHub.add_record(); from there they go to
   * a per-channel buffer   -> the live waveform views (the last `buffer_minutes` per channel)
   * per-channel statistics -> the channel table (rate, latest sample, latency, gaps, packets)
 
+A record that starts more than FUTURE_LIMIT s ahead of the PC clock and far past the channel's
+newest data (GPS glitch, firmware time jump) still goes to the packet ring and the listeners
+(so it is recorded), but not into the live buffer and the statistics: one bad time stamp
+cannot wipe a channel's live data or pin its latest time in the future.
+
+The packet ring keeps only the raw bytes of each record (the decoded samples are dropped once
+they are in the live buffer). Sequence numbers wrap at 24 bits; the engine starts them where
+the previous run ended (plus a safety gap), so a number a SeedLink client saved is never
+reused for another packet after a restart.
+
 Threading: add_record(), packet waiting and listeners run in the engine's asyncio thread only
 (other threads use Engine.call_soon). The read methods (stats, window, ...) are safe from any
 thread, e.g. the user interface.
@@ -22,6 +32,8 @@ import numpy as np
 log = logging.getLogger("seiszone")
 
 GAP_TOLERANCE = 0.5     # in samples: a jump bigger than this between records is a gap / overlap
+FUTURE_LIMIT = 600      # s ahead of the PC clock before a record's time may be an outlier
+FUTURE_LOG_EVERY = 60   # s between warnings about such records
 
 
 class _Segment:
@@ -138,7 +150,8 @@ class StreamBuffer:
     def _trim(self):
         if not self.segments:
             return
-        cutoff = self.segments[-1].end - self.seconds
+        # a segment far in the future (bad time stamp) must never evict the real data
+        cutoff = min(self.segments[-1].end, time.time() + FUTURE_LIMIT) - self.seconds
         while self.segments and self.segments[0].end <= cutoff:
             self.segments.pop(0)
         if self.segments:
@@ -181,6 +194,8 @@ class DataHub:
         self.started = time.time()
         self.duplicates = 0
         self.decode_errors = 0
+        self.future_rejected = 0    # records with a time far ahead (kept out of the live data)
+        self._future_logged = 0.0
 
     # ------------------------------------------------------------------ writing (engine thread)
     def add_record(self, rec, source_id=""):
@@ -205,25 +220,30 @@ class DataHub:
             self.packets.append((self.seq, rec))
             sid = rec.sid
             st = self.stats.get(sid)
-            if st is None or abs(st["rate"] - rec.rate) > 1e-6:
-                st = self.stats[sid] = self._new_stats(rec, source_id)
-                self.buffers[sid] = StreamBuffer(rec.rate, self.buffer_seconds)
+            if (st is not None and rec.start > now + FUTURE_LIMIT
+                    and rec.start > st["last_end"] + self.buffer_seconds):
+                self._future(st, rec, now)   # recorded and served, but kept out of the live data
             else:
-                tol = GAP_TOLERANCE / rec.rate
-                if rec.start > st["last_end"] + tol:
-                    st["gaps"] += 1
-                    st["gap_seconds"] += rec.start - st["last_end"]
-                    st["last_gap"] = (st["last_end"], rec.start)
-                elif rec.end < st["last_end"] - tol:
-                    st["backfilled"] += 1
-            st["packets"] += 1
-            st["source"] = source_id or st["source"]
-            st["first"] = min(st["first"], rec.start)
-            st["last_end"] = max(st["last_end"], rec.end)
-            st["last_arrival"] = now
-            st["latency"] = now - st["last_end"]
-            st["last_value"] = float(samples[-1])
-            self.buffers[sid].add(rec.start, samples)
+                if st is None or abs(st["rate"] - rec.rate) > 1e-6:
+                    st = self.stats[sid] = self._new_stats(rec, source_id)
+                    self.buffers[sid] = StreamBuffer(rec.rate, self.buffer_seconds)
+                else:
+                    tol = GAP_TOLERANCE / rec.rate
+                    if rec.start > st["last_end"] + tol:
+                        st["gaps"] += 1
+                        st["gap_seconds"] += rec.start - st["last_end"]
+                        st["last_gap"] = (st["last_end"], rec.start)
+                    elif rec.end < st["last_end"] - tol:
+                        st["backfilled"] += 1
+                st["packets"] += 1
+                st["source"] = source_id or st["source"]
+                st["first"] = min(st["first"], rec.start)
+                st["last_end"] = max(st["last_end"], rec.end)
+                st["last_arrival"] = now
+                st["latency"] = now - st["last_end"]
+                st["last_value"] = float(samples[-1])
+                self.buffers[sid].add(rec.start, samples)
+            rec._samples = None   # the ring keeps raw bytes only; the live buffer holds a copy
         for ev in list(self._waiters):
             ev.set()
         for fn in list(self.listeners):
@@ -233,12 +253,22 @@ class DataHub:
                 log.exception("data listener %r failed", fn)
         return True
 
+    def _future(self, st, rec, now):
+        st["future_rejected"] += 1
+        self.future_rejected += 1
+        if now - self._future_logged >= FUTURE_LOG_EVERY:
+            self._future_logged = now
+            log.warning("%s: record time %s is %.0f s ahead of the PC clock - recorded, but not "
+                        "shown live (bad time stamp?)", rec.sid,
+                        time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(rec.start)), rec.start - now)
+
     @staticmethod
     def _new_stats(rec, source_id):
         return {"sid": rec.sid, "net": rec.net, "sta": rec.sta, "loc": rec.loc, "cha": rec.cha,
                 "rate": rec.rate, "source": source_id, "packets": 0, "first": rec.start,
                 "last_end": rec.end, "last_arrival": 0.0, "latency": 0.0, "gaps": 0,
-                "gap_seconds": 0.0, "last_gap": None, "backfilled": 0, "last_value": 0.0}
+                "gap_seconds": 0.0, "last_gap": None, "backfilled": 0, "last_value": 0.0,
+                "future_rejected": 0}
 
     def add_listener(self, fn):
         if fn not in self.listeners:

@@ -8,9 +8,14 @@ TCP ("gcf-tcp"): the instrument streams BTP frames or bare blocks; every BTP fra
     acknowledged, otherwise the instrument resends it.
 
 Every data block becomes 512-byte Steim2 records named with src["gcf"]["net"/"sta"] and
-src["gcf"]["map"] {gcf stream id: [loc, cha]} (fallback gcf.default_seed_name), with a
-sequence counter per channel; repeated blocks (refreshes, BTP resends) are dropped before
-encoding. Status blocks carry text from the instrument and are logged.
+src["gcf"]["map"] {gcf stream id: [loc, cha]}, with a sequence counter per channel; repeated
+blocks (refreshes, BTP resends) are dropped before encoding. A non-empty map is the user's
+channel selection: streams not in it are not used. Only with an empty map (a source added
+without a channel list) are the names made by gcf.default_seed_name. A source belongs to one
+digitiser: src["gcf"]["system_id"] (or, for older configs, the one the probe found, else the
+first one seen) - blocks of other digitisers behind the same Scream server are dropped, so two
+units with the same stream names never mix. Status blocks carry text from the instrument and
+are logged.
 """
 
 import asyncio
@@ -82,9 +87,14 @@ class GcfLink(Link):
         self.kind = src.get("kind", "gcf-udp")
         self.names = src.get("gcf") or {}
         self.seqs = {}                           # "loc.cha" -> next miniSEED sequence number
-        self.seen = collections.OrderedDict()    # (stream id, start) of blocks already used
+        self.seen = collections.OrderedDict()    # (system id, stream id, start) of blocks already used
         self.blocks = 0
         self.last_block = 0.0
+        self.skipped = 0                         # blocks of streams that are not selected
+        self.foreign = 0                         # blocks of another digitiser (system id)
+        found = str((src.get("details") or {}).get("system_id") or "")
+        self.system_id = self.names.get("system_id") or (found if found and "," not in found else None)
+        self._noted = set()                      # stream / system ids already logged as skipped
         self._last_error = ""
 
     @property
@@ -95,16 +105,28 @@ class GcfLink(Link):
         st = super().status()
         st["blocks"] = self.blocks
         st["last_block"] = self.last_block
+        st["skipped"] = self.skipped
+        st["foreign"] = self.foreign
         return st
 
     def handle_block(self, b):
         """Use one decoded block (None = not a block: ignored)."""
         if b is None:
             return
+        if self.system_id is None:
+            self.system_id = b.system_id
+            log.info("GCF %s: using digitiser %s", self.label, b.system_id)
+        if b.system_id != self.system_id:
+            self.foreign += 1
+            if ("sys", b.system_id) not in self._noted:
+                self._noted.add(("sys", b.system_id))
+                log.info("GCF %s: blocks of digitiser %s ignored (this source is %s)", self.label,
+                         b.system_id, self.system_id)
+            return
         if b.is_status:
             log.info("GCF %s status %s: %s", self.label, b.stream_id, (b.status_text or "")[:500])
             return
-        key = (b.stream_id, round(b.start, 3))
+        key = (b.system_id, b.stream_id, round(b.start, 3))
         if key in self.seen:
             self.duplicates += 1
             return
@@ -113,6 +135,13 @@ class GcfLink(Link):
             self.seen.popitem(last=False)
         self.blocks += 1
         self.last_block = time.time()
+        gmap = self.names.get("map") or {}
+        if gmap and b.stream_id not in gmap:   # not selected by the user
+            self.skipped += 1
+            if b.stream_id not in self._noted:
+                self._noted.add(b.stream_id)
+                log.debug("GCF %s: stream %s is not selected - not used", self.label, b.stream_id)
+            return
         for rec in block_records(self.names, b, self.seqs):
             self.feed(rec)
 

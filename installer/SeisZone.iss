@@ -47,7 +47,7 @@ UsedUserAreasWarning=no
 
 [Messages]
 WelcomeLabel2=This installs [name/ver] on your computer.%n%nSeisZone shows, records and shares live seismic data from Guralp Fortimus, Kelunji Gecko and other SeedLink instruments.%n%nSetup also adds one Windows Firewall rule so that a Kelunji Gecko (port 58772) and other programs (SeisZone SeedLink server) can connect to this PC.
-ConfirmUninstall=Remove %1 from this computer?%n%nYour recordings, exports, settings and log files are NOT deleted. They stay in Documents\SeisZone, AppData\Roaming\SeisZone and AppData\Local\SeisZone.
+ConfirmUninstall=Remove %1 from this computer?%n%nA running SeisZone is closed (recordings stop). Your recordings, exports, settings and log files are NOT deleted. They stay in Documents\SeisZone, AppData\Roaming\SeisZone and AppData\Local\SeisZone.
 UninstalledAll=%1 was removed from your computer.%n%nYour recordings, exports, settings and log files were kept.
 
 [Tasks]
@@ -108,26 +108,39 @@ begin
   Sleep(1000);
 end;
 
-{ False = the user cancelled: SeisZone keeps running and nothing is changed }
-function AskAndClose(Detail: String): Boolean;
+var
+  ClosedBySetup: Boolean;
+
+{ SeisZone is closed only once the user has committed (Install clicked / removal confirmed):
+  cancelling the wizard earlier leaves it running. }
+function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
-  Result := True;
+  Result := '';
   if not SeisZoneRunning then Exit;
-  if SuppressibleMsgBox('SeisZone is running and will be closed.' + #13#10#13#10 + Detail,
+  if SuppressibleMsgBox('SeisZone is running and will be closed.' + #13#10#13#10 +
+                        'Recordings that are running continue automatically when SeisZone starts again.',
                         mbInformation, MB_OKCANCEL, IDOK) <> IDOK then
   begin
-    Result := False;
+    Result := 'SeisZone must be closed to install this version. It keeps running; click Cancel to leave Setup.';
     Exit;
   end;
   CloseSeisZone;
+  ClosedBySetup := True;
 end;
 
-function InitializeSetup: Boolean;
+{ A silent update brings SeisZone back (as the normal user, in the tray); an interactive one
+  offers "Launch SeisZone" on its last page. }
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Code: Integer;
 begin
-  Result := AskAndClose('Recordings that are running continue automatically when SeisZone starts again.');
+  if (CurStep = ssPostInstall) and ClosedBySetup and WizardSilent then
+    ExecAsOriginalUser(ExpandConstant('{app}\{#Exe}'), '--minimized', '', SW_SHOWNORMAL, ewNoWait, Code);
 end;
 
-function InitializeUninstall: Boolean;
+{ After "Remove SeisZone from this computer?" was answered Yes (the question says it closes). }
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
-  Result := AskAndClose('Recordings stop now. All files already recorded, your settings and the logs are kept.');
+  if (CurUninstallStep = usUninstall) and SeisZoneRunning then
+    CloseSeisZone;
 end;

@@ -18,11 +18,16 @@ Protocol (SeedLink 3.1, as libslink and standard servers use it):
 
 Data packets are b"SL%06X" % seq + 512-byte record. "DATA n" starts AT packet n (libslink
 sends last received + 1), so a client that was away gets exactly what it missed while the
-ring still holds it; an unknown n means live data only. Without a sequence number streaming
-is live only, unless a begin time was given (then from the oldest held packet ending after
-it). A client that cannot keep up and falls out of the ring continues at the oldest packet
-held. Everything runs in the engine's asyncio loop and never blocks it: packets are sent in
-batches with a yield in between, and a client that takes no data for DRAIN_TIMEOUT is dropped.
+ring still holds it. An n that is not held (pushed out of the ring, or a number of an earlier
+run - the engine keeps the numbers unique across runs) starts at the oldest packet held (that
+ends after the begin time, if one was given): resending is harmless, live only would lose
+data. Without a sequence number streaming is live only, unless a begin time was given (then
+from the oldest held packet ending after it). A client that cannot keep up and falls out of
+the ring continues at the oldest packet held. Commands may end in CR, LF or CR LF (libslink
+and ObsPy send a bare CR). Everything runs in the engine's asyncio loop and never blocks it:
+packets are sent in batches with a yield in between, a client that takes no data for
+DRAIN_TIMEOUT is dropped, one that sends no command for IDLE_TIMEOUT while negotiating is
+closed, and TCP keep-alive notices peers that vanished while no data flows.
 """
 
 import asyncio
@@ -31,6 +36,7 @@ import datetime as dt
 import fnmatch
 import logging
 import re
+import socket
 import struct
 import time
 from xml.sax.saxutils import escape
@@ -46,6 +52,7 @@ PACKET = 520                 # "SL" + 6 hex digits + 512-byte record
 BATCH_PACKETS = 500          # packets taken from the ring per step (then the loop gets a turn)
 DRAIN_TIMEOUT = 120          # seconds a client may refuse data before it is dropped
 WAIT_TIMEOUT = 30            # re-check interval while waiting for new packets
+IDLE_TIMEOUT = 300           # seconds a negotiating client may stay silent
 CACHE_SIZE = 4000            # re-encoded (non-512-byte) records kept for other clients
 CODE_RE = re.compile(r"^[A-Z0-9?*]{1,5}$")
 SELECTOR_RE = re.compile(r"^!?[A-Z0-9?*\-]{0,5}(\.[A-Z?*])?$")
@@ -164,6 +171,38 @@ def build_info_records(xml_text, final=True):
     return out
 
 
+async def _read_cmd(reader):
+    """One command line ending in CR, LF or CR LF (the LF after a CR then arrives as an empty
+    command and is skipped). b"" at the end of the connection."""
+    try:
+        return await reader.readuntil((b"\r", b"\n"))
+    except asyncio.IncompleteReadError as e:
+        return e.partial
+    except asyncio.LimitOverrunError:
+        raise ValueError("command line too long") from None
+
+
+def _keepalive(writer):
+    """TCP keep-alive, so a peer that vanished (VPN down, power cut) is noticed while no data flows."""
+    sock = writer.get_extra_info("socket")
+    if sock is None:
+        return
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    except (OSError, ValueError, AttributeError):
+        return
+    # first probe after 60 s of silence, then every 10 s (the system default waits 2 hours).
+    # asyncio's TransportSocket has no ioctl(), so the TCP_KEEP* options are used.
+    for name, value in (("TCP_KEEPIDLE", 60), ("TCP_KEEPINTVL", 10)):
+        opt = getattr(socket, name, None)
+        if opt is None:
+            continue
+        try:
+            sock.setsockopt(socket.IPPROTO_TCP, opt, value)
+        except (OSError, ValueError, AttributeError):
+            pass
+
+
 def _peer_text(writer):
     p = writer.get_extra_info("peername")
     if isinstance(p, tuple) and len(p) >= 2:
@@ -256,18 +295,19 @@ class SeedLinkServer:
         self.peers.append(info)
         log.info("SeedLink server: client %s connected", info["peer"])
         c = _Conn(reader, writer, info)
+        _keepalive(writer)
         reason = "closed"
         try:
             while True:
-                line = await reader.readline()
+                try:
+                    line = await asyncio.wait_for(_read_cmd(reader), IDLE_TIMEOUT)
+                except TimeoutError:
+                    reason = f"no command for {IDLE_TIMEOUT} s, closed"
+                    break
                 if not line:
                     break
-                done = False
-                for cmd in line.decode("ascii", "replace").replace("\r", "\n").split("\n"):
-                    if cmd.strip() and await self._command(c, cmd.strip()):
-                        done = True
-                        break
-                if done:
+                cmd = line.decode("ascii", "replace").strip()
+                if cmd and await self._command(c, cmd):
                     break
                 await asyncio.wait_for(writer.drain(), DRAIN_TIMEOUT)
         except TimeoutError:
@@ -368,12 +408,17 @@ class SeedLinkServer:
 
     # ------------------------------------------------------------------ streaming
     def _start_seq(self, req, fetch):
-        """First packet for one request: its DATA n when held; the oldest held packet when a
-        begin time was given or for FETCH; otherwise the next packet to arrive (live)."""
+        """First packet for one request: its DATA n when held; the oldest held packet when n is
+        not held (pushed out of the ring, or a number of an earlier run), when a begin time was
+        given or for FETCH; otherwise the next packet to arrive (live)."""
         hub = self.hub
-        if req.seq is not None and hub.has_seq(req.seq):
-            return req.seq
-        if req.begin is not None or req.fetch or fetch:
+        if req.seq is not None:
+            if hub.has_seq(req.seq):
+                req.begin = None        # "DATA n begin": the time only counts when n is not held
+                return req.seq
+            if ((req.seq - hub.next_seq()) & MASK) < 0x800000:
+                return hub.next_seq()   # not arrived yet: the client is up to date
+        if req.seq is not None or req.begin is not None or req.fetch or fetch:
             first = hub.first_seq()
             return hub.next_seq() if first is None else first
         return hub.next_seq()
@@ -388,7 +433,7 @@ class SeedLinkServer:
             try:
                 recs = mseed.encode_records(rec.net, rec.sta, rec.loc, rec.cha, rec.rate, rec.start,
                                             rec.samples, reclen=512)
-            except (ValueError, OverflowError, TypeError) as e:
+            except (ValueError, OverflowError, TypeError, struct.error) as e:
                 if not self._encode_failed:
                     log.warning("SeedLink server: cannot re-encode %r to 512 bytes (%s); skipped", rec, e)
                     self._encode_failed = True
@@ -413,7 +458,7 @@ class SeedLinkServer:
         """While streaming: answer INFO (keep-alive) requests, notice BYE and disconnects."""
         try:
             while True:
-                line = await c.reader.readline()
+                line = await _read_cmd(c.reader)
                 if not line:
                     break
                 parts = line.decode("ascii", "replace").split()
