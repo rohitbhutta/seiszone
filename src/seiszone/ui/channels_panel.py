@@ -1,6 +1,7 @@
 """ChannelsPanel: one row per channel the hub holds - rate, newest sample, latency, packets,
-gaps, source - with a "Show" tick that decides which channels the waveform view plots
-(MainWindow shows new channels by itself and remembers the ones the user unticks as hidden).
+gaps, source - with a "View" tick: the ticked channels open together in a new viewer window
+(Open viewer). A double-click opens a viewer with that channel, the right-click menu opens the
+selected channels or adds them to an open viewer, and rows can be dragged into a viewer.
 
 The table is a model (ChannelModel) behind a sort/filter proxy, so sorting and the filter box
 cost nothing extra. refresh() (every second) only updates the values in place; the model is
@@ -15,7 +16,7 @@ Status colour of a channel, from its latency (now - end of the newest sample):
 import logging
 import time
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt, Signal
+from PySide6.QtCore import QAbstractTableModel, QMimeData, QModelIndex, QSortFilterProxyModel, Qt, Signal
 from PySide6.QtGui import QColor, QGuiApplication, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMenu, QPushButton,
                                QTableView, QVBoxLayout, QWidget)
@@ -24,7 +25,7 @@ from . import theme
 
 log = logging.getLogger("seiszone")
 
-COLUMNS = ["Show", "Channel", "Description", "Rate (sps)", "Latest sample (UTC)", "Latency", "Packets", "Gaps",
+COLUMNS = ["View", "Channel", "Description", "Rate (sps)", "Latest sample (UTC)", "Latency", "Packets", "Gaps",
            "Source"]
 C_SHOW, C_SID, C_DESC, C_RATE, C_LAST, C_LAT, C_PACK, C_GAPS, C_SRC = range(len(COLUMNS))
 NUMERIC = {C_RATE, C_LAT, C_PACK, C_GAPS}
@@ -33,7 +34,7 @@ OK_SECONDS = 30.0
 LATE_SECONDS = 300.0
 LEVEL_TEXT = {"ok": "receiving", "late": "late", "old": "no recent data"}
 LEVEL_COLOR = {"ok": "ok", "late": "warn", "old": "danger"}
-AUTO_SHOW = 12          # MainWindow shows new channels by itself while fewer than this are shown
+CHANNEL_MIME = "application/x-seiszone-channels"   # the same as waveform_view.CHANNEL_MIME
 
 
 def packet_interval(st):
@@ -111,12 +112,11 @@ class ChannelModel(QAbstractTableModel):
             if role == Qt.ToolTipRole and section == C_LAT:
                 return "Time since the end of the newest sample received"
             if role == Qt.ToolTipRole and section == C_SHOW:
-                return (f"Ticked channels are plotted. New channels are shown by themselves (up to {AUTO_SHOW}); "
-                        "a channel you untick stays hidden until you tick it again")
+                return "Ticked channels open together in a new viewer window (Open viewer)"
         return None
 
     def flags(self, index):
-        f = Qt.ItemIsEnabled | Qt.ItemIsSelectable
+        f = Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled
         if index.column() == C_SHOW:
             f |= Qt.ItemIsUserCheckable
         return f
@@ -160,6 +160,18 @@ class ChannelModel(QAbstractTableModel):
         self.toggled.emit()
         return True
 
+    def mimeTypes(self):
+        return [CHANNEL_MIME]
+
+    def mimeData(self, indexes):
+        """Dragged rows: their channel ids, one per line (a viewer window takes them)."""
+        rows = sorted({i.row() for i in indexes if i.isValid()})
+        data = QMimeData()
+        sids = [self.rows[r]["sid"] for r in rows if r < len(self.rows)]
+        data.setData(CHANNEL_MIME, "\n".join(sids).encode("utf-8"))
+        data.setText("\n".join(sids))
+        return data
+
     # --- ours -----------------------------------------------------------------------------
     def set_rows(self, rows):
         """New values; returns True when the model had to be reset (channels came or went)."""
@@ -181,7 +193,9 @@ class ChannelModel(QAbstractTableModel):
 
 
 class ChannelsPanel(QWidget):
-    shownChanged = Signal(list)
+    shownChanged = Signal(list)       # the ticked channels changed (MainWindow keeps them)
+    viewRequested = Signal(list)      # open a new viewer with these channels
+    addRequested = Signal(list, int)  # add these channels to open viewer number n
 
     def __init__(self, engine, config, parent=None):
         super().__init__(parent)
@@ -202,12 +216,18 @@ class ChannelsPanel(QWidget):
         self.filter.textChanged.connect(self._filter_changed)
         self.count = QLabel()
         self.count.setStyleSheet(f"color: {theme.COLORS['muted']};")
-        show_all = QPushButton("Show all")
+        self.viewer_titles = lambda: []   # MainWindow: the names of the open viewers (for "Add to viewer")
+        show_all = QPushButton("Tick all")
         show_all.setToolTip("Tick every channel listed (only those matching the filter)")
         show_all.clicked.connect(self.show_listed)
-        hide_all = QPushButton("Hide all")
+        hide_all = QPushButton("Untick all")
         hide_all.setToolTip("Untick every channel listed (only those matching the filter)")
         hide_all.clicked.connect(self.hide_listed)
+        self.view_button = QPushButton(theme.icon("channel"), "Open viewer")
+        self.view_button.setToolTip("Open a viewer window with the ticked channels (or the selected rows). "
+                                    "Double-click a channel to open it alone; drag channels into an open viewer "
+                                    "to add them")
+        self.view_button.clicked.connect(self.open_viewer)
 
         self.table = QTableView()
         self.table.setModel(self.proxy)
@@ -223,6 +243,8 @@ class ChannelsPanel(QWidget):
         self.table.horizontalHeader().setHighlightSections(False)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.table.setDragEnabled(True)
+        self.table.setDragDropMode(QAbstractItemView.DragOnly)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._context_menu)
         self.table.doubleClicked.connect(self._double_clicked)
@@ -234,6 +256,7 @@ class ChannelsPanel(QWidget):
         top.addWidget(self.count)
         top.addWidget(show_all)
         top.addWidget(hide_all)
+        top.addWidget(self.view_button)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(4, 4, 4, 4)
         lay.setSpacing(4)
@@ -309,28 +332,48 @@ class ChannelsPanel(QWidget):
         listed = set(self._listed())
         self._change_shown([s for s in self.model.shown if s not in listed])
 
+    def to_view(self):
+        """The channels Open viewer opens: the ticked ones (in table order), else the selected rows."""
+        order = [r["sid"] for r in self.model.rows]
+        ticked = [s for s in order if s in self.model.shown] + [s for s in self.model.shown if s not in order]
+        return ticked or self.selected()
+
+    def open_viewer(self):
+        sids = self.to_view()
+        if sids:
+            self.viewRequested.emit(sids)
+        return sids
+
     def _double_clicked(self, index):
         if index.isValid() and index.column() != C_SHOW:
-            self._change_shown([self.model.rows[self.proxy.mapToSource(index).row()]["sid"]])
+            self.viewRequested.emit([self.model.rows[self.proxy.mapToSource(index).row()]["sid"]])
+
+    def build_menu(self, sel):
+        """The right-click menu for the selected channels (separate from showing it, for tests)."""
+        m = QMenu(self)
+        m.addAction(theme.icon("channel"), f"Open in a new viewer ({len(sel)})",
+                    lambda: self.viewRequested.emit(list(sel)))
+        titles = list(self.viewer_titles())
+        sub = m.addMenu("Add to viewer")
+        sub.setEnabled(bool(titles))
+        for n, title in enumerate(titles):
+            sub.addAction(title, lambda n=n: self.addRequested.emit(list(sel), n))
+        m.addSeparator()
+        m.addAction("Tick", lambda: self._change_shown(self.model.shown + [s for s in sel
+                                                                           if s not in self.model.shown]))
+        m.addAction("Untick", lambda: self._change_shown([s for s in self.model.shown if s not in sel]))
+        m.addAction("Tick only these", lambda: self._change_shown(sel))
+        m.addSeparator()
+        m.addAction("Copy channel codes", lambda: QGuiApplication.clipboard().setText("\n".join(sel)))
+        return m
 
     def _context_menu(self, pos):
         sel = self.selected()
         if not sel:
             return
-        m = QMenu(self)
-        only, show, hide = m.addAction("Show only these"), m.addAction("Show"), m.addAction("Hide")
-        m.addSeparator()
-        copy = m.addAction("Copy channel codes")
-        chosen = m.exec(self.table.viewport().mapToGlobal(pos))
+        m = self.build_menu(sel)
+        m.exec(self.table.viewport().mapToGlobal(pos))
         m.deleteLater()
-        if chosen is only:
-            self._change_shown(sel)
-        elif chosen is show:
-            self._change_shown(self.model.shown + [s for s in sel if s not in self.model.shown])
-        elif chosen is hide:
-            self._change_shown([s for s in self.model.shown if s not in sel])
-        elif chosen is copy:
-            QGuiApplication.clipboard().setText("\n".join(sel))
 
     def _filter_changed(self, text):
         self.proxy.setFilterFixedString(text.strip())
@@ -349,7 +392,7 @@ class ChannelsPanel(QWidget):
         total = len(self.model.rows)
         listed = self.proxy.rowCount()
         shown = len(self.model.shown)
-        text = f"{total} channel{'s' if total != 1 else ''}, {shown} shown"
+        text = f"{total} channel{'s' if total != 1 else ''}, {shown} ticked"
         if listed != total:
             text = f"{listed} of {text}"
         self.count.setText(text)

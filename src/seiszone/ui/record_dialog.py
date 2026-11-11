@@ -5,18 +5,23 @@ Stop and Open folder. Bottom: "New recording" - name, folder, channels (all chan
 that appear later, or a chosen list), file length and file layout, with the free disk space of
 the folder. Recordings run until the user stops them and SeisZone never deletes their files;
 low disk space only warns.
+
+The dialog is a window of its own (minimize and maximize buttons, its own taskbar button) that
+can stay open beside SeisZone. A divider between the two parts is dragged up or down to give
+the recordings list more or less room; size, place and divider are kept for the next time
+(config ui "record_geometry" / "record_splitter").
 """
 
 import logging
 import os
 import time
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QByteArray, Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QComboBox, QDialog, QFileDialog, QFormLayout,
-                               QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget,
-                               QListWidgetItem, QMessageBox, QPushButton, QRadioButton, QSizePolicy, QTreeWidget,
-                               QTreeWidgetItem, QVBoxLayout)
+                               QFrame, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget,
+                               QListWidgetItem, QMessageBox, QPushButton, QRadioButton, QScrollArea, QSizePolicy,
+                               QSplitter, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from .. import paths
 from . import theme
@@ -62,7 +67,9 @@ class RecordDialog(QDialog):
         self.config = config
         self.setWindowTitle("Recordings")
         self.setWindowIcon(theme.icon("record"))
-        self.resize(980, 720)
+        self.setWindowFlags(Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowMinimizeButtonHint
+                            | Qt.WindowMaximizeButtonHint | Qt.WindowCloseButtonHint)
+        self.resize(1000, 780)
         c = theme.COLORS
 
         # --- recordings --------------------------------------------------------------------
@@ -186,10 +193,30 @@ class RecordDialog(QDialog):
         bottom.addWidget(close)
         bottom.addWidget(self.start_button)
 
+        inner = QWidget()          # the form scrolls when the divider leaves it little room
+        il = QVBoxLayout(inner)
+        il.setContentsMargins(0, 0, 0, 0)
+        il.addWidget(new)
+        self.new_area = QScrollArea()
+        self.new_area.setWidgetResizable(True)
+        self.new_area.setFrameShape(QFrame.NoFrame)
+        self.new_area.setWidget(inner)
+        self.splitter = QSplitter(Qt.Vertical)
+        self.splitter.addWidget(box)
+        self.splitter.addWidget(self.new_area)
+        self.splitter.setChildrenCollapsible(False)
+        self.splitter.setHandleWidth(9)
+        self.splitter.setStretchFactor(0, 2)
+        self.splitter.setStretchFactor(1, 3)
+        self.splitter.setStyleSheet(
+            f"QSplitter::handle:vertical {{ background: {c['border']}; margin: 3px 120px; border-radius: 1px; }}"
+            f"QSplitter::handle:vertical:hover {{ background: {c['accent']}; }}")
+        self.splitter.handle(1).setToolTip("Drag up or down: a bigger or smaller recordings list")
+        box.setMinimumHeight(110)
         lay = QVBoxLayout(self)
-        lay.addWidget(box, 2)
-        lay.addWidget(new, 3)
+        lay.addWidget(self.splitter, 1)
         lay.addLayout(bottom)
+        self._restore_size()
 
         self._update_channel_list()
         self._update_disk()
@@ -198,6 +225,35 @@ class RecordDialog(QDialog):
         self.timer.setInterval(1000)
         self.timer.timeout.connect(self.refresh)
         self.timer.start()
+
+    # ------------------------------------------------------------------------------------
+    # size and divider
+    # ------------------------------------------------------------------------------------
+    def _restore_size(self):
+        geo = self.config.get("ui", "record_geometry") or ""
+        try:
+            if geo:
+                self.restoreGeometry(QByteArray.fromBase64(geo.encode("ascii")))
+        except (ValueError, UnicodeError):
+            pass
+        sizes = self.config.get("ui", "record_splitter") or []
+        if (isinstance(sizes, list) and len(sizes) == 2 and all(isinstance(x, int) and x > 0 for x in sizes)):
+            self.splitter.setSizes(sizes)
+        else:
+            self.splitter.setSizes([280, 440])
+
+    def _save_size(self):
+        try:
+            self.config.update_section("ui", {
+                "record_geometry": bytes(self.saveGeometry().toBase64()).decode("ascii"),
+                "record_splitter": [int(x) for x in self.splitter.sizes()]})
+        except Exception:
+            log.exception("could not keep the size of the Recordings window")
+
+    def done(self, result):
+        self._save_size()
+        self.timer.stop()
+        super().done(result)
 
     # ------------------------------------------------------------------------------------
     # recordings list
@@ -282,6 +338,23 @@ class RecordDialog(QDialog):
     def _tick(self, on):
         for i in range(self.channel_list.count()):
             self.channel_list.item(i).setCheckState(Qt.Checked if on else Qt.Unchecked)
+
+    def select_channels(self, sids):
+        """Tick exactly these channels for a new recording ("Record these channels")."""
+        want = list(dict.fromkeys(sids))
+        have = {self.channel_list.item(i).data(ID_ROLE) for i in range(self.channel_list.count())}
+        for sid in want:
+            if sid not in have:
+                item = QListWidgetItem(sid)
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setData(ID_ROLE, sid)
+                self.channel_list.addItem(item)
+        for i in range(self.channel_list.count()):
+            item = self.channel_list.item(i)
+            item.setCheckState(Qt.Checked if item.data(ID_ROLE) in want else Qt.Unchecked)
+        if want:
+            self.chosen_radio.setChecked(True)
+        self._update_count()
 
     def ticked(self):
         return [self.channel_list.item(i).data(ID_ROLE) for i in range(self.channel_list.count())

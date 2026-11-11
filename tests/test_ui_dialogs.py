@@ -208,7 +208,7 @@ def test_sources_panel_context_actions_call_the_engine(make_engine, qapp, monkey
 
     menu = panel.build_menu(item)
     assert selected == ["fake1"]
-    find_action(menu, "Show channels (3)").trigger()
+    find_action(menu, "Open in a viewer (3 channels)").trigger()
     assert requested == [["WB.KUM.0J.HNE", "WB.KUM.0J.HNN", "WB.KUM.0J.HNZ"]]
     find_action(menu, "Reconnect").trigger()
     assert ("reconnect", "fake1") in engine.calls
@@ -228,7 +228,7 @@ def test_sources_panel_context_actions_call_the_engine(make_engine, qapp, monkey
     dlg.close()
 
     gecko_menu = panel.build_menu(panel.tree.topLevelItem(1))
-    find_action(gecko_menu, "Show channels (1)").trigger()
+    find_action(gecko_menu, "Open in a viewer (1 channels)").trigger()
     assert requested[-1] == ["SS.SMR03..HHZ"]
     assert panel.properties(None, ("gecko",))[1]["ports"] == [58772]
     assert panel.properties(None, ("server",))[1]["port"] == 18000
@@ -633,6 +633,41 @@ def test_record_dialog_start_and_stop(make_engine, qapp, monkeypatch, tmp_path):
     dlg._select(rid)
     assert not dlg.stop_button.isEnabled() and dlg.open_button.isEnabled()
     dlg.reject()
+
+
+def test_record_dialog_is_a_window_with_a_divider(make_engine, qapp):
+    """Minimize and maximize buttons; the divider between the recordings list and the new
+    recording form is dragged to give the list more room, and kept for the next time."""
+    from PySide6.QtWidgets import QSplitter
+    from seiszone.ui.record_dialog import RecordDialog
+    engine = make_engine()
+    dlg = RecordDialog(engine, engine.config)
+    flags = dlg.windowFlags()
+    assert flags & Qt.WindowMinimizeButtonHint and flags & Qt.WindowMaximizeButtonHint
+    assert flags & Qt.WindowCloseButtonHint and dlg.parent() is None
+    assert isinstance(dlg.splitter, QSplitter) and dlg.splitter.orientation() == Qt.Vertical
+    assert dlg.splitter.widget(0).title() == "Recordings" and dlg.splitter.widget(1) is dlg.new_area
+    assert not dlg.splitter.childrenCollapsible()
+    dlg.resize(1000, 800)
+    dlg.show()
+    pump(qapp, 0.2)
+    dlg.splitter.setSizes([500, 220])                     # the user drags the divider down
+    pump(qapp, 0.1)
+    top = dlg.splitter.sizes()[0]
+    assert top > 400
+    dlg.showMinimized()
+    pump(qapp, 0.1)
+    dlg.reject()                                          # closing keeps size and divider
+    assert engine.config.get("ui", "record_splitter")[0] == top
+    again = RecordDialog(engine, engine.config)
+    again.resize(1000, 800)
+    again.show()
+    pump(qapp, 0.2)
+    assert abs(again.splitter.sizes()[0] - top) <= 30
+    # "Record these channels" from a viewer ticks exactly those channels
+    again.select_channels(["WB.KUM.0J.HNN", "XX.NEW..HHZ"])
+    assert again.chosen_radio.isChecked() and again.ticked() == ["WB.KUM.0J.HNN", "XX.NEW..HHZ"]
+    again.reject()
 
 
 def test_record_dialog_shows_disk_warning(make_engine, qapp):

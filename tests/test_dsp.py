@@ -113,3 +113,63 @@ def test_stats():
     assert s["n"] == 3 and s["min"] == 1.0 and s["max"] == 5.0 and s["mean"] == 3.0
     assert s["rms"] == pytest.approx(np.sqrt(8 / 3))
     assert dsp.stats([])["n"] == 0
+
+
+# ------------------------------------------------------------------------------------------
+# filter specs (the viewer's filters: default band-pass, own designs, per channel)
+# ------------------------------------------------------------------------------------------
+def test_normalize_spec_rejects_junk():
+    assert dsp.normalize_spec(None) is None
+    assert dsp.normalize_spec({"hp": "x", "lp": -3}) is None              # nothing usable: no filter
+    assert dsp.normalize_spec({"hp": 10.0, "lp": 2.0}) is None            # high-pass above the low-pass
+    assert dsp.normalize_spec({"default": 1}) == {"default": True}
+    spec = dsp.normalize_spec({"hp": "0.5", "hp_order": 99, "lp": None, "lp_order": "?"})
+    assert spec == {"hp": 0.5, "hp_order": dsp.MAX_ORDER, "lp": None, "lp_order": dsp.ORDER}
+
+
+def test_default_band_follows_the_sample_rate():
+    assert dsp.default_band(100.0) == pytest.approx((5.0, 45.0))
+    assert dsp.default_band(1.0) == pytest.approx((1 / 30, 1 / 10))
+    y = sine(20.0, 60, 100.0) + sine(0.5, 60, 100.0)
+    out = dsp.apply_spec(y, 100.0, dsp.DEFAULT_SPEC)
+    assert rms_mid(out) == pytest.approx(rms_mid(sine(20.0, 60, 100.0)), rel=0.1)   # 0.5 Hz removed
+
+
+def test_own_design_and_description():
+    spec = dsp.make_spec(hp=2.0, hp_order=2)
+    assert dsp.describe(spec) == "High-pass 2 Hz (order 2)"
+    assert dsp.describe(dsp.make_spec(hp=1.0, lp=10.0)) == "Band-pass 1-10 Hz"
+    assert dsp.describe(dsp.make_spec(lp=0.05)) == "Low-pass 0.05 Hz"
+    assert dsp.describe(None) == "No filter" and dsp.describe(dsp.DEFAULT_SPEC) == "Default band-pass"
+    y = sine(10.0) + sine(0.2)
+    out = dsp.apply_spec(y, RATE, spec)
+    assert rms_mid(out) == pytest.approx(rms_mid(sine(10.0)), rel=0.1)
+    assert np.array_equal(dsp.apply(y, RATE, "bp1-10"), dsp.apply_spec(y, RATE, dsp.spec_of("bp1-10")))
+
+
+def test_response_is_minus_six_db_at_a_corner():
+    """Forwards and backwards: the square of the Butterworth gain, -6 dB at each corner."""
+    spec = dsp.make_spec(hp=1.0, lp=10.0)
+    gains = dsp.response(spec, RATE, [1.0, 3.0, 10.0, 0.01, 80.0])
+    assert gains[0] == pytest.approx(-6.0, abs=0.3) and gains[2] == pytest.approx(-6.0, abs=0.3)
+    assert abs(gains[1]) < 0.5 and gains[3] < -100 and gains[4] < -60
+    assert np.all(dsp.response(None, RATE, [1.0, 2.0]) == 0)
+
+
+def test_pre_roll_of_specs():
+    assert dsp.pre_roll("hp0.1") == pytest.approx(30.0)
+    assert dsp.pre_roll(dsp.make_spec(lp=5.0)) == pytest.approx(0.6)
+    assert dsp.pre_roll(dsp.DEFAULT_SPEC, 1.0) == 60.0                     # 1/30 Hz: capped at 60 s
+    assert dsp.pre_roll(None) == 0.0
+
+
+def test_spectrogram_finds_the_tone():
+    rate = 100.0
+    y = sine(12.5, 60, rate)
+    y[3000:3010] = np.nan                                                   # a gap counts as quiet
+    power, step, first = dsp.spectrogram(y, rate, 64, 200)
+    assert power.shape[1] == 65 and power.shape[0] <= 200
+    freqs = np.linspace(0, rate / 2, 65)
+    assert freqs[int(np.argmax(power.mean(axis=0)))] == pytest.approx(12.5, abs=1.0)
+    assert step >= 64 / rate and first == pytest.approx(64 / rate)
+    assert dsp.spectrogram(y[:100], rate, 64, 200) is None

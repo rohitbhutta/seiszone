@@ -281,10 +281,10 @@ class SettingsDialog(QDialog):
         form = QFormLayout()
         form.addRow("Live data kept in memory", self.buffer)
         form.addRow("Colours", self.theme_box)
-        form.addRow("Default time window", self.window_box)
+        form.addRow("Time window of new viewers", self.window_box)
         lay = QVBoxLayout(w)
         lay.addLayout(form)
-        lay.addWidget(self._hint("Each channel keeps this much live data for the waveform view (10-720 min); "
+        lay.addWidget(self._hint("Each channel keeps this much live data for the viewer windows (10-720 min); "
                                  "more needs more memory: 12 channels at 200 sps for 12 h use about 1.5 GB."))
         lay.addStretch(1)
         return w

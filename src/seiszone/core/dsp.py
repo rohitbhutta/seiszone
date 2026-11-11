@@ -2,17 +2,26 @@
 amplitude spectra and simple statistics. Everything is NaN-safe (NaN marks missing data in
 the views) and never fails on short arrays - the waveform view calls it many times a second.
 
-Filters are zero-phase (scipy.signal.sosfiltfilt of a 4th-order Butterworth in second-order
-sections, which stays stable even for 0.1 Hz at 200 sps).
+Filters are zero-phase (scipy.signal.sosfiltfilt of Butterworth filters in second-order
+sections, which stays stable even for 0.1 Hz at 200 sps). A filter is a "spec":
+
+    {"hp": 1.0, "hp_order": 4, "lp": 10.0, "lp_order": 4}   high-pass and/or low-pass corners in
+                                                            Hz (None: that part is off), orders 1-8
+    {"default": True}                                       the default band-pass of the stream's
+                                                            rate (default_band)
+
+The named FILTERS are the ready-made specs the viewer offers; a viewer's own designs are specs too.
 """
 
 import functools
 import math
 
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 from scipy import signal
 
 ORDER = 4
+MAX_ORDER = 8
 
 FILTERS = {
     "none": {"label": "No filter", "type": None, "freq": None},
@@ -26,24 +35,125 @@ FILTERS = {
 }
 
 
-@functools.lru_cache(maxsize=64)
-def _design(name, rate):
-    """Second-order sections for a filter at a sample rate, or None when nothing is left to
-    filter (e.g. a 20 Hz low-pass on 20 sps data). Corners at/above 0.95 x Nyquist are dropped."""
-    spec = FILTERS[name]
-    kind, freq = spec["type"], spec["freq"]
-    if kind is None or rate <= 0:
+DEFAULT_SPEC = {"default": True}
+
+
+def spec_of(name):
+    """The spec of a named filter (FILTERS key), or None for "none" and unknown names."""
+    f = FILTERS.get(name) or FILTERS["none"]
+    kind, freq = f["type"], f["freq"]
+    if kind == "highpass":
+        return make_spec(hp=freq)
+    if kind == "lowpass":
+        return make_spec(lp=freq)
+    if kind == "bandpass":
+        return make_spec(hp=freq[0], lp=freq[1])
+    return None
+
+
+def make_spec(hp=None, lp=None, hp_order=ORDER, lp_order=ORDER):
+    return {"hp": hp, "hp_order": hp_order, "lp": lp, "lp_order": lp_order}
+
+
+def _corner(value):
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return None
+    return v if math.isfinite(v) and v > 0 else None
+
+
+def _order(value):
+    try:
+        return min(MAX_ORDER, max(1, int(value)))
+    except (TypeError, ValueError):
+        return ORDER
+
+
+def normalize_spec(spec):
+    """A clean copy of a spec from config (any junk becomes "off"), or None when it filters
+    nothing. A high-pass corner at or above the low-pass one is not a filter: None."""
+    if not isinstance(spec, dict):
+        return None
+    if spec.get("default"):
+        return dict(DEFAULT_SPEC)
+    hp, lp = _corner(spec.get("hp")), _corner(spec.get("lp"))
+    if hp is None and lp is None:
+        return None
+    if hp is not None and lp is not None and hp >= lp:
+        return None
+    return make_spec(hp, lp, _order(spec.get("hp_order")), _order(spec.get("lp_order")))
+
+
+def default_band(rate):
+    """(high-pass, low-pass) corners of the default band-pass: 10-30 s period for 1 or 2 sps
+    data, else 0.1 and 0.9 of the Nyquist frequency (5-45 Hz at 100 sps) - it takes the long
+    periods out of a broadband record so it lies flat."""
+    if rate <= 2.0:
+        return 1.0 / 30.0, 1.0 / 10.0
+    nyq = rate / 2.0
+    return 0.1 * nyq, 0.9 * nyq
+
+
+def resolve(spec, rate):
+    """(hp, hp_order, lp, lp_order) of a spec at a sample rate, or None (no filter)."""
+    spec = normalize_spec(spec)
+    if spec is None:
+        return None
+    if spec.get("default"):
+        hp, lp = default_band(rate)
+        return hp, ORDER, lp, ORDER
+    return spec["hp"], spec["hp_order"], spec["lp"], spec["lp_order"]
+
+
+def describe(spec):
+    """Short text of a spec: "Band-pass 1-10 Hz", "High-pass 0.1 Hz (order 2)", "Default band-pass"."""
+    spec = normalize_spec(spec)
+    if spec is None:
+        return "No filter"
+    if spec.get("default"):
+        return "Default band-pass"
+
+    def hz(v):
+        return f"{v:g} Hz" if v >= 1 else f"{v:.3g} Hz"
+
+    hp, lp = spec["hp"], spec["lp"]
+    if hp is not None and lp is not None:
+        text = f"Band-pass {hp:g}-{hz(lp)}"
+    elif hp is not None:
+        text = f"High-pass {hz(hp)}"
+    else:
+        text = f"Low-pass {hz(lp)}"
+    orders = {o for o, v in ((spec["hp_order"], hp), (spec["lp_order"], lp)) if v is not None}
+    if orders != {ORDER}:
+        text += " (order " + "/".join(str(o) for o in sorted(orders)) + ")"
+    return text
+
+
+@functools.lru_cache(maxsize=256)
+def design(hp, hp_order, lp, lp_order, rate):
+    """Second-order sections of the high-pass and/or low-pass at a sample rate, or None when
+    nothing is left to filter. Corners at/above 0.95 x Nyquist are dropped (a low-pass there
+    passes everything; a high-pass there would leave nothing, so the filter is skipped)."""
+    if rate <= 0:
         return None
     limit = 0.95 * rate / 2
-    if kind == "bandpass":
-        lo, hi = freq
-        if lo >= limit:
-            return None
-        if hi >= limit:
-            kind, freq = "highpass", lo
-    elif freq >= limit:
+    if hp is not None and hp >= limit:
         return None
-    return signal.butter(ORDER, freq, btype=kind, fs=rate, output="sos")
+    if lp is not None and lp >= limit:
+        lp = None
+    parts = []
+    if hp is not None:
+        parts.append(signal.butter(hp_order, hp, btype="highpass", fs=rate, output="sos"))
+    if lp is not None:
+        parts.append(signal.butter(lp_order, lp, btype="lowpass", fs=rate, output="sos"))
+    return np.vstack(parts) if parts else None
+
+
+def _design(name, rate):
+    """Sections of a named filter at a sample rate (None: nothing to filter)."""
+    r = resolve(spec_of(name), float(rate))
+    return design(*r, float(rate)) if r else None
 
 
 def _padlen(sos):
@@ -52,11 +162,17 @@ def _padlen(sos):
 
 
 def apply(y, rate, name="none", demean=True):
+    """Filtered copy of y (float64) with a named filter (FILTERS); see apply_spec."""
+    return apply_spec(y, rate, spec_of(name), demean)
+
+
+def apply_spec(y, rate, spec, demean=True):
     """Filtered copy of y (float64). NaN samples stay NaN; they are bridged by the mean while
-    filtering. Arrays too short for the filter are only demeaned."""
+    filtering. Arrays too short for the filter are only demeaned. Without demean a low-pass
+    alone keeps the offset (a high-pass takes it out anyway)."""
     y = np.array(y, dtype=np.float64)
-    kind = FILTERS.get(name, FILTERS["none"])["type"]
-    sos = _design(name, float(rate)) if kind else None
+    r = resolve(spec, float(rate)) if spec else None
+    sos = design(*r, float(rate)) if r else None
     bad = ~np.isfinite(y)
     if (sos is None and not demean) or bad.all():
         return y
@@ -65,10 +181,57 @@ def apply(y, rate, name="none", demean=True):
     y -= mean
     if sos is not None and len(y) > _padlen(sos):
         y = signal.sosfiltfilt(sos, y)
-    if not demean and kind == "lowpass":   # a low-pass alone keeps the offset
+    if not demean and r is not None and r[0] is None:   # a low-pass alone keeps the offset
         y += mean
     y[bad] = np.nan
     return y
+
+
+def pre_roll(spec, rate=0.0):
+    """Seconds of data read before the visible start so a filter's edge transient stays off
+    screen: three periods of the lowest corner frequency, at most 60 s."""
+    if isinstance(spec, str):
+        spec = spec_of(spec)
+    r = resolve(spec, rate if rate > 0 else 100.0) if spec else None
+    if not r:
+        return 0.0
+    low = r[0] if r[0] is not None else r[2]
+    return min(60.0, 3.0 / low) if low and low > 0 else 0.0
+
+
+def response(spec, rate, freqs):
+    """Gain in dB of the filter as applied (forwards and backwards: the square of the
+    Butterworth response, -6 dB at a corner) at these frequencies in Hz. 0 dB everywhere when
+    the spec filters nothing at this rate."""
+    freqs = np.asarray(freqs, dtype=np.float64)
+    r = resolve(spec, float(rate)) if spec else None
+    sos = design(*r, float(rate)) if r else None
+    if sos is None:
+        return np.zeros_like(freqs)
+    _w, h = signal.sosfreqz(sos, worN=freqs, fs=rate)
+    return 40.0 * np.log10(np.maximum(np.abs(h), 1e-12))
+
+
+def spectrogram(y, rate, bins, max_columns):
+    """Power spectrogram for display: (power[columns, bins + 1] from 0 Hz to Nyquist, seconds
+    from one column to the next, seconds from the first sample to the centre of the first
+    column), or None when y is shorter than one segment. Segments of 2*bins samples (Hann
+    window), stepped so there are at most max_columns columns (at least half a segment). NaN
+    counts as the mean (a gap is quiet, not loud)."""
+    y = np.asarray(y, dtype=np.float64)
+    nper = 2 * int(bins)
+    n = len(y)
+    if n < nper or nper < 4 or rate <= 0:
+        return None
+    good = np.isfinite(y)
+    if not good.any():
+        return None
+    y = np.where(good, y, float(np.mean(y[good])))
+    step = max(nper // 2, math.ceil((n - nper + 1) / max(1, int(max_columns))))
+    frames = sliding_window_view(y, nper)[::step]
+    frames = (frames - frames.mean(axis=1, keepdims=True)) * np.hanning(nper)
+    power = np.abs(np.fft.rfft(frames, axis=1)) ** 2
+    return power, step / rate, (nper / 2) / rate
 
 
 def demean(y):

@@ -106,13 +106,11 @@ def window(qapp, tmp_path):
 def test_window_builds_and_timers_tick(qapp, window):
     assert window.windowTitle() == f"SeisZone {VERSION}"
     texts = [a.text() for a in window.toolbar.actions() if a.text()]
-    assert texts == ["Add source", "Remove", "Reconnect", "Record", "Export", "Spectrum", "Settings", "About"]
+    assert texts == ["Add source", "Remove", "Reconnect", "Open viewer", "Record", "Export", "Settings", "About"]
+    assert window.centralWidget() is window.channels           # the waveforms are in viewer windows
     window.show()
     pump(qapp, 2.0)
-    # first start: the first channels are shown as soon as data is there, and remembered
-    shown = window.view.channels()
-    assert shown and set(shown) <= set(window.engine.hub.stream_ids())
-    assert window.config.get("view", "channels") == list(shown)
+    assert window.channels.model.rows and window.viewers == []
     assert "1/1 sources receiving" in window.st["sources"].text()
     assert "Gecko links: 1" in window.st["gecko"].text()
     assert ":18000" in window.st["server"].text() and "1 client" in window.st["server"].text()
@@ -124,8 +122,7 @@ def test_toolbar_dialogs_open_and_close(qapp, window):
     window.show()
     pump(qapp, 0.5)
     for name, opener in (("about", window.open_about), ("record", window.open_record_dialog),
-                         ("export", window.open_export_dialog), ("spectrum", window.open_spectrum),
-                         ("settings", window.open_settings)):
+                         ("export", window.open_export_dialog), ("settings", window.open_settings)):
         dlg = opener()
         assert dlg is not None, name
         pump(qapp, 0.3)
@@ -353,8 +350,9 @@ def test_main_starts_and_quits(qapp, monkeypatch):
         pump(app, 1.5)
         wins = [w for w in app.topLevelWidgets() if isinstance(w, MainWindow) and w.isVisible()]
         seen["windows"] = len(wins)
-        seen["channels"] = wins[0].view.channels() if wins else []
         if wins:
+            v = wins[0].open_viewer(["WB.KUM.0J.HNZ", "WB.KUM.0J.HNN"])
+            seen["channels"] = v.view.channels() if v else []
             wins[0].act_quit.trigger()
         pump(app, 0.2)
         seen["visible_after"] = any(w.isVisible() for w in wins)
@@ -368,6 +366,7 @@ def test_main_starts_and_quits(qapp, monkeypatch):
     calls = [c[0] for c in made[0].calls]
     assert calls.count("start") == 1 and calls.count("stop") == 1
     assert Config().get("ui", "geometry")  # layout saved on quit
+    assert [v["sids"] for v in Config().get("viewers")] == [["WB.KUM.0J.HNZ", "WB.KUM.0J.HNN"]]
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="named mutex")
@@ -460,7 +459,7 @@ def test_quit_lets_a_running_export_finish(qapp, tmp_path):
 
 
 # --------------------------------------------------------------------------------------------
-# channels shown by themselves as they arrive; the ones the user hid stay hidden
+# viewer windows: opened from the ticked channels, saved at quit, opened again at the next start
 # --------------------------------------------------------------------------------------------
 
 def _add_channels(hub, net, sta, chans, rate=5.0, seconds=20):
@@ -488,80 +487,117 @@ def _close(qapp, w):
     pump(qapp, 0.05)
 
 
-def test_new_channels_are_shown_as_they_arrive(qapp, tmp_path):
-    config = Config(str(tmp_path / "config.json"))
-    config.set("view", "channels", ["KA.KAND.0J.HNZ"])     # what the user's first start had saved
-    w = _window_with_hub(config)
-    try:
-        assert w.view.is_live() and w.act_live.isChecked()   # always starts live
-        hub = w.engine.hub
-        first = _add_channels(hub, "KA", "KAND", [("0J", "HNZ")])
-        w.refresh()
-        assert w.view.channels() == first
-        # the other channels of the source arrive a moment later: shown too (it used to keep
-        # only the first channel that had arrived)
-        more = _add_channels(hub, "KA", "KAND", [("0J", "HNN"), ("0J", "HNE"), ("9J", "MNZ"), ("9J", "MNN"),
-                                                 ("9J", "MNE")])
-        w.refresh()
-        assert w.view.channels() == first + sorted(more)
-        assert w.channels.shown() == w.view.channels()
-        assert Config(config.path).get("view", "channels") == w.view.channels()     # persisted
-        # a second instrument with eight channels: filled up to twelve, the rest only listed
-        other = _add_channels(hub, "WB", "KUM", [("0J", f"HN{c}") for c in "ZNE"] + [("9J", f"MN{c}") for c in "ZNE"]
-                              + [("0J", "HN1"), ("0J", "HN2")])
-        w.refresh()
-        assert len(w.view.channels()) == 12
-        assert w.view.channels()[6:] == sorted(other)[:6]
-        w.refresh()
-        assert len(w.view.channels()) == 12
-    finally:
-        _close(qapp, w)
-
-
-def test_channels_the_user_hid_stay_hidden(qapp, tmp_path):
+def test_viewers_open_from_the_ticked_channels_and_come_back(qapp, tmp_path):
     from seiszone.ui.channels_panel import C_SHOW, C_SID
+    from seiszone.ui.viewer_window import ViewerWindow
     config = Config(str(tmp_path / "config.json"))
     w = _window_with_hub(config)
-    sids = _add_channels(w.engine.hub, "KA", "KAND", [("0J", "HNZ"), ("0J", "HNN"), ("0J", "HNE")])
+    _add_channels(w.engine.hub, "KA", "KAND", [("0J", "HNZ"), ("0J", "HNN"), ("0J", "HNE")])
+    gecko = _add_channels(w.engine.hub, "SS", "SMR03", [("00", "HNZ")])
     try:
+        w.show()
+        pump(qapp, 0.2)
         w.refresh()
-        assert w.view.channels() == sorted(sids)
+        assert w.viewers == []                                  # no viewer by itself
+        assert w.open_viewer() is None and "Tick channels" in w.statusBar().currentMessage()
         proxy = w.channels.proxy
-        row = [proxy.data(proxy.index(r, C_SID)) for r in range(proxy.rowCount())].index("KA.KAND.0J.HNN")
-        assert proxy.setData(proxy.index(row, C_SHOW), Qt.Unchecked.value, Qt.CheckStateRole)   # the user unticks
-        assert "KA.KAND.0J.HNN" not in w.view.channels()
-        assert config.get("view", "hidden") == ["KA.KAND.0J.HNN"]
-        w.refresh()
-        assert "KA.KAND.0J.HNN" not in w.view.channels()
+        rows = [proxy.data(proxy.index(r, C_SID)) for r in range(proxy.rowCount())]
+        for sid in ("KA.KAND.0J.HNZ", "KA.KAND.0J.HNE"):
+            assert proxy.setData(proxy.index(rows.index(sid), C_SHOW), Qt.Checked.value, Qt.CheckStateRole)
+        assert Config(config.path).get("view", "channels") == ["KA.KAND.0J.HNZ", "KA.KAND.0J.HNE"]
+        assert "2 ticked" in w.channels.count.text()
+        w.channels.view_button.click()                          # Open viewer: the ticked channels
+        assert len(w.viewers) == 1
+        v1 = w.viewers[0]
+        assert isinstance(v1, ViewerWindow) and v1.parent() is None and v1.isVisible()
+        assert v1.view.channels() == ["KA.KAND.0J.HNE", "KA.KAND.0J.HNZ"]     # table order
+        assert "KA.KAND" in v1.windowTitle()
+        # a double-click opens a second viewer with that channel alone
+        w.channels._double_clicked(proxy.index(rows.index(gecko[0]), C_SID))
+        assert len(w.viewers) == 2 and w.viewers[1].view.channels() == gecko
+        # "Add to viewer" from the right-click menu
+        assert w.channels.viewer_titles() == [v1.title(), w.viewers[1].title()]
+        w.add_to_viewer(["KA.KAND.0J.HNN"], 1)
+        assert w.viewers[1].view.channels() == gecko + ["KA.KAND.0J.HNN"]
+        menu = w.channels.build_menu(["KA.KAND.0J.HNN"])
+        add = [a for a in menu.actions() if a.text() == "Add to viewer"][0]
+        assert add.menu().isEnabled() and len(add.menu().actions()) == 2
+        # the main window's timer drives the viewers
+        v1.view._version += 1
+        w._refresh_viewers()
+        assert all(tr.version == v1.view._version for tr in v1.view._traces)
+        # the Window menu lists them
+        w._fill_window_menu()
+        assert [a.text() for a in w.window_menu.actions() if a.text()][1:3] == [v1.title(), w.viewers[1].title()]
+        # settings of a viewer are saved; closing one by the user forgets it
+        v1.view.set_filter("bp1-10")
+        v1.view.set_trace_color("KA.KAND.0J.HNZ", "#ff0000")
+        second = w.viewers[1]
+        second.close()
+        pump(qapp, 0.1)
+        assert w.viewers == [v1]
+        w._save_timer.timeout.emit()
+        saved = Config(config.path).get("viewers")
+        assert [x["sids"] for x in saved] == [["KA.KAND.0J.HNE", "KA.KAND.0J.HNZ"]]
     finally:
         _close(qapp, w)
-    # next start: the channels arrive again, the hidden one is not shown
+    # quitting keeps the open viewer; the next start opens it again with its settings
+    saved = Config(config.path).get("viewers")
+    assert len(saved) == 1 and saved[0]["filter"] == "bp1-10" and saved[0]["geometry"]
     w = _window_with_hub(config)
     try:
-        _add_channels(w.engine.hub, "KA", "KAND", [("0J", "HNZ"), ("0J", "HNN"), ("0J", "HNE")])
-        w.refresh()
-        assert w.view.channels() == ["KA.KAND.0J.HNE", "KA.KAND.0J.HNZ"]
-        # ticking it again shows it and forgets the hiding
-        proxy = w.channels.proxy
-        row = [proxy.data(proxy.index(r, C_SID)) for r in range(proxy.rowCount())].index("KA.KAND.0J.HNN")
-        assert proxy.setData(proxy.index(row, C_SHOW), Qt.Checked.value, Qt.CheckStateRole)
-        assert w.view.channels()[-1] == "KA.KAND.0J.HNN" and config.get("view", "hidden") == []
-        # "show these channels" from the Sources panel shows a hidden channel again, but does not
-        # hide the others for good (they were not unticked)
-        w.channels.proxy.setData(proxy.index(row, C_SHOW), Qt.Unchecked.value, Qt.CheckStateRole)
-        assert config.get("view", "hidden") == ["KA.KAND.0J.HNN"]
-        w.show_channels(["KA.KAND.0J.HNN"])
-        assert w.view.channels() == ["KA.KAND.0J.HNN"] and config.get("view", "hidden") == []
+        assert w.viewers == []
+        w.show()
+        pump(qapp, 0.3)
+        assert len(w.viewers) == 1
+        v = w.viewers[0].view
+        assert v.channels() == ["KA.KAND.0J.HNE", "KA.KAND.0J.HNZ"] and v.filter_on() and v.filter_key() == "bp1-10"
+        assert v.trace_settings("KA.KAND.0J.HNZ")["color"] == "#ff0000"
+        assert w.channels.shown() == ["KA.KAND.0J.HNZ", "KA.KAND.0J.HNE"]      # the ticks are kept too
+        w.close_viewers()
+        pump(qapp, 0.1)
+        assert w.viewers == []
     finally:
         _close(qapp, w)
+    assert Config(config.path).get("viewers") == []
 
 
-def test_settings_default_window_applied_at_once(qapp, window, monkeypatch):
+def test_sources_panel_and_viewer_open_the_other_windows(qapp, window, monkeypatch):
+    window.show()
+    pump(qapp, 0.3)
+    window.sources.channelsRequested.emit(["WB.KUM.0J.HNZ", "WB.KUM.0J.HNN"])     # "Open in a viewer"
+    assert len(window.viewers) == 1
+    v = window.viewers[0]
+    assert v.view.channels() == ["WB.KUM.0J.HNZ", "WB.KUM.0J.HNN"]
+    rec = v.open_record()                         # Record these channels: the Recordings window, ticked
+    assert rec is window.dialogs["record"] and rec.chosen_radio.isChecked()
+    assert rec.ticked() == ["WB.KUM.0J.HNN", "WB.KUM.0J.HNZ"] and rec.parent() is None
+    exp = v.open_export()                         # Export with the viewer's channels and time range
+    assert exp is window.dialogs["export"] and exp.view_range == pytest.approx(v.view.visible_range())
+    exp.reject()
+    rec.reject()
+    dup = v.duplicate()                           # Ctrl+D: another viewer with the same settings
+    assert len(window.viewers) == 2 and dup.view.channels() == v.view.channels()
+    pump(qapp, 0.1)
+    # an Export window already open is replaced by one with the new viewer's channels and range
+    first = window.open_export_dialog()
+    second = dup.open_export()
+    pump(qapp, 0.1)
+    assert second is not first and window.dialogs["export"] is second
+    assert second.view_range == pytest.approx(dup.view.visible_range())
+    second.reject()
+    # a filter saved or deleted in one viewer: every other viewer looks it up again
+    seen = []
+    monkeypatch.setattr(dup.view, "filters_changed", lambda: seen.append("dup"))
+    monkeypatch.setattr(v.view, "filters_changed", lambda: seen.append("v"))
+    v.view.filtersSaved.emit()
+    assert seen == ["dup"]
+
+
+def test_settings_default_window_is_for_new_viewers(qapp, window, monkeypatch):
     monkeypatch.setattr(app_mod, "autostart_enabled", lambda: False)   # never the real registry
     monkeypatch.setattr(app_mod, "set_autostart", lambda on: True)
-    assert window.view._window != 3600
     window.config.update_section("view", {"window_seconds": 3600})    # what Settings > OK saves
     window._settings_applied()
-    assert window.view._window == 3600 and window.view.window_box.currentData() == 3600
-    window.view.filter_box.setCurrentIndex(window.view.filter_box.findData("hp1"))   # saves the view
-    assert Config(window.config.path).get("view", "window_seconds") == 3600
+    v = window.open_viewer(["WB.KUM.0J.HNZ"])
+    assert v.view._window == 3600 and v.view.window_box.currentData() == 3600

@@ -20,7 +20,7 @@ are carried over and cleaned up.
 | G3 | Güralp Fortimus over SeedLink (18000) and GCF (1567 UDP/TCP) | `core/seedlink_client.py`, `core/gcf_link.py` |
 | G4 | Kelunji Gecko SMR03 via USR-W610 connecting in on TCP 58772 (no SRC Streams) | `core/gecko.py` |
 | G5 | Any other SeedLink server (e.g. IN.DDI, CI.TEDT) | `core/seedlink_client.py` |
-| G6 | Live multi-channel waveform view: time window, zoom, scaling, filters, units | `ui/waveform_view.py`, `core/dsp.py` |
+| G6 | Live multi-channel viewer windows (any number, each its own window): time window, amplitude zoom, scaling, window and per-channel filters with a filter design, units, offsets, spectrograms, cursors, details (1.1.0) | `ui/viewer_window.py`, `ui/waveform_view.py`, `ui/filter_dialog.py`, `ui/viewer_dialogs.py`, `core/dsp.py` |
 | G7 | Channel table: rate, latest sample, latency, gaps, packets, status colour | `ui/channels_panel.py` |
 | G8 | Continuous recording to miniSEED, user start/stop only, **never deletes data**, survives restarts | `core/recorder.py` |
 | G9 | Export any time window (per-channel or combined file + report) | `core/export.py`, `ui/export_dialog.py` |
@@ -83,7 +83,10 @@ seiszone/
       main_window.py   MainWindow
       sources_panel.py SourcesPanel
       channels_panel.py ChannelsPanel
-      waveform_view.py WaveformView
+      waveform_view.py WaveformView (the plots of a viewer window)
+      viewer_window.py ViewerWindow (a viewer: menus, right-click menu, keys, status bar)
+      viewer_dialogs.py ScaleDialog, DetailsWindow, CalibrationDialog, ChannelPickerDialog
+      filter_dialog.py filter list, saved filters, FilterDesignDialog
       add_source_dialog.py  AddSourceDialog
       record_dialog.py      RecordDialog (start/stop recordings, list)
       export_dialog.py      ExportDialog
@@ -244,6 +247,12 @@ whole seconds.
 stable for short arrays: pad / fall back to demean); `envelope(t0, rate, y, max_points) ->
 (x, y)` min/max decimation for plotting; `spectrum(y, rate) -> (freq, amplitude)` (Welch);
 `stats(y)` min/max/mean/rms.
+Filter specs (1.1.0): `{"hp", "hp_order", "lp", "lp_order"}` (Hz or None, orders 1-8) or
+`{"default": True}`; `normalize_spec`, `spec_of(name)`, `make_spec`, `default_band(rate)` (0.1-0.9
+x Nyquist; 10-30 s period at 1-2 sps), `resolve(spec, rate)`, `describe(spec)`,
+`design(hp, hpo, lp, lpo, rate)` (cascaded Butterworth sections, cached), `apply_spec(y, rate,
+spec, demean)`, `pre_roll(spec, rate)`, `response(spec, rate, freqs)` (dB as applied: |H|² of
+the forwards-backwards filter), `spectrogram(y, rate, bins, max_columns)` (Hann STFT power).
 
 ### 5.14 Engine — `core/engine.py`
 `Engine(config, state=None, hub=None)`; `start()` (thread "seiszone-engine" with its own asyncio
@@ -278,20 +287,54 @@ for a detection). `--minimized` starts in the tray. "Start with Windows" writes
 run_seiszone.py); at start the value is only rewritten when missing or its program no longer
 exists, so a source or build-folder run never takes over the installed SeisZone's entry.
 
-`MainWindow(engine, config)`: toolbar (Add source +, Remove, Reconnect, Record, Export,
-Spectrum, Settings), left dock `SourcesPanel`, centre `WaveformView`, bottom docks
-`ChannelsPanel` and `LogPanel`, status bar (sources receiving, Gecko links, SeedLink server
-clients, recording state, free disk). Timers: waveforms 250 ms, tables 1 s.
-Window geometry saved in `config["ui"]`. Every channel id the hub has not shown before in this
-run is added to the view by itself (`_show_new_channels`, up to `channels_panel.AUTO_SHOW` = 12)
-unless it is in `config["view"]["hidden"]`; unticking a channel in the Channels panel adds it to
-`"hidden"`, ticking it removes it; the Sources panel's "show these channels" only un-hides.
+`MainWindow(engine, config)` (1.1.0): toolbar (Add source +, Remove, Reconnect, Open viewer,
+Record, Export, Settings, About), left dock `SourcesPanel`, centre `ChannelsPanel`, bottom dock
+`LogPanel`, Window menu (new viewer, the open viewers, close all), status bar (sources
+receiving, Gecko links, SeedLink server clients, recording state, free disk). Timers: viewers
+250 ms, tables 1 s. Window geometry and dock state (`saveState(LAYOUT_VERSION = 2)`) saved in
+`config["ui"]`. The waveforms are only in viewer windows: `open_viewer(sids=None, state=None)`
+(default: the ticked channels in table order, else the selected rows) makes a parentless
+`ViewerWindow` (own taskbar button); `viewers` list; `add_to_viewer(sids, n)`;
+`save_viewers()` -> `config["viewers"]` (each `ViewerWindow.state()`), 0.5 s after a change and
+at `prepare_quit()` (which closes them with `quitting=True`, so they stay saved); a viewer the
+user closes is dropped; `restore_viewers()` once, at the first show (a start in the tray opens
+them when the window is first shown). The Channels table's "View" ticks are kept in
+`config["view"]["channels"]`; Open viewer / double-click / "Open in a new viewer" emit
+`viewRequested`, "Add to viewer" `addRequested(sids, n)`; rows drag as `CHANNEL_MIME`. The
+Sources panel's "Open in a viewer" opens one. `open_record_dialog(sids, only=False)`: the
+Recordings window is parentless with minimize / maximize buttons (shown non-modal) and a
+vertical `QSplitter` between the recordings list and the scrolling "New recording" form; size
+and divider in `config["ui"]["record_geometry" / "record_splitter"]`; `select_channels(sids)`.
+
+`ViewerWindow(engine, config, state=None, host=None)`: menu bar (Channels, View, Filter,
+Tools, Window, Help), the `WaveformView` with its bar, status bar with the mouse readout,
+`state()` = view state + `title` + `geometry`, signals `closedByUser`, `stateChanged`. Right-click
+menu in two parts (channel: Colour C, Scale S, Scale others to match Ctrl+S, Details D, Filter
+submenu, Offset submenu, Locked offset, Spectrogram P, contrast, Calibration, Remove Del; window:
+Background, Lane lines L, Overlay O, Spectrogram size, All spectrograms Ctrl+P, Sort by,
+Channels, Label, Clear Ctrl+Del, No caption F11, Duplicate Ctrl+D, Spectrum / Export / Record /
+Picture). Shift+drag selection menu: zoom, spectrum, export, use as noise / signal in the
+filter design. Keys: Up/Down amplitude, Left/Right window, Ctrl+Left/Right scroll, Home, 1,
+Ctrl+1, Pause/Space, F, Ctrl+F, N, Z, +/-, Ctrl +/-, F5, Ctrl+Shift+P print, Ctrl+W close.
+
+`WaveformView(engine, config, parent=None, state=None)` settings: window (`WINDOWS` 10 s - 60
+min), `filter_on` / `filter` (a `filter_dialog.filter_catalogue` key: "default", the FILTERS
+names, "saved:<name>", "custom" with `custom` spec), units counts / physical / physical_g
+(acceleration in g), scale auto / common / fixed + `fixed`, `demean`, `gain` (x2 steps, 1/64 -
+4096), `lanes`, `overlay`, `background`, `spec_size` (32-256), per channel `traces[sid]` =
+`TRACE_DEFAULTS` keys that differ: color, scale, filter (None = window's, "off", a key,
+"custom") + custom, offset (None = follow demean, else counts subtracted), locked, spectrogram,
+contrast. Grid rows per channel: 3i trace, 3i+1 spectrogram, 3i+2 time axis / gap. A trace is
+filtered (`apply_spec`, no demean), its mean (`mean_pre`, what Null fixes) taken from the full
+data; offset and units are applied to the decimated points only. Physical units: config
+`calibration[sid]` first, then StationXML. Wheel: amplitude; Shift: window; Ctrl: scroll (pauses).
 
 `WaveformView`, Live: the right edge is "now minus the smallest arrival lag seen in the last
 `LAG_MEMORY` = 60 s" (follows the data, not the PC clock; lags over `LAG_LIMIT` = 300 s and
 backfill faster than real time are ignored; a growing lag grows at most `LAG_GROWTH` = 0.5 s/s so
-the edge never steps back; a changed channel set takes its first lag at once). The wheel while
-Live steps the window length and stays Live; while Paused it zooms; a drag pauses. Paused is an
+the edge never steps back; a changed channel set takes its first lag at once). The wheel zooms
+the amplitude and Shift+wheel steps the window length (both stay Live); Ctrl+wheel and a drag
+pause. Paused is an
 amber "Paused – back to live" button and returns to Live after `AUTO_LIVE` = 120 s without mouse
 use on the plots. The view always starts Live.
 

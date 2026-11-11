@@ -225,12 +225,13 @@ def test_application_end_to_end(tmp_path):
         window = MainWindow(engine, cfg)
         window.show()
 
-        # ---- live data: channels in the table, traces in the view
+        # ---- live data: channels in the table, traces in a viewer window opened with them
         def channels_listed():
             return {r["sid"] for r in window.channels.model.rows} >= set(SIDS)
         assert pump(app, 20, channels_listed), "channels did not appear in the Channels table"
+        viewer = window.open_viewer(SIDS)
         pump(app, 8)
-        assert set(window.view.channels()) == set(SIDS)
+        assert viewer is not None and viewer.view.channels() == SIDS
         assert engine.status()["sources"][SOURCE_ID]["state"] == links.RECEIVING
         stats = engine.hub.stats_snapshot()
         for sid in SIDS:
@@ -238,7 +239,7 @@ def test_application_end_to_end(tmp_path):
             assert stats[sid]["first"] <= time.time() - HISTORY + 5, "history not backfilled"
             assert time.time() - stats[sid]["last_end"] < 5, "live data late"
             assert stats[sid]["gaps"] == 0
-        for tr in window.view._traces:
+        for tr in viewer.view._traces:
             x, y = tr.curve.getData()
             assert x is not None and len(x) > 100 and np.isfinite(y).any(), f"no trace data for {tr.sid}"
         assert "1/1 sources receiving" in window.st["sources"].text()
@@ -270,6 +271,7 @@ def test_application_end_to_end(tmp_path):
         os.makedirs(SCREENS, exist_ok=True)
         shot = os.path.join(SCREENS, "integration.png")
         assert window.grab().save(shot)
+        assert viewer.grab().save(os.path.join(SCREENS, "integration_viewer.png"))
 
         # ---- export the last 30 s: older part from the live buffer, newest from the files
         t1 = min(engine.hub.stats_snapshot()[sid]["last_end"] for sid in SIDS)
@@ -309,8 +311,6 @@ def test_application_end_to_end(tmp_path):
     assert stop_time < 6, f"engine stop took {stop_time:.1f} s"
     assert not engine.running and not any(t.name == "seiszone-engine" for t in threading.enumerate())
     assert errors.lines == [], "errors were logged:\n" + "\n".join(errors.lines)
-    # the instrument's channels, then the Gecko's as they joined (new channels are shown by themselves;
-    # within each group in the order they arrived)
-    saved = Config(cfg.path).get("view", "channels")
-    assert cfg.source(SOURCE_ID)["enabled"] and len(saved) == len(SIDS) + len(GECKO_SIDS)
-    assert set(saved[:len(SIDS)]) == set(SIDS) and set(saved[len(SIDS):]) == set(GECKO_SIDS)
+    # the viewer that was open at the quit is saved, to open again at the next start
+    saved = Config(cfg.path).get("viewers")
+    assert cfg.source(SOURCE_ID)["enabled"] and [v["sids"] for v in saved] == [SIDS]

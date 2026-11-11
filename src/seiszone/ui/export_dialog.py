@@ -121,7 +121,7 @@ class ExportDialog(QDialog):
         self.view_button = QPushButton("The view's range")
         self.view_button.setAutoDefault(False)
         self.view_button.setEnabled(self.view_range is not None)
-        self.view_button.setToolTip("The time range visible in the waveform view")
+        self.view_button.setToolTip("The time range visible in the viewer this export was opened from")
         self.view_button.clicked.connect(lambda: self.set_window(*self.view_range))
         quick.addWidget(self.view_button)
         quick.addStretch(1)

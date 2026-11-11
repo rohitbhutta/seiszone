@@ -4,7 +4,7 @@ per channel.
 Welch's method needs evenly spaced samples, so a channel with gaps in the window is analysed on
 its longest gap-free part; the caption says so. Units are counts / sqrt(Hz), or physical units
 when the station's StationXML gives a sensitivity (the dialog offers the same choice as the
-waveform view). The window is fixed when the dialog opens - it does not follow live data.
+viewer windows). The window is fixed when the dialog opens - it does not follow live data.
 """
 
 import logging

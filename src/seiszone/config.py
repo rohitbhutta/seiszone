@@ -21,7 +21,15 @@ user interface warns). state.json is handled the same way (State.load_error / re
   "recording": {"folder": "<Documents>\\SeisZone\\Recordings", "file_minutes": 60, "layout": "channel"},
   "buffer_minutes": 60,                          # live data kept in memory per channel
   "view": {"window_seconds": 300, "filter": "none", "units": "counts", "scale": "auto",
-           "channels": [], "demean": true},
+           "channels": [], "demean": true},       # defaults of new viewers; channels: the ticked ones
+  "viewers": [{"sids": [...], "title": "", "window": 300, "filter_on": false, "filter": "default",
+               "custom": null, "units": "counts", "scale": "auto", "fixed": 1000, "demean": true,
+               "gain": 1, "lanes": true, "overlay": false, "background": null, "spec_size": 64,
+               "traces": {"WB.KUM.0J.HNZ": {"color": "#ff0000", "scale": 2, "filter": "bp1-10",
+                                            "offset": null, "locked": false, "spectrogram": true}},
+               "geometry": "<base64>"}],      # the viewer windows open at the last quit
+  "filters": [{"name": "Teleseisms", "spec": {"hp": 0.02, "hp_order": 4, "lp": 0.1, "lp_order": 4}}],
+  "calibration": {"SS.SMR03..HNZ": {"sensitivity": 407880.0, "units": "M/S**2"}},  # counts per unit
   "ui": {"theme": "dark" | "light", "minimize_to_tray": true, "start_minimized": false,
          "start_with_windows": false, "geometry": "", "state": ""}
 }
@@ -57,6 +65,9 @@ DEFAULTS = {
     "buffer_minutes": 60,
     "view": {"window_seconds": 300, "filter": "none", "units": "counts", "scale": "auto",
              "channels": [], "demean": True},
+    "viewers": [],
+    "filters": [],
+    "calibration": {},
     "ui": {"theme": "dark", "minimize_to_tray": True, "start_minimized": False,
            "start_with_windows": False, "geometry": "", "state": ""},
 }
@@ -248,6 +259,14 @@ class Config:
     def set(self, section, key, value, save=True):
         with self.lock:
             self.data.setdefault(section, {})[key] = copy.deepcopy(value)
+            if save:
+                self.save()
+
+    def set_value(self, key, value, save=True):
+        """A top-level entry that is not a section of settings ("viewers", "filters",
+        "calibration")."""
+        with self.lock:
+            self.data[key] = copy.deepcopy(value)
             if save:
                 self.save()
 

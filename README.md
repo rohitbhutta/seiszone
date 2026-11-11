@@ -8,7 +8,7 @@ SeedLink so other programs can read it.
 It is built only on open standards: SeedLink 3, Guralp GCF / Scream protocol, Kelunji Gecko
 telemetry framing, miniSEED 2 and FDSN StationXML.
 
-Version 1.0.2. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
+Version 1.1.0. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
 
 ## Features
 
@@ -18,9 +18,15 @@ Version 1.0.2. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
   `10.8.0.182:1567` (GCF), or any public SeedLink server.
 * **Kelunji Gecko SMR03** over a USR-W610 serial-to-WiFi/LAN converter: the Gecko connects
   *in* to this PC on TCP port 58772. No other software is needed.
-* **Live waveforms**: many channels stacked, time window 30 s to 60 min, filters (high-pass,
-  low-pass, band-pass), counts or physical units (from StationXML), auto / common / fixed
-  scaling, mouse zoom and pan, Live / Pause.
+* **Viewer windows**: tick channels and open them in a viewer window of its own (any number,
+  saved and reopened at the next start). Many channels stacked or overlaid, time window 10 s
+  to 60 min, amplitude zoom, the window filter switched on and off (F) and every channel's own
+  filter (default band-pass, high-pass, low-pass, band-pass, own designs in a filter design
+  window, saved filters), counts or physical units (StationXML or a calibration you enter,
+  acceleration also in g), auto / common / fixed scaling and per-channel scale factors, offsets
+  (null, zero, locked), spectrograms, time and amplitude cursors, details (mean, min, max, RMS),
+  colours, sorting, Shift+drag selection (zoom, spectrum, export), print and picture, keys for
+  everything, Live / Pause.
 * **Channel table**: sample rate, newest sample, latency, packets, gaps, source, with a
   green / amber / red status colour.
 * **Continuous recording** to miniSEED (lossless: the received records are written unchanged),
@@ -33,6 +39,7 @@ Version 1.0.2. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
   with a report of samples and gaps.
 * **SeedLink server** (port 18000, the standard SeedLink port) that offers every channel SeisZone receives to other
   programs, on this PC (`127.0.0.1:18000`) or on the network.
+* **Recordings window** of its own (minimize, maximize, a divider to size the recordings list).
 * **Spectrum** of the visible data, tray icon, start with Windows, dark and light colours,
   program log file.
 * Runs as a normal Windows user; only the installer needs administrator rights.

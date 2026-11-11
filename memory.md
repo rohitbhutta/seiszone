@@ -46,12 +46,14 @@ port 80 (status, data streams, StationXML ~0.9 MB — about a minute over the sl
 Tests must never contact these or listen on 58772, 18000 or 18010 (the real Gecko connects to
 58772; the old service holds 18010; SeisZone's own server runs on 18000).
 
-## Status (2026-11-10, version 1.0.2)
+## Status (2026-11-11, version 1.1.0)
 
 * Project at `C:\D Drive\Only Coding\seiszone` (git repository, local only - not pushed).
-* **Version 1.0.2** (see "Version 1.0.2" below): SeisZone's SeedLink server moves to port 18000.
-  1.0.1 is commit 5c60396. The user installed 1.0.0 and was installing 1.0.1 when asking for
-  the port change; `build/dist/SeisZoneSetup.exe` (1.0.2) upgrades either in place (same AppId).
+* **Version 1.1.0** (see "Version 1.1.0" below): the live waveforms are in viewer windows of
+  their own with the full set of display tools of the user's earlier viewer (filters per window
+  and per channel, filter design, offsets, spectrograms, cursors, ...); the Recordings window can
+  be minimized / maximized and has a divider. `build/dist/SeisZoneSetup.exe` (1.1.0) upgrades
+  any earlier version in place (same AppId). 1.0.2 is commit 4092142, 1.0.1 5c60396.
 * All modules written and integrated: spine, SeedLink client/server, Gecko receiver, GCF link,
   probe, StationXML, recorder, export, DSP, engine + CLI, every UI panel/dialog, icon, installer,
   README, user guide. `python -m pytest tests -q`: 211 passed (about 2 min; 188 in 1.0.0 after
@@ -79,6 +81,67 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   new resume command `DATA n <time>` is accepted by all three Fortimus servers; each backfilled
   ~22-24 h of history (~5,850 packets per source) with 0 gaps and no errors.
 * Not yet done: Gecko field test; user installs and accepts 1.0.2.
+
+### Version 1.1.0 (2026-11-11)
+
+Why: the user (with screenshots of the Recordings window and of their earlier viewer's trace
+window and its right-click menu) asked for: (1) a minimize option on the Recordings window and a
+way to drag the recordings list bigger / smaller "like the channels section of the main
+window"; (2) the viewer NOT inside the application by default: the user selects channels and a
+viewer pops up as a new window; (3) every option of the earlier viewer's trace window (they
+named the bandpass filter on/off, filters for each channel, parameters and the right-click menu)
+researched and built in. Research source: that viewer's own help pages and user guide PDF that
+are installed on this PC (read only; its name is not written anywhere in SeisZone).
+
+* `ui/viewer_window.py` `ViewerWindow` (parentless QMainWindow: own taskbar button, minimize,
+  maximize; menus Channels / View / Filter / Tools / Window / Help; right-click menu in two parts
+  - channel: Colour C, Scale S, Scale others to match Ctrl+S, Details D, Filter submenu, Offset
+  submenu (follow mean removal / Null / Zero Z), Locked offset, Amplitude cursors on this
+  channel, Spectrogram P (+/- contrast), Calibration, Remove Del; window: Background colour, Lane
+  lines L, Overlay O, Spectrogram size, All spectrograms Ctrl+P, Sort by, Channels, Label, Clear
+  Ctrl+Del, No caption F11 (full screen), Duplicate Ctrl+D, Spectrum / Export / Record these
+  channels / Save picture; Print Ctrl+Shift+P; Shift+drag selection menu: zoom, spectrum,
+  export, use as noise / signal in the filter design; status bar mouse readout).
+* `ui/waveform_view.py` rewritten around the old speed design: tool bar Channels, Window -/+,
+  Amplitude -/x1/+ (x2 steps), Filter on/off split button (F) with the filter list, Units
+  (counts / physical / physical with acceleration in g), Scale (auto / common / fixed), Remove
+  mean, Null (N), Time cursors (dt and 1/dt), Ampl cursors, Live. Wheel = amplitude, Shift+wheel
+  = window, Ctrl+wheel = scroll (pauses). Per-channel settings in `traces[sid]` (colour, scale,
+  own filter, offset, locked, spectrogram, contrast); `state()` saved per viewer.
+* `ui/filter_dialog.py`: filter list (Default band-pass = 0.1-0.9 x Nyquist, 10-30 s at 1-2 sps;
+  the ready-made filters; saved filters in config "filters"), `FilterDesignDialog` (high-/low-pass
+  on/off, corner in Hz or s, order 1-8, response graph, left click = HP corner, right click = LP
+  corner, noise / signal spectra, Apply / OK / Auto-apply / Save).
+* `ui/viewer_dialogs.py`: ScaleDialog, DetailsWindow (mean/min/max/diff/RMS, offset box,
+  lines on the plot), CalibrationDialog (counts per unit -> config "calibration", used before
+  StationXML), ChannelPickerDialog.
+* `core/dsp.py` filter specs (`apply_spec`, `default_band`, `describe`, `response`,
+  `spectrogram`, ...). `config.py`: DEFAULTS `viewers`, `filters`, `calibration`; `set_value()`.
+* Main window: Channels table in the centre ("View" ticks + Open viewer, double-click, right-click
+  "Open in a new viewer" / "Add to viewer", drag rows into a viewer), Log at the bottom, Window
+  menu; no auto-shown channels any more (the "hidden" list is gone). Viewers open at quit are
+  saved (`config["viewers"]`) and reopened at the next start (at the first show of the window).
+* Recordings window: parentless, minimize / maximize / close buttons, shown non-modal; vertical
+  QSplitter between the list and the scrolling "New recording" form; size and divider kept in
+  `config["ui"]["record_geometry" / "record_splitter"]`; a viewer's "Record these channels"
+  ticks exactly its channels.
+* An independent 3-agent review found 18 defects in the new code (ambiguous Ctrl+F, overlay
+  leftovers, Shift+drag losing the selection, overlay Y ranges, filter design dialog tracking,
+  saved filter caching / broadcast, menu leaks, Details lines left on Esc, L/O keys, export
+  window reuse, seconds rounding, untouched default band-pass); all fixed with a regression test
+  each (tests/test_ui_viewer.py end).
+* Tests: tests/test_ui_viewer.py (new), test_dsp, test_ui_data, test_ui_shell, test_ui_dialogs,
+  test_integration updated. `python -m pytest tests -q`: 252 passed.
+* Test process exit: the test run (also at 1.0.2) now and then crashed AFTER all tests passed
+  (access violation in Qt teardown / DLL unload). tests/conftest.py `pytest_unconfigure` now ends
+  the process with TerminateProcess (exit code = pytest's result; os._exit alone still crashes
+  in the DLL unload). The 12 x 60 min speed test measures without GC pauses and measures once
+  more when a busy PC makes it miss (1.0.2 code missed its 150 ms limit 3 of 4 times alone;
+  1.1.0 is faster: 73-135 ms).
+* The frozen 1.1.0 build contains the new modules (checked in the PyInstaller TOC). A GUI run of
+  the frozen exe was not possible: the user's own SeisZone was running (single-instance mutex);
+  the check only brought the user's window forward.
+* Screens: build/screens/viewer.png, main_window.png, record_window.png, filter_design.png.
 
 ### Version 1.0.2 (2026-11-10)
 
@@ -217,9 +280,9 @@ User files: `%APPDATA%\SeisZone` (config.json, state.json, stationxml\), `%LOCAL
 
 ## Open items / next steps
 
-1. (done) 1.0.1 committed as 5c60396; 1.0.2 committed after its build.
-2. User installs build/dist/SeisZoneSetup.exe 1.0.2 (UAC) and checks that the view is live, shows
-   all channels, and "SeedLink server :18000" is listening.
+1. (done) 1.0.1 = 5c60396, 1.0.2 = 4092142; 1.1.0 committed after its build.
+2. User installs build/dist/SeisZoneSetup.exe 1.1.0 (UAC), ticks channels and opens viewers,
+   tries the filters / right-click menu, and checks "SeedLink server :18000" is listening.
 3. The user chooses to stop the old GeckoSeedLink service: installer task "stopoldservice" or
    the Sources panel's "Free the port" / "Stop old service". Then check that "Gecko receiver"
    shows the SMR03 link (W610 redial time unknown, usually within a minute) - the SMR03 field test.

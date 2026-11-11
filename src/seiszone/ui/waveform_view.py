@@ -1,38 +1,53 @@
-"""WaveformView: the live multi-channel seismogram display.
+"""WaveformView: the live multi-channel seismogram display inside a viewer window
+(ui.viewer_window). A window can hold any channels; any number of viewer windows can be open,
+each with its own settings, and the same channel can be in several of them.
 
-One plot row per channel, stacked vertically, X axes linked, UTC time axis under the
-bottom row, a caption per trace (channel, site, min/max of what is visible). Above the plots a
-bar with window length, filter, units, scale, mean removal and Live/Pause.
+One plot row per channel, stacked vertically, X axes linked, UTC time axis under the bottom row,
+a caption per trace (channel, site, filter, min/max of what is visible). Above the plots a tool
+bar: window length (time zoom), amplitude zoom, filter on/off with its choice, units, scale mode,
+mean removal, null offsets, time / amplitude cursors and Live/Pause.
+
+Whole-window settings: time window, filter (switched with F, chosen from filter_dialog's list or
+designed), units (counts, physical, physical with acceleration in g), scale mode (each trace
+fills its row / one common range / fixed ±), amplitude zoom (x2 steps), mean removal, lane
+lines, overlay (all traces in one row), background colour, spectrogram height.
+Per-channel settings (the viewer window's right-click menu): colour, scale factor, own filter
+(or none), offset (follow the mean removal / fixed: null = the mean now, zero = absolute values),
+locked offset (Null offsets leaves it), spectrogram on/off and its contrast.
+
+Mouse: the wheel zooms the amplitude, Shift+wheel steps the window length (both stay live),
+Ctrl+wheel scrolls in time and dragging pans (both pause); Shift+drag selects a time range
+(selectionMade: the viewer offers zoom, spectrum, export, filter design); a double-click goes
+live again. Channels dragged from the Channels table are added (CHANNEL_MIME).
 
 Speed is the main design constraint (12 channels x 200 sps x 60-minute windows, redrawn four
 times a second on an ordinary office PC):
 
-  * plots are built only when the channel list changes, and from light parts (a ViewBox, a
-    left and a bottom axis in one shared grid layout) instead of pyqtgraph's PlotItem, which
-    costs ~40 ms each (context menu, four axes, a layout pass per plot): twelve channels appear
-    in well under half a second; a refresh only calls setData on the existing curves;
+  * plots are built only when the channel list or the layout changes, and from light parts (a
+    ViewBox, a left and a bottom axis in one shared grid layout) instead of pyqtgraph's
+    PlotItem, which costs ~40 ms each; a refresh only calls setData on the existing curves;
   * only the visible time range is read from the hub, and it is reduced with min/max decimation
     (dsp.envelope) to about two points per screen pixel - no peak is ever lost on screen;
   * a trace is recomputed only when the view moved by at least one pixel (in a 60-minute window
     that is every ~2.5 s) or a setting changed, and one refresh spends at most BUDGET seconds
     (FORCED_BUDGET right after a change) on recomputing, round-robin over the traces - filters
-    on long windows never freeze the window;
+    and spectrograms on long windows never freeze the window;
   * nothing is done while the window is hidden or minimized.
 
 Gaps in the data are NaN between the hub's segments, so the line breaks there.
 
 Live and paused: the live right edge follows the data, not the PC clock (see _live_range), so
-the newest sample touches the right edge whatever the clock offset. The mouse wheel over a plot
-steps the window length while live (it stays live); dragging (panning) pauses, and while paused
-the wheel zooms. A paused view is shown by an amber "Paused – back to live" button and follows
-the newest data again by itself after AUTO_LIVE seconds without mouse use on the plots (the
-button or a double-click return at once). SeisZone always starts live.
+the newest sample touches the right edge whatever the clock offset. A paused view is shown by an
+amber "Paused – back to live" button and follows the newest data again by itself after AUTO_LIVE
+seconds without mouse use on the plots (the button or a double-click return at once). A viewer
+always starts live.
 
 Every trace keeps at least MIN_ROW pixels: when more channels are shown than fit, the plots
 scroll vertically (the time axis is under the last trace).
 """
 
 import collections
+import json
 import logging
 import math
 import time
@@ -40,36 +55,48 @@ import weakref
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import QEvent, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QDoubleValidator, QFont, QIcon
+from PySide6.QtCore import QEvent, QRectF, Qt, QTimer, Signal
+from PySide6.QtGui import QActionGroup, QColor, QCursor, QDoubleValidator, QFont, QIcon
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QGraphicsGridLayout, QGraphicsWidget, QHBoxLayout,
-                               QLabel, QLineEdit, QScrollArea, QStackedWidget, QToolButton, QVBoxLayout,
-                               QWidget)
+                               QLabel, QLineEdit, QMenu, QScrollArea, QSizePolicy, QStackedWidget, QToolButton,
+                               QVBoxLayout, QWidget)
 
 from ..core import dsp
 from . import theme
+from .filter_dialog import (SAVED_PREFIX, FilterDesignDialog, delete_filter, filter_catalogue, filter_label,
+                            filter_spec, saved_filters)
 
 log = logging.getLogger("seiszone")
 
-WINDOWS = [(30, "30 s"), (60, "1 min"), (120, "2 min"), (300, "5 min"), (600, "10 min"), (1800, "30 min"),
-           (3600, "60 min")]
-UNITS = [("counts", "Counts"), ("physical", "Physical units")]
+CHANNEL_MIME = "application/x-seiszone-channels"   # channel ids, one per line (Channels table -> viewer)
+WINDOWS = [(10, "10 s"), (30, "30 s"), (60, "1 min"), (120, "2 min"), (300, "5 min"), (600, "10 min"),
+           (1800, "30 min"), (3600, "60 min")]
+UNITS = [("counts", "Counts"), ("physical", "Physical units"), ("physical_g", "Physical, acceleration in g")]
 SCALES = [("auto", "Auto (each trace)"), ("common", "Common (all traces)"), ("fixed", "Fixed ±")]
+SPEC_SIZES = [32, 64, 128, 256]
+GAIN_RANGE = (1.0 / 64, 4096.0)   # amplitude zoom of the whole window, in x2 steps
+G = 9.80665                      # m/s² per g
+ACCEL_UNITS = {"M/S**2", "M/S2", "M/SEC**2", "M/S/S"}
 BUDGET = 0.030          # seconds of recomputing per refresh; the rest waits for the next refresh
 FORCED_BUDGET = 0.25    # the same right after a setting / channel change (the user waits for it)
 PAUSED_RELOAD = 2.0     # re-read a trace at least this often (backfilled data, paused views)
-SENS_TTL = 30.0         # seconds a looked-up StationXML sensitivity is trusted (files may be added)
+SENS_TTL = 30.0         # seconds a looked-up sensitivity is trusted (StationXML files may be added)
 AXIS_WIDTH = 66         # left axis width: the same on every plot so the traces line up
 TIME_AXIS_HEIGHT = 26   # the time axis under the bottom plot
 ROW_GAP = 4             # space between two plots (the hidden bottom axis of the upper one)
 MIN_ROW = 24            # pixels of a trace at least (more channels than fit: the plots scroll)
+LABEL_STEP = 16         # pixels between the stacked captions of overlaid traces
 AUTO_LIVE = 120.0       # a paused view follows live data again after this many seconds without mouse use
 LAG_MEMORY = 60.0       # seconds an observed arrival lag counts for the live right edge
 LAG_LIMIT = 300.0       # larger arrival lags are not followed (old data: the view anchors to it instead)
 LAG_GROWTH = 0.5        # seconds per second a growing arrival lag may grow (the live edge never steps back)
 WHEEL_NOTCH = 120       # one mouse wheel notch in Qt's angle-delta units (touchpads send parts of it)
+SPEC_RANGE_DB = 50.0    # colour range of a spectrogram below its brightest level
+SPEC_STEP_DB = 6.0      # one contrast step (+/- keys): the data x2 or /2
 UNIT_NAMES = {"M/S": "m/s", "M/S**2": "m/s²", "M/S2": "m/s²", "M/SEC": "m/s", "M": "m", "PA": "Pa",
-              "V": "V", "COUNTS": "counts"}
+              "V": "V", "COUNTS": "counts", "G": "g"}
+TRACE_DEFAULTS = {"color": None, "scale": 1.0, "filter": None, "custom": None, "offset": None, "locked": False,
+                  "spectrogram": False, "contrast": 0}
 
 
 def nearest_window(seconds):
@@ -90,60 +117,95 @@ def fmt_value(v, physical):
     return f"{v:.0f}" if abs(v) >= 10 else f"{v:.2f}"
 
 
-def pre_roll(name):
-    """Seconds of data read before the visible start so a filter's edge transient stays
-    off screen: three periods of the lowest corner frequency, at most 60 s."""
-    spec = dsp.FILTERS.get(name) or {}
-    freq = spec.get("freq")
-    if not spec.get("type") or freq is None:
-        return 0.0
-    low = min(freq) if isinstance(freq, (tuple, list)) else freq
-    return min(60.0, 3.0 / low) if low > 0 else 0.0
+def fmt_gain(g):
+    return f"×{g:g}" if g >= 1 else f"×1/{1 / g:g}"
+
+
+def pre_roll(spec, rate=0.0):
+    """Seconds read before the visible start so a filter's edge transient stays off screen."""
+    return dsp.pre_roll(spec, rate)
+
+
+def component(sid):
+    """Z, N, E, 1, 2, ... (the last letter of the channel code) for sorting."""
+    return sid.rsplit(".", 1)[-1][-1:] if sid else ""
+
+
+SORTS = {
+    "channel": ("Channel code", lambda sid, rate: sid),
+    "component": ("Component (Z, N, E, then others)",
+                  lambda sid, rate: ("ZNE".find(component(sid)) % 4 if component(sid) in "ZNE" else 3,
+                                     component(sid), sid)),
+    "station": ("Station, then component", lambda sid, rate: (".".join(sid.split(".")[:2]), sid)),
+    "rate": ("Sample rate (highest first)", lambda sid, rate: (-rate, sid)),
+}
+
+
+def spectrogram_lut():
+    """Colours of a spectrogram, quiet to loud: deep purple, blue, cyan, green, yellow, red."""
+    cmap = pg.ColorMap([0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+                       [(26, 5, 51), (44, 63, 209), (24, 192, 216), (76, 208, 76), (242, 225, 76), (232, 64, 42)])
+    return cmap.getLookupTable(0.0, 1.0, 256)
 
 
 class _TraceLabel(pg.LabelItem):
     """Trace caption pinned to the top-left corner of its plot, on a translucent background so
-    the trace under it stays readable."""
+    the trace under it stays readable; the channel under the mouse gets a frame."""
 
     def __init__(self, vb):
         super().__init__("", justify="left")
         self.bg = QColor(0, 0, 0, 0)
+        self.frame = None
         self.setParentItem(vb)
         self.anchor(itemPos=(0, 0), parentPos=(0, 0), offset=(4, 2))
         self.setZValue(50)
 
     def paint(self, p, *args):
         p.fillRect(self.boundingRect(), self.bg)
+        if self.frame is not None:
+            p.setPen(pg.mkPen(self.frame))
+            p.drawRect(self.boundingRect().adjusted(0, 0, -1, -1))
 
 
 class _PlotBox(pg.ViewBox):
-    """ViewBox that offers its mouse wheel to the view first (while live the wheel steps the
-    window length instead of zooming). The view is held weakly: no reference cycle through Qt."""
+    """ViewBox that offers its mouse wheel and drags to the view first (the wheel zooms the
+    amplitude, Shift+drag selects). The view is held weakly: no reference cycle through Qt."""
 
-    def __init__(self, on_wheel):
+    def __init__(self, view):
         super().__init__(enableMenu=False)
-        self._on_wheel = weakref.WeakMethod(on_wheel)
+        self._view = weakref.ref(view)
 
     def wheelEvent(self, ev, axis=None):
-        handler = self._on_wheel()
-        if handler is not None and handler(ev):
+        view = self._view()
+        if view is not None and view._on_wheel(ev, self):
             return
         super().wheelEvent(ev, axis)
 
+    def mouseDragEvent(self, ev, axis=None):
+        view = self._view()
+        if view is not None and view._on_drag(ev, self):
+            return
+        super().mouseDragEvent(ev, axis)
+
 
 class _Trace:
-    """One channel on screen - its plot parts and what was last computed for it."""
+    """One plot row on screen - its plot parts and what was last computed for the channel in it."""
 
-    __slots__ = ("sid", "vb", "left", "bottom", "curve", "label", "t0", "t1", "version", "computed", "lo", "hi",
-                 "yrange", "text", "units", "has_sens")
+    __slots__ = ("sid", "vb", "left", "bottom", "curve", "label", "host", "svb", "saxis", "image", "t0", "t1",
+                 "version", "computed", "lo", "hi", "yrange", "text", "units", "has_sens", "stats", "mean_pre",
+                 "filter_text", "rate", "nyq", "lines", "tcur", "ykey")
 
     def __init__(self, vb, left, bottom, curve, label):
         self.vb, self.left, self.bottom, self.curve, self.label = vb, left, bottom, curve, label
+        self.host = vb          # the ViewBox drawing the curve (the first row's in overlay mode)
+        self.svb = self.saxis = self.image = None   # spectrogram row, made when first needed
+        self.lines = {}         # details lines: "mean" / "min" / "max" -> InfiniteLine
+        self.tcur = []          # this row's two time cursor lines
         self.reset(None)
 
     def items(self):
         """The layout items of this row."""
-        return self.left, self.vb, self.bottom
+        return [x for x in (self.left, self.vb, self.bottom, self.saxis, self.svb) if x is not None]
 
     def reset(self, sid):
         """Show another channel in this plot: forget everything computed for the old one."""
@@ -152,41 +214,68 @@ class _Trace:
         self.version = -1
         self.computed = 0.0
         self.lo = self.hi = None
-        self.yrange = None
+        self.yrange = None      # the Y range shown (with padding)
+        self.ykey = None        # the Y range last asked for (unchanged: nothing to do)
         self.text = None
         self.units = "counts"
         self.has_sens = True
+        self.stats = None
+        self.mean_pre = None
+        self.filter_text = ""
+        self.rate = 0.0
+        self.nyq = None
         self.curve.setData([], [])
         self.label.setText("")
+        if self.image is not None:
+            self.image.clear()
 
 
 class WaveformView(QWidget):
     rangeChanged = Signal(float, float)
+    changed = Signal()                        # a setting worth saving changed (the viewer saves its state)
+    contextRequested = Signal(object, object)   # channel id (or None), global position
+    selectionMade = Signal(float, float, object, object)   # t0, t1, channel id (or None), global position
+    hoverChanged = Signal(str)                # mouse readout: time, channel, value
+    channelsDropped = Signal(list)            # channel ids dropped on the plots (already added)
+    channelsButton = Signal()                 # the Channels button: the viewer offers its channel list
+    filtersSaved = Signal()                   # a saved filter was added, replaced or deleted (all viewers follow)
 
-    def __init__(self, engine, config, parent=None):
+    def __init__(self, engine, config, parent=None, state=None):
         super().__init__(parent)
         self.engine = engine
         self.config = config
+        st = state if isinstance(state, dict) else {}
         v = config.get("view") or {}
-        self._window = nearest_window(v.get("window_seconds", 300))
-        self._filter = v.get("filter") if v.get("filter") in dsp.FILTERS else "none"
-        self._units = "physical" if v.get("units") == "physical" else "counts"
-        self._scale = v.get("scale") if v.get("scale") in dict(SCALES) else "auto"
+        self._window = nearest_window(st.get("window", v.get("window_seconds", 300)))
+        self._filter_on, self._filter_key, self._custom = self._initial_filter(st, v)
+        units = st.get("units", v.get("units"))
+        self._units = units if units in dict(UNITS) else "counts"
+        scale = st.get("scale", v.get("scale"))
+        self._scale = scale if scale in dict(SCALES) else "auto"
         try:
-            self._fixed = abs(float(v.get("fixed_scale", 1000.0))) or 1000.0
+            self._fixed = abs(float(st.get("fixed", v.get("fixed_scale", 1000.0)))) or 1000.0
         except (TypeError, ValueError):
             self._fixed = 1000.0
-        self._demean = bool(v.get("demean", True))
+        self._demean = bool(st.get("demean", v.get("demean", True)))
+        self._gain = self._clamp_gain(st.get("gain", 1.0))
+        self._lanes = bool(st.get("lanes", True))
+        self._overlay = bool(st.get("overlay", False))
+        self._bg = st.get("background") if QColor.isValidColorName(str(st.get("background") or "")) else None
+        self._spec_size = st.get("spec_size") if st.get("spec_size") in SPEC_SIZES else 64
+        self._tset = {}            # channel id -> its own settings (only those differing from TRACE_DEFAULTS)
+        for sid, ts in (st.get("traces") or {}).items():
+            if isinstance(sid, str) and isinstance(ts, dict):
+                self._tset[sid] = {k: ts[k] for k in TRACE_DEFAULTS if k in ts}
         self._live = True          # always starts live (never saved)
         self._anchored = False     # live range ends at the newest (old) data, not at now
         self._lags = collections.deque()   # (PC time, arrival lag) of the newest-sample advances
         self._lag = None           # the arrival lag the live edge uses (None: never seen)
         self._lag_at = 0.0         # PC time it was last worked out
         self._relag = False        # another channel set: the next lag measured replaces _lag at once
-        self._latest = None       # newest sample end of the shown channels at the last look
+        self._latest = None        # newest sample end of the shown channels at the last look
         self._latest_at = 0.0      # PC time that value last changed
         self._touched = time.monotonic()   # last mouse use on the plots (a paused view returns AUTO_LIVE later)
-        self._wheel = 0            # wheel delta not yet turned into a window step
+        self._wheel = 0            # wheel delta not yet turned into a step
         self._sids = []
         self._traces = []
         self._version = 0          # bumped by every setting change: every trace recomputes
@@ -195,8 +284,22 @@ class WaveformView(QWidget):
         self._range = None         # (t0, t1) while no plot exists
         self._emitted = None
         self._sens = {}            # sid -> (looked up at, (value, units) | None)
+        self._rates = {}           # sid -> sample rate (from the hub statistics)
+        self._specs = {}           # filter key cache: (key, custom json) -> spec
+        self._active = None        # channel under the mouse
+        self._menu_sid = None      # channel of the last right click
+        self._hovered = None       # the last channel the mouse was over (kept when it leaves the plots)
+        self._selecting = False    # a Shift+drag selection is under way (decided when the drag starts)
+        self._tcur = None          # time cursors: [fraction, fraction] of the window, or None
+        self._acur = None          # amplitude cursors: [sid, fraction, fraction] of its range, or None
+        self._acur_lines = []
+        self._moving_cursor = False
+        self._sel_items = []       # selection regions while Shift+dragging
+        self._details = set()      # channels whose Details window shows mean / min / max lines
+        self._design = None        # the open filter design dialog
         self._built = False
         self._colors = {}          # the theme colours last applied
+        self._lut = spectrogram_lut()
 
         pg.setConfigOptions(antialias=False, background=theme.COLORS["plot_bg"],
                             foreground=theme.COLORS["text"])
@@ -206,19 +309,27 @@ class WaveformView(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
-        lay.addWidget(self._build_bar())
+        self.bar = self._build_bar()
+        lay.addWidget(self.bar)
         self.stack = QStackedWidget()
-        self.empty = QLabel("No channels shown.\nTick channels in the Channels table to see them here.")
+        self.empty = QLabel("No channels in this viewer.\nDrag channels here from the Channels table, or use "
+                            "the Channels button.")
         self.empty.setAlignment(Qt.AlignCenter)
+        self.empty.setAcceptDrops(True)
+        self.empty.installEventFilter(self)
         self.glw = pg.GraphicsView()
         root = QGraphicsWidget()
         self.grid = QGraphicsGridLayout(root)
         self.grid.setContentsMargins(2, 6, 10, 2)
         self.grid.setSpacing(0)
         self.glw.setCentralItem(root)
+        self.glw.setFocusPolicy(Qt.StrongFocus)
+        self.glw.setAcceptDrops(True)
+        self.glw.viewport().setAcceptDrops(True)
         self.glw.installEventFilter(self)
-        self.glw.viewport().installEventFilter(self)   # mouse use on the plots (the auto-return to live)
+        self.glw.viewport().installEventFilter(self)   # mouse use (auto-return to live), drops
         self.glw.scene().sigMouseClicked.connect(self._on_click)
+        self.glw.scene().sigMouseMoved.connect(self._on_mouse_moved)
         self.scroll = QScrollArea()          # the plots scroll when they do not fit
         self.scroll.setFrameShape(QFrame.NoFrame)
         self.scroll.setWidgetResizable(False)
@@ -236,6 +347,30 @@ class WaveformView(QWidget):
         self._reload.timeout.connect(self._reload_now)
         self._built = True
         self._apply_colors()
+        sids = [s for s in (st.get("sids") or []) if isinstance(s, str)]
+        if sids:
+            self.set_channels(sids)
+
+    @staticmethod
+    def _initial_filter(st, v):
+        """(on, key, custom) from a saved viewer, or from the old single-view setting."""
+        if "filter_on" in st:
+            key = st.get("filter") if isinstance(st.get("filter"), str) else "default"
+            return bool(st.get("filter_on")), key, dsp.normalize_spec(st.get("custom"))
+        old = v.get("filter")
+        if old in dsp.FILTERS and old != "none":
+            return True, old, None
+        return False, "default", None
+
+    @staticmethod
+    def _clamp_gain(g):
+        try:
+            g = float(g)
+        except (TypeError, ValueError):
+            return 1.0
+        if not math.isfinite(g) or g <= 0:
+            return 1.0
+        return min(GAIN_RANGE[1], max(GAIN_RANGE[0], 2.0 ** round(math.log2(g))))
 
     # ------------------------------------------------------------------------------------
     # building
@@ -247,91 +382,121 @@ class WaveformView(QWidget):
             cb.addItem(text, key)
         cb.setCurrentIndex(max(0, cb.findData(current)))
         cb.setToolTip(tip)
+        cb.setFocusPolicy(Qt.NoFocus)   # arrow keys stay with the plots (time / amplitude zoom)
         return cb
+
+    @staticmethod
+    def _tool(text, tip, checkable=False):
+        b = QToolButton()
+        b.setText(text)
+        b.setToolTip(tip)
+        b.setCheckable(checkable)
+        b.setFocusPolicy(Qt.NoFocus)
+        b.setAutoRaise(True)
+        return b
 
     def _build_bar(self):
         bar = QFrame()
         bar.setObjectName("waveformBar")
         h = QHBoxLayout(bar)
-        h.setContentsMargins(6, 4, 6, 4)
-        h.setSpacing(6)
+        h.setContentsMargins(6, 3, 6, 3)
+        h.setSpacing(4)
 
         def caption(text):
             lab = QLabel(text)
             lab.setObjectName("barCaption")
             return lab
 
+        self.channels_button = self._tool("Channels", "Choose the channels of this viewer (you can also drag "
+                                                      "channels here from the Channels table)")
+        self.channels_button.clicked.connect(self.channelsButton)
         self.window_box = self._combo([(w, t) for w, t in WINDOWS], self._window,
-                                      "Length of the time window shown")
-        self.filter_box = self._combo([(k, f["label"]) for k, f in dsp.FILTERS.items()], self._filter,
-                                      "Zero-phase Butterworth filter applied to every trace")
+                                      "Length of the time window shown (Left / Right arrow keys, Shift+wheel)")
+        self.time_in = self._tool("−", "Shorter time window (Left arrow, Shift+wheel up)")
+        self.time_out = self._tool("+", "Longer time window (Right arrow, Shift+wheel down)")
+        self.time_in.clicked.connect(lambda: self.step_window(-1))
+        self.time_out.clicked.connect(lambda: self.step_window(1))
+        self.amp_out = self._tool("−", "Smaller traces (Down arrow, mouse wheel down)")
+        self.amp_in = self._tool("+", "Larger traces (Up arrow, mouse wheel up)")
+        self.gain_label = self._tool(fmt_gain(self._gain), "Amplitude zoom of every trace - click to reset it "
+                                                           "to ×1 (Home)")
+        self.amp_out.clicked.connect(lambda: self.zoom_amplitude(-1))
+        self.amp_in.clicked.connect(lambda: self.zoom_amplitude(1))
+        self.gain_label.clicked.connect(self.reset_amplitude)
+
+        self.filter_button = self._tool("Filter", "", checkable=True)
+        self.filter_button.setPopupMode(QToolButton.MenuButtonPopup)
+        self.filter_menu = QMenu(self.filter_button)
+        self.filter_menu.aboutToShow.connect(self._fill_filter_menu)
+        self.filter_button.setMenu(self.filter_menu)
+        self.filter_button.setChecked(self._filter_on)
+        self.filter_button.toggled.connect(self.set_filter_on)
         self.units_box = self._combo(UNITS, self._units,
-                                     "Counts, or physical units from the station's StationXML response")
+                                     "Counts, or physical units from the station's StationXML response (or the "
+                                     "calibration you entered for a channel)")
         self.scale_box = self._combo(SCALES, self._scale,
-                                     "Auto: each trace fills its plot. Common: the same amplitude scale for "
-                                     "all traces. Fixed: ± the value given")
+                                     "Auto: each trace fills its row. Common: the same amplitude range for all "
+                                     "traces. Fixed: ± the value given. The amplitude zoom applies to all three")
         # bound methods only (no lambdas holding self: they would keep the widget alive forever)
         self.window_box.currentIndexChanged.connect(self._set_window)
-        self.filter_box.currentIndexChanged.connect(self._set_filter)
         self.units_box.currentIndexChanged.connect(self._set_units)
         self.scale_box.currentIndexChanged.connect(self._set_scale)
         self.fixed_edit = QLineEdit(f"{self._fixed:g}")
         self.fixed_edit.setValidator(QDoubleValidator(1e-12, 1e15, 12, self))
         self.fixed_edit.setFixedWidth(80)
-        self.fixed_edit.setToolTip("Half height of every plot, in the units shown")
+        self.fixed_edit.setToolTip("Half height of every row, in the units shown")
         self.fixed_edit.editingFinished.connect(self._fixed_edited)
         self.demean_box = QCheckBox("Remove mean")
         self.demean_box.setChecked(self._demean)
-        self.demean_box.setToolTip("Subtract the mean of the visible data from each trace")
+        self.demean_box.setFocusPolicy(Qt.NoFocus)
+        self.demean_box.setToolTip("Subtract the mean of the visible data from each trace (channels with a "
+                                   "fixed offset keep theirs)")
         self.demean_box.toggled.connect(self._set_demean)
+        self.null_button = self._tool("Null", "Null offsets (N): fix each trace's offset at its mean now, so it "
+                                              "sits centred in its row (channels with a locked offset keep "
+                                              "theirs)")
+        self.null_button.clicked.connect(lambda: self.null_offsets())
+        self.tcur_button = self._tool("Time cursors", "Two time cursors: drag them; the time between them and "
+                                                      "its frequency are shown here", checkable=True)
+        self.tcur_button.toggled.connect(self.set_time_cursors)
+        self.acur_button = self._tool("Ampl cursors", "Two amplitude cursors on the channel under the mouse "
+                                                      "(or the first): drag them; the difference is shown here",
+                                      checkable=True)
+        self.acur_button.toggled.connect(lambda on: self.set_amp_cursors(on))
         self.live_button = QToolButton()
         self.live_button.setCheckable(True)
         self.live_button.setChecked(True)
+        self.live_button.setFocusPolicy(Qt.NoFocus)
         self.live_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.live_button.toggled.connect(self.set_live)
         self.note = QLabel()
         self.note.setObjectName("barNote")
+        self.note.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.range_label = QLabel()
         self.range_label.setObjectName("barRange")
 
-        for w in (caption("Window"), self.window_box, caption("Filter"), self.filter_box, caption("Units"),
-                  self.units_box, caption("Scale"), self.scale_box, self.fixed_edit, self.demean_box,
-                  self.live_button):
+        def sep():
+            line = QFrame()
+            line.setFrameShape(QFrame.VLine)
+            line.setObjectName("barSep")
+            return line
+
+        for w in (self.channels_button, sep(), caption("Window"), self.window_box, self.time_in, self.time_out,
+                  sep(), caption("Amplitude"), self.amp_out, self.gain_label, self.amp_in, sep(),
+                  self.filter_button, caption("Units"), self.units_box, caption("Scale"), self.scale_box,
+                  self.fixed_edit, self.demean_box, self.null_button, sep(), self.tcur_button, self.acur_button,
+                  sep(), self.live_button):
             h.addWidget(w)
-        h.addSpacing(8)
+        h.addSpacing(6)
         h.addWidget(self.note, 1)
         h.addWidget(self.range_label)
         self.fixed_edit.setVisible(self._scale == "fixed")
+        self._update_filter_button()
         self._update_live_button()
         return bar
 
-    def _rebuild(self):
-        """Plot rows for the current channel list (called only when that list changes).
-        Existing rows are reused for the new channels and only the difference in number is
-        added or removed at the end. Trace i uses grid rows 2i (left axis, ViewBox) and 2i+1
-        (its time axis: with values under the last trace only, a thin gap under the others -
-        where it still draws the vertical grid lines)."""
-        n = len(self._sids)
-        while len(self._traces) > n:
-            for item in self._traces.pop().items():
-                self.grid.removeItem(item)
-                self.glw.scene().removeItem(item)
-        while len(self._traces) < n:
-            self._traces.append(self._new_trace(len(self._traces)))
-        for i, (tr, sid) in enumerate(zip(self._traces, self._sids)):
-            if tr.sid != sid:
-                tr.reset(sid)
-            last = i == n - 1
-            tr.bottom.setStyle(showValues=last, tickLength=5 if last else 0)
-            tr.bottom.setHeight(TIME_AXIS_HEIGHT if last else ROW_GAP)
-        self.stack.setCurrentWidget(self.scroll if self._traces else self.empty)
-        self._color_traces()
-        self._size_canvas()
-        self._fit_rows()
-        self.grid.activate()   # geometry now, not at the next event: the decimation needs the width
-
     def _new_trace(self, row):
-        vb = _PlotBox(self._on_wheel)
+        vb = _PlotBox(self)
         vb.setMouseEnabled(x=True, y=False)
         vb.disableAutoRange()
         vb.sigRangeChangedManually.connect(self._on_user_range)
@@ -340,7 +505,6 @@ class WaveformView(QWidget):
         left.setStyle(tickFont=self._font, tickTextOffset=4)
         bottom = pg.DateAxisItem("bottom", utcOffset=0)
         bottom.setStyle(tickFont=self._font, tickTextOffset=3)
-        bottom.setGrid(128)
         for axis in (left, bottom):
             axis.enableAutoSIPrefix(False)   # else every range change re-renders an unused HTML label
             axis.linkToView(vb)
@@ -350,10 +514,107 @@ class WaveformView(QWidget):
             vb.setXLink(self._traces[0].vb)
         curve = pg.PlotDataItem([], [], connect="finite")
         vb.addItem(curve)
-        self.grid.addItem(left, 2 * row, 0)
-        self.grid.addItem(vb, 2 * row, 1)
-        self.grid.addItem(bottom, 2 * row + 1, 1)
+        self.grid.addItem(left, 3 * row, 0)
+        self.grid.addItem(vb, 3 * row, 1)
+        self.grid.addItem(bottom, 3 * row + 2, 1)
         return _Trace(vb, left, bottom, curve, _TraceLabel(vb))
+
+    def _ensure_spec_row(self, tr, row):
+        """The spectrogram row of a plot (made the first time a channel in it wants one)."""
+        if tr.svb is not None:
+            return
+        svb = pg.ViewBox(enableMenu=False)
+        svb.setMouseEnabled(x=False, y=True)   # wheel / drag zoom the frequency axis
+        svb.disableAutoRange()
+        svb.setXLink(self._traces[0].vb)
+        saxis = pg.AxisItem("left")
+        saxis.setWidth(AXIS_WIDTH)
+        saxis.setStyle(tickFont=self._font, tickTextOffset=4)
+        saxis.enableAutoSIPrefix(False)
+        saxis.linkToView(svb)
+        image = pg.ImageItem()
+        image.setLookupTable(self._lut)
+        svb.addItem(image)
+        tr.svb, tr.saxis, tr.image = svb, saxis, image
+        self.grid.addItem(saxis, 3 * row + 1, 0)
+        self.grid.addItem(svb, 3 * row + 1, 1)
+        c = theme.COLORS
+        saxis.setPen(pg.mkPen(c["border"]))
+        saxis.setTextPen(pg.mkPen(c["muted"]))
+
+    def _rebuild(self):
+        """Plot rows for the current channel list and layout (called only when they change).
+        Existing rows are reused for the new channels and only the difference in number is
+        added or removed at the end. Row i uses grid rows 3i (left axis, ViewBox), 3i+1 (its
+        spectrogram, when on) and 3i+2 (its time axis: with values under the last row only, a
+        thin gap under the others - where it still draws the vertical grid lines)."""
+        n = len(self._sids)
+        while len(self._traces) > n:
+            tr = self._traces.pop()
+            for line in tr.lines.values():
+                tr.host.removeItem(line)
+            if tr.host is not tr.vb:          # overlaid: its curve and caption sit in the first row
+                tr.host.removeItem(tr.curve)
+                tr.label.setParentItem(None)
+                if tr.label.scene() is not None:
+                    tr.label.scene().removeItem(tr.label)
+            for item in tr.items():
+                self.grid.removeItem(item)
+                self.glw.scene().removeItem(item)
+        while len(self._traces) < n:
+            self._traces.append(self._new_trace(len(self._traces)))
+        self._clear_cursor_lines()
+        overlay = self._overlay and n > 1
+        first = self._traces[0].vb if self._traces else None
+        for i, (tr, sid) in enumerate(zip(self._traces, self._sids)):
+            for line in tr.lines.values():
+                tr.host.removeItem(line)
+            tr.lines = {}
+            if tr.sid != sid:
+                tr.reset(sid)
+            tr.ykey = None
+            host = first if overlay else tr.vb
+            if tr.host is not host:
+                tr.host.removeItem(tr.curve)
+                host.addItem(tr.curve)
+                tr.host = host
+            tr.label.setParentItem(host)
+            tr.label.anchor(itemPos=(0, 0), parentPos=(0, 0), offset=(4, 2 + (LABEL_STEP * i if overlay else 0)))
+            visible = i == 0 or not overlay
+            for item in (tr.vb, tr.left):
+                item.setVisible(visible)
+            spec = self._spec_on(sid)
+            if spec:
+                self._ensure_spec_row(tr, i)
+            if tr.svb is not None:
+                tr.svb.setVisible(spec)
+                tr.saxis.setVisible(spec)
+            last = i == (0 if overlay else n - 1)
+            tr.bottom.setVisible(visible)
+            tr.bottom.setStyle(showValues=last, tickLength=5 if last else 0)
+            tr.bottom.setHeight(TIME_AXIS_HEIGHT if last else ROW_GAP)
+        self.stack.setCurrentWidget(self.scroll if self._traces else self.empty)
+        self._color_traces()
+        self._size_canvas()
+        self._fit_rows()
+        self.grid.activate()   # geometry now, not at the next event: the decimation needs the width
+        self._make_cursor_lines()
+
+    def _spec_on(self, sid):
+        return bool(self._ts(sid)["spectrogram"]) and not (self._overlay and len(self._sids) > 1)
+
+    def _row_plan(self):
+        """[(trace visible, spectrogram height, gap height)] for every row."""
+        n = len(self._traces)
+        overlay = self._overlay and n > 1
+        plan = []
+        for i, tr in enumerate(self._traces):
+            visible = i == 0 or not overlay
+            spec = self._spec_size if visible and tr.sid and self._spec_on(tr.sid) else 0
+            last = i == (0 if overlay else n - 1)
+            gap = TIME_AXIS_HEIGHT if last else (ROW_GAP if visible else 0)
+            plan.append((visible, spec, gap))
+        return plan
 
     def _size_canvas(self, width=None, height=None):
         """The plot canvas fills the scroll area, and is taller when the rows need more room
@@ -361,59 +622,72 @@ class WaveformView(QWidget):
         vp = self.scroll.viewport()
         width = vp.width() if width is None else width
         height = vp.height() if height is None else height
-        n = len(self._traces)
+        plan = self._row_plan()
         _l, top, _r, bottom = self.grid.getContentsMargins()
-        need = (n * MIN_ROW + ROW_GAP * max(0, n - 1) + TIME_AXIS_HEIGHT + top + bottom
-                + 2 * self.glw.frameWidth()) if n else 0
+        need = (sum(MIN_ROW + s + g for v, s, g in plan if v) + sum(g for v, s, g in plan if not v)
+                + top + bottom + 2 * self.glw.frameWidth()) if plan else 0
         w, h = max(1, width), max(1, height, math.ceil(need))
         if (self.glw.width(), self.glw.height()) != (w, h):
             self.glw.setFixedSize(w, h)
 
     def _fit_rows(self, height=None):
-        """Equal data heights for every trace; the time axis and the gaps keep their fixed height.
-        `height` is the new viewport height during a resize (the viewport itself is resized
-        only after the event filter has seen the event)."""
-        n = len(self._traces)
-        if not n:
+        """Equal data heights for every visible trace; spectrograms, time axis and gaps keep
+        their fixed heights. `height` is the new viewport height during a resize (the viewport
+        itself is resized only after the event filter has seen the event)."""
+        plan = self._row_plan()
+        if not plan:
             return
         lay = self.grid
         _l, top, _r, bottom = lay.getContentsMargins()
         avail = (self.glw.viewport().height() if height is None else height) - top - bottom
-        each = max(float(MIN_ROW), (avail - TIME_AXIS_HEIGHT - ROW_GAP * (n - 1)) / n)
-        for i in range(max(2 * n, lay.rowCount())):   # rows of removed plots give their height back
-            if i >= 2 * n:
+        fixed = sum(s + g for _v, s, g in plan)
+        shown = sum(1 for v, _s, _g in plan if v) or 1
+        each = max(float(MIN_ROW), (avail - fixed) / shown)
+        rows = 3 * len(plan)
+        for i in range(max(rows, lay.rowCount())):   # rows of removed plots give their height back
+            if i >= rows:
                 h = 0
-            elif i % 2 == 0:
-                h = each
             else:
-                h = TIME_AXIS_HEIGHT if i == 2 * n - 1 else ROW_GAP
+                visible, spec, gap = plan[i // 3]
+                h = (each if visible else 0, spec, gap)[i % 3]
             lay.setRowFixedHeight(i, h)
 
     def _apply_colors(self):
         """Colours from the current theme (called again when the application palette changes)."""
         c = theme.COLORS
         self._colors = dict(c)
-        self.glw.setBackground(c["plot_bg"])
+        self.glw.setBackground(self._background())
         self.empty.setStyleSheet(f"color: {c['muted']}; font-size: 11pt; background: {c['plot_bg']};")
-        self.findChild(QFrame, "waveformBar").setStyleSheet(
+        self.bar.setStyleSheet(
             f"QFrame#waveformBar {{ background: {c['panel']}; border-bottom: 1px solid {c['border']}; }}"
             f"QLabel#barCaption, QLabel#barRange {{ color: {c['muted']}; }}"
-            f"QLabel#barNote {{ color: {c['warn']}; }}")
+            f"QLabel#barNote {{ color: {c['warn']}; }}"
+            f"QFrame#barSep {{ color: {c['border']}; }}"
+            f"QToolButton:checked {{ background: {c['select']}; border-radius: 3px; }}")
         self._color_traces()
         self._update_live_button()
 
+    def _background(self):
+        return self._bg or theme.COLORS["plot_bg"]
+
+    def trace_color(self, i, sid=None):
+        own = self._ts(sid)["color"] if sid else None
+        return own if own and QColor.isValidColorName(own) else theme.trace_color(i)
+
     def _color_traces(self):
-        """Pens and caption colours by trace position (also after a reorder). The data stay."""
+        """Pens, caption colours, lane lines (also after a reorder). The data stay."""
         c = theme.COLORS
-        bg = QColor(c["plot_bg"])
+        bg = QColor(self._background())
         bg.setAlpha(200)
         for i, tr in enumerate(self._traces):
-            tr.curve.setPen(pg.mkPen(theme.trace_color(i), width=1))
+            tr.curve.setPen(pg.mkPen(self.trace_color(i, tr.sid), width=1))
             for ax in (tr.left, tr.bottom):
                 ax.setPen(pg.mkPen(c["border"]))
                 ax.setTextPen(pg.mkPen(c["muted"]))
-            tr.vb.setBorder(pg.mkPen(c["grid"]))
+            tr.vb.setBorder(pg.mkPen(c["grid"]) if self._lanes else None)
+            tr.bottom.setGrid(128 if self._lanes else False)
             tr.label.bg = bg
+            tr.label.frame = c["accent"] if tr.sid and tr.sid == self._active else None
             tr.label.update()
             if tr.t0 is not None:
                 self._update_label(tr)
@@ -424,13 +698,18 @@ class WaveformView(QWidget):
     def set_channels(self, sids):
         """Show these channels (in this order). Plots are rebuilt only if the list changed; the
         time spent building counts against the recompute budget, so the call stays short and
-        the traces the budget did not cover follow within the next refreshes."""
+        the traces the budget did not cover follow within the next refreshes. Settings of
+        channels no longer shown are dropped."""
         sids = list(dict.fromkeys(s for s in sids if isinstance(s, str) and s))
         if sids == self._sids:
             return
         started = time.perf_counter()
         t0, t1 = self.visible_range()
         self._sids = sids
+        self._tset = {k: v for k, v in self._tset.items() if k in sids}
+        self._details &= set(sids)
+        if self._acur and self._acur[0] not in sids:
+            self.acur_button.setChecked(False)
         self._latest = None   # another channel set: its newest sample is a new reference, not an arrival
         self._lags.clear()    # and its own arrival lag (the old set's may be much smaller: a gap at the edge)
         self._relag = True
@@ -438,12 +717,27 @@ class WaveformView(QWidget):
         self._set_range(*(self._live_range() if self._live else (t0, t1)))
         if self._traces:
             self._update_traces(urgent=True, started=started)
+        self.changed.emit()
 
     def channels(self):
         return list(self._sids)
 
+    def add_channels(self, sids):
+        """Append channels not shown yet; returns the ones added."""
+        new = [s for s in dict.fromkeys(sids) if isinstance(s, str) and s and s not in self._sids]
+        if new:
+            self.set_channels(self._sids + new)
+        return new
+
+    def remove_channel(self, sid):
+        if sid in self._sids:
+            self.set_channels([s for s in self._sids if s != sid])
+
+    def clear(self):
+        self.set_channels([])
+
     def refresh(self):
-        """Follow live data and recompute traces that are out of date (MainWindow: every 250 ms).
+        """Follow live data and recompute traces that are out of date (every 250 ms).
         A view paused for AUTO_LIVE seconds without mouse use on the plots goes live again."""
         if not self._traces or not self._on_screen():
             return
@@ -452,6 +746,11 @@ class WaveformView(QWidget):
         if self._live:
             self._set_range(*self._live_range())
         self._update_traces(urgent=False)
+
+    def redraw(self):
+        """Recompute everything now (F5)."""
+        self._version += 1
+        self._reload_now()
 
     def visible_range(self):
         """(t0, t1) epoch seconds of the time range on screen."""
@@ -476,18 +775,39 @@ class WaveformView(QWidget):
     def is_live(self):
         return self._live
 
-    # ------------------------------------------------------------------------------------
-    # settings
-    # ------------------------------------------------------------------------------------
-    def _save(self):
-        self.config.update_section("view", {"window_seconds": self._window, "filter": self._filter,
-                                            "units": self._units, "scale": self._scale,
-                                            "fixed_scale": self._fixed, "demean": self._demean})
-
-    def _changed(self):
-        self._version += 1
-        self._save()
+    def show_range(self, t0, t1):
+        """Pause and show this time range (a selection's "Zoom to this time range")."""
+        if t1 <= t0:
+            return
+        self.set_live(False)
+        self._touched = time.monotonic()
+        self._set_range(t0, t1)
         self._reload_now()
+
+    def state(self):
+        """Everything a viewer saves (config "viewers"); WaveformView(state=...) restores it."""
+        traces = {}
+        for sid in self._sids:
+            own = {k: v for k, v in self._tset.get(sid, {}).items() if v != TRACE_DEFAULTS[k]}
+            if own:
+                traces[sid] = own
+        return {"sids": list(self._sids), "window": self._window, "filter_on": self._filter_on,
+                "filter": self._filter_key, "custom": self._custom, "units": self._units, "scale": self._scale,
+                "fixed": self._fixed, "demean": self._demean, "gain": self._gain, "lanes": self._lanes,
+                "overlay": self._overlay, "background": self._bg, "spec_size": self._spec_size,
+                "traces": traces}
+
+    # ------------------------------------------------------------------------------------
+    # whole-window settings
+    # ------------------------------------------------------------------------------------
+    def _changed(self, rebuild=False):
+        """A setting changed: recompute every trace now and tell the viewer to save."""
+        self._version += 1
+        self._specs.clear()
+        if rebuild:
+            self._rebuild()
+        self._reload_now()
+        self.changed.emit()
 
     def _set_window(self, _index):
         self._window = int(self.window_box.currentData())
@@ -499,15 +819,231 @@ class WaveformView(QWidget):
             self._set_range(t1 - self._window, t1)
         self._changed()
 
-    def _set_filter(self, _index):
-        name = self.filter_box.currentData()
-        self._filter = name if name in dsp.FILTERS else "none"
+    def step_window(self, steps):
+        """Longer (steps > 0) or shorter time window, by the offered steps."""
+        box = self.window_box
+        i = min(box.count() - 1, max(0, box.currentIndex() + int(steps)))
+        if i != box.currentIndex():
+            box.setCurrentIndex(i)            # _set_window: new range, saved
+
+    def zoom_amplitude(self, steps):
+        """Larger (steps > 0) or smaller traces, x2 per step; the view stays live."""
+        g = self._clamp_gain(self._gain * 2.0 ** int(steps))
+        if g != self._gain:
+            self._gain = g
+            self.gain_label.setText(fmt_gain(g))
+            self._apply_y_ranges()
+            self.changed.emit()
+
+    def reset_amplitude(self):
+        if self._gain != 1.0:
+            self._gain = 1.0
+            self.gain_label.setText(fmt_gain(1.0))
+            self._apply_y_ranges()
+            self.changed.emit()
+
+    def reset_scales(self):
+        """Every channel's own scale factor and the amplitude zoom back to 1 (Ctrl+1)."""
+        for ts in self._tset.values():
+            ts.pop("scale", None)
+        self._gain = 1.0
+        self.gain_label.setText(fmt_gain(1.0))
         self._changed()
+
+    def pan(self, fraction):
+        """Scroll by a part of the window (negative: back in time); pauses."""
+        t0, t1 = self.visible_range()
+        d = (t1 - t0) * fraction
+        self.show_range(t0 + d, t1 + d)
+
+    def gain(self):
+        return self._gain
+
+    def set_filter_on(self, on):
+        on = bool(on)
+        if on != self._filter_on:
+            self._filter_on = on
+            self._update_filter_button()
+            self._changed()
+        elif self.filter_button.isChecked() != on:
+            self._update_filter_button()
+
+    def toggle_filter(self):
+        self.set_filter_on(not self._filter_on)
+
+    def filter_on(self):
+        return self._filter_on
+
+    def set_filter(self, key, custom=None):
+        """Choose the window's filter (a filter_catalogue key, or "custom" with a design) and
+        switch it on. A custom design of None switches the filter off."""
+        if key == "custom":
+            custom = dsp.normalize_spec(custom)
+            if custom is None:
+                self.set_filter_on(False)
+                return
+            if custom.get("default"):   # the design left as the default band-pass
+                key = "default"
+            else:
+                self._custom = custom
+        self._filter_key = key
+        self._filter_on = True
+        self._update_filter_button()
+        self._changed()
+
+    def filter_key(self):
+        return self._filter_key
+
+    def _resolve(self, key, custom):
+        """Spec of a filter key, cached until the next setting change (a saved filter is looked
+        up each time: another viewer or the design may replace or delete it)."""
+        if key.startswith(SAVED_PREFIX):
+            return filter_spec(self.config, key, custom)
+        k = (key, json.dumps(custom, sort_keys=True) if key == "custom" else "")
+        if k not in self._specs:
+            self._specs[k] = filter_spec(self.config, key, custom)
+        return self._specs[k]
+
+    def window_spec(self):
+        return self._resolve(self._filter_key, self._custom) if self._filter_on else None
+
+    def _update_filter_button(self):
+        b = self.filter_button
+        b.blockSignals(True)
+        b.setChecked(self._filter_on)
+        b.blockSignals(False)
+        label = filter_label(self.config, self._filter_key, self._custom)
+        b.setText(f"Filter: {label}" if self._filter_on else "Filter off")
+        b.setToolTip(f"Filter of every channel: {label} (zero phase). Click to switch it "
+                     f"{'off' if self._filter_on else 'on'} (F); the arrow chooses another filter or opens "
+                     "the design (Ctrl+F). A channel can have its own filter (right-click it).")
+
+    def _fill_filter_menu(self):
+        self.fill_filter_menu(self.filter_menu, None)
+
+    def fill_filter_menu(self, menu, sid):
+        """The filter choices: for the whole window (sid None) or for one channel."""
+        menu.clear()
+        for old in menu.findChildren(QActionGroup) + menu.findChildren(QMenu):   # left from the last fill
+            old.setParent(None)
+            old.deleteLater()
+        group = QActionGroup(menu)
+        if sid is None:
+            current = self._filter_key if self._filter_on else None
+            off = menu.addAction("No filter")
+            off.setCheckable(True)
+            off.setChecked(not self._filter_on)
+            off.triggered.connect(lambda: self.set_filter_on(False))
+        else:
+            own = self._ts(sid)["filter"]
+            current = own
+            same = menu.addAction("Same as the window" + (f" ({self.window_filter_text()})"))
+            same.setCheckable(True)
+            same.setChecked(own is None)
+            same.triggered.connect(lambda: self.set_trace_filter(sid, None))
+            off = menu.addAction("No filter for this channel")
+            off.setCheckable(True)
+            off.setChecked(own == "off")
+            off.triggered.connect(lambda: self.set_trace_filter(sid, "off"))
+            group.addAction(same)
+        group.addAction(off)
+        menu.addSeparator()
+        section = False
+        for key, label, _spec in filter_catalogue(self.config):
+            if key.startswith(SAVED_PREFIX) and not section:
+                menu.addSection("Saved filters")
+                section = True
+            a = menu.addAction(label)
+            a.setCheckable(True)
+            a.setChecked(current == key)
+            group.addAction(a)
+            if sid is None:
+                a.triggered.connect(lambda _=False, k=key: self.set_filter(k))
+            else:
+                a.triggered.connect(lambda _=False, k=key: self.set_trace_filter(sid, k))
+        custom = self._custom if sid is None else self._ts(sid)["custom"]
+        if dsp.normalize_spec(custom):
+            a = menu.addAction(f"Own design: {dsp.describe(custom)}")
+            a.setCheckable(True)
+            a.setChecked(current == "custom")
+            group.addAction(a)
+            if sid is None:
+                a.triggered.connect(lambda: self.set_filter("custom", self._custom))
+            else:
+                a.triggered.connect(lambda: self.set_trace_filter(sid, "custom", self._ts(sid)["custom"]))
+        menu.addSeparator()
+        design = menu.addAction("Design..." if sid is None else "Design for this channel...")
+        if sid is None:   # the key belongs to the viewer window's own action: here it is only shown
+            design.setShortcut("Ctrl+F")
+            design.setShortcutContext(Qt.WidgetShortcut)
+            design.setShortcutVisibleInContextMenu(True)
+        design.triggered.connect(lambda: self.open_filter_design(sid))
+        saved = saved_filters(self.config)
+        if saved and sid is None:
+            sub = menu.addMenu("Delete a saved filter")
+            for f in saved:
+                sub.addAction(f["name"], lambda n=f["name"]: self.delete_saved_filter(n))
+
+    def delete_saved_filter(self, name):
+        delete_filter(self.config, name)
+        self.filters_changed()
+        self.filtersSaved.emit()
+
+    def filters_changed(self):
+        """A saved filter was added, replaced or deleted (here or in another viewer)."""
+        self._specs.clear()
+        self._update_filter_button()
+        self._changed()
+
+    def window_filter_text(self):
+        return filter_label(self.config, self._filter_key, self._custom) if self._filter_on else "no filter"
+
+    def open_filter_design(self, sid=None, spectrum=None):
+        """The filter design dialog for the whole window (sid None) or one channel; spectrum:
+        ("noise" | "signal", freqs, amplitudes) to show in it."""
+        d = self._design
+        target = sid if sid else "all channels"
+        if d is None or not d.isVisible() or d.property("target") != target:
+            if d is not None:
+                d.destroyed.disconnect(self._design_closed)   # it goes later: it must not forget the new one
+                d.close()
+            if sid:
+                spec = self.trace_spec(sid)
+                rates = [self._rates.get(sid) or 100.0]
+                apply_fn = (lambda spec, s=sid: self.set_trace_filter(s, "custom", spec))
+            else:
+                spec = self.window_spec()
+                rates = [self._rates.get(s) or 0.0 for s in self._sids] or [100.0]
+                apply_fn = (lambda spec: self.set_filter("custom", spec))
+            d = FilterDesignDialog(self.config, apply_fn, spec, rates, target, self)
+            d.setProperty("target", target)
+            d.setAttribute(Qt.WA_DeleteOnClose)
+            d.destroyed.connect(self._design_closed)
+            d.saved.connect(self._design_saved)
+            self._design = d
+            d.show()
+        d.raise_()
+        d.activateWindow()
+        if spectrum:
+            d.set_spectrum(*spectrum)
+        return d
+
+    def _design_closed(self, *_args):
+        self._design = None
+
+    def _design_saved(self, *_args):
+        self.filters_changed()
+        self.filtersSaved.emit()
 
     def _set_units(self, _index):
         self._units = self.units_box.currentData()
         self._sens.clear()
         self._changed()
+
+    def set_units(self, units):
+        i = self.units_box.findData(units)
+        if i >= 0:
+            self.units_box.setCurrentIndex(i)
 
     def _set_scale(self, _index):
         self._scale = scale = self.scale_box.currentData()
@@ -525,9 +1061,59 @@ class WaveformView(QWidget):
         if value != self._fixed:
             self._fixed = value
             self._changed()
+        self.glw.setFocus()
+
+    def set_fixed_scale(self, value):
+        """Fixed scale mode with this half height (Scale others to match)."""
+        self._fixed = float(value)
+        self.fixed_edit.setText(f"{self._fixed:.6g}")
+        if self._scale != "fixed":
+            self.scale_box.setCurrentIndex(self.scale_box.findData("fixed"))   # _set_scale: recompute
+        else:
+            self._changed()
 
     def _set_demean(self, on):
         self._demean = bool(on)
+        self._changed()
+
+    def set_lanes(self, on):
+        self._lanes = bool(on)
+        self._color_traces()
+        self.changed.emit()
+
+    def lanes(self):
+        return self._lanes
+
+    def set_overlay(self, on):
+        if bool(on) != self._overlay:
+            self._overlay = bool(on)
+            self._changed(rebuild=True)
+
+    def overlay(self):
+        return self._overlay
+
+    def set_background(self, color):
+        self._bg = color if color and QColor.isValidColorName(color) else None
+        self.glw.setBackground(self._background())
+        self._color_traces()
+        self.changed.emit()
+
+    def set_spec_size(self, size):
+        if size in SPEC_SIZES and size != self._spec_size:
+            self._spec_size = size
+            self._changed(rebuild=True)
+
+    def spec_size(self):
+        return self._spec_size
+
+    def sort_channels(self, key, reverse=False):
+        """Put the channels in order once (SORTS: channel, component, station, rate)."""
+        fn = SORTS.get(key, SORTS["channel"])[1]
+        self.set_channels(sorted(self._sids, key=lambda s: fn(s, self._rates.get(s, 0.0)), reverse=reverse))
+
+    def calibration_changed(self):
+        """A channel's calibration was entered or removed: look the sensitivities up again."""
+        self._sens.clear()
         self._changed()
 
     def _update_live_button(self):
@@ -538,8 +1124,8 @@ class WaveformView(QWidget):
         if self._live:
             b.setIcon(theme.icon("live"))
             b.setText("Live")
-            b.setToolTip("Following the newest data. The mouse wheel over a plot changes the window length; "
-                         "dragging a plot pauses.")
+            b.setToolTip("Following the newest data (Pause key). The mouse wheel changes the amplitude, "
+                         "Shift+wheel the window length; dragging a plot pauses.")
             b.setStyleSheet("")
         else:
             c = theme.COLORS
@@ -553,6 +1139,291 @@ class WaveformView(QWidget):
                          f"without mouse use on the plots.")
             b.setStyleSheet(f"QToolButton, QToolButton:hover {{ background: {c['warn']}; color: {fg}; "
                             f"font-weight: 600; border-radius: 4px; padding: 4px 10px; }}")
+
+    # ------------------------------------------------------------------------------------
+    # per-channel settings
+    # ------------------------------------------------------------------------------------
+    def _ts(self, sid):
+        """A channel's settings (defaults filled in; a copy - change them with _set_ts)."""
+        out = dict(TRACE_DEFAULTS)
+        out.update(self._tset.get(sid, {}))
+        return out
+
+    def trace_settings(self, sid):
+        return self._ts(sid)
+
+    def _set_ts(self, sid, rebuild=False, **values):
+        if sid not in self._sids:
+            return
+        own = self._tset.setdefault(sid, {})
+        for k, v in values.items():
+            if v == TRACE_DEFAULTS[k]:
+                own.pop(k, None)
+            else:
+                own[k] = v
+        self._changed(rebuild=rebuild)
+
+    def set_trace_color(self, sid, color):
+        self._set_ts(sid, color=color if color and QColor.isValidColorName(color) else None)
+        self._color_traces()
+
+    def set_trace_scale(self, sid, value):
+        try:
+            v = float(value)
+        except (TypeError, ValueError):
+            return
+        if math.isfinite(v) and v > 0:
+            self._set_ts(sid, scale=v)
+
+    def scale_others_to_match(self, sid):
+        """Every channel gets the amplitude range this one shows now (fixed scale mode)."""
+        tr = self._trace(sid)
+        if tr is None or tr.yrange is None:
+            return
+        half = (tr.yrange[1] - tr.yrange[0]) / 2.0
+        if self._scale != "fixed":
+            half /= 1.0 + 2 * 0.06   # without the padding of the auto / common modes
+        for ts in self._tset.values():
+            ts.pop("scale", None)
+        self._gain = 1.0
+        self.gain_label.setText(fmt_gain(1.0))
+        self.set_fixed_scale(half)
+
+    def set_trace_filter(self, sid, key, custom=None):
+        """A channel's own filter: None = the window's, "off" = none, a catalogue key, or
+        "custom" with a design (a design of None: no filter for this channel)."""
+        if key == "custom":
+            custom = dsp.normalize_spec(custom)
+            if custom is None:
+                key = "off"
+            elif custom.get("default"):
+                key = "default"
+        self._set_ts(sid, filter=key, custom=custom if key == "custom" else self._ts(sid)["custom"])
+
+    def trace_spec(self, sid):
+        """The filter applied to a channel (None: unfiltered)."""
+        ts = self._ts(sid)
+        f = ts["filter"]
+        if f == "off":
+            return None
+        if f:
+            return self._resolve(f, ts["custom"])
+        return self.window_spec()
+
+    def trace_filter_text(self, sid):
+        ts = self._ts(sid)
+        f = ts["filter"]
+        if f == "off":
+            return "no filter (own setting)"
+        if f:
+            return filter_label(self.config, f, ts["custom"])
+        return self.window_filter_text()
+
+    def null_offsets(self, sid=None):
+        """Fix the offset at the mean of the visible data now: one channel, or every channel
+        whose offset is not locked."""
+        for tr in self._traces:
+            if tr.sid and tr.mean_pre is not None and (tr.sid == sid if sid else not self._ts(tr.sid)["locked"]):
+                self._tset.setdefault(tr.sid, {})["offset"] = tr.mean_pre
+        self._changed()
+
+    def zero_offset(self, sid=None):
+        """Offset 0 (absolute values): one channel, or all channels (locked ones too)."""
+        for s in ([sid] if sid else self._sids):
+            self._tset.setdefault(s, {})["offset"] = 0.0
+        self._changed()
+
+    def set_offset(self, sid, value):
+        """A channel's offset in counts (None: follow the window's mean removal)."""
+        if value is not None:
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                return
+            if not math.isfinite(value):
+                return
+        self._set_ts(sid, offset=value)
+
+    def set_locked(self, sid, on):
+        self._set_ts(sid, locked=bool(on))
+
+    def set_spectrogram(self, sid, on):
+        self._set_ts(sid, rebuild=True, spectrogram=bool(on))
+
+    def toggle_all_spectrograms(self):
+        """All on, or all off when every channel shows one (Ctrl+P)."""
+        on = not all(self._ts(s)["spectrogram"] for s in self._sids)
+        for s in self._sids:
+            own = self._tset.setdefault(s, {})
+            if on:
+                own["spectrogram"] = True
+            else:
+                own.pop("spectrogram", None)
+        self._changed(rebuild=True)
+
+    def spectrogram_contrast(self, sid, steps):
+        """Brighter (steps > 0) or darker spectrogram; sid None: every channel."""
+        for s in ([sid] if sid else self._sids):
+            c = int(self._ts(s)["contrast"]) + int(steps)
+            own = self._tset.setdefault(s, {})
+            if c:
+                own["contrast"] = max(-10, min(10, c))
+            else:
+                own.pop("contrast", None)
+        self._changed()
+
+    def reset_spectrogram_zoom(self, sid):
+        tr = self._trace(sid)
+        if tr is not None and tr.svb is not None and tr.nyq:
+            tr.svb.setYRange(0, tr.nyq, padding=0)
+
+    def show_details_lines(self, sid, on):
+        """Mean (dotted), minimum and maximum (solid) lines on a channel while its Details
+        window is open."""
+        if on:
+            self._details.add(sid)
+        else:
+            self._details.discard(sid)
+        tr = self._trace(sid)
+        if tr is not None:
+            self._update_detail_lines(tr)
+            if on:
+                tr.version = -1          # computed again now, with its RMS
+                self._reload_now()
+
+    def trace_stats(self, sid):
+        """{"n", "mean", "min", "max", "rms", "units", "offset", "filter", "rate"} of the visible
+        data of a channel as shown (units after calibration), or None."""
+        tr = self._trace(sid)
+        if tr is None or tr.stats is None:
+            return None
+        out = dict(tr.stats)
+        out.update(units=tr.units, offset=self._ts(sid)["offset"], filter=self.trace_filter_text(sid),
+                   rate=tr.rate, mean_counts=tr.mean_pre)
+        return out
+
+    def active_sid(self):
+        """The channel the keyboard shortcuts act on: under the mouse, else the last one
+        right-clicked, else the first."""
+        for s in (self._active, self._menu_sid, self._hovered):
+            if s in self._sids:
+                return s
+        return self._sids[0] if self._sids else None
+
+    def _trace(self, sid):
+        return next((tr for tr in self._traces if tr.sid == sid), None)
+
+    # ------------------------------------------------------------------------------------
+    # cursors
+    # ------------------------------------------------------------------------------------
+    def set_time_cursors(self, on):
+        self._tcur = [0.4, 0.6] if on else None
+        if self.tcur_button.isChecked() != bool(on):
+            self.tcur_button.blockSignals(True)
+            self.tcur_button.setChecked(bool(on))
+            self.tcur_button.blockSignals(False)
+        self._clear_cursor_lines()
+        self._make_cursor_lines()
+
+    def set_amp_cursors(self, on, sid=None):
+        """Amplitude cursors on a channel (default: the one the mouse was last over)."""
+        sid = sid or self.active_sid()
+        self._acur = [sid, 0.3, 0.7] if on and sid else None
+        if self.acur_button.isChecked() != bool(self._acur):
+            self.acur_button.blockSignals(True)
+            self.acur_button.setChecked(bool(self._acur))
+            self.acur_button.blockSignals(False)
+        self._clear_cursor_lines()
+        self._make_cursor_lines()
+
+    def cursor_readout(self):
+        """(seconds between the time cursors or None, amplitude difference or None, units)."""
+        dt = da = None
+        units = ""
+        if self._tcur:
+            t0, t1 = self.visible_range()
+            dt = abs(self._tcur[1] - self._tcur[0]) * (t1 - t0)
+        if self._acur:
+            tr = self._trace(self._acur[0])
+            if tr is not None and tr.yrange is not None:
+                da = abs(self._acur[2] - self._acur[1]) * (tr.yrange[1] - tr.yrange[0])
+                units = tr.units
+        return dt, da, units
+
+    def _clear_cursor_lines(self):
+        for tr in self._traces:
+            for line in tr.tcur:
+                tr.vb.removeItem(line)
+            tr.tcur = []
+        for vb, line in self._acur_lines:
+            vb.removeItem(line)
+        self._acur_lines = []
+
+    def _make_cursor_lines(self):
+        c = theme.COLORS
+        if self._tcur:
+            pen = pg.mkPen(c["accent2"], width=1)
+            for tr in self._traces:
+                if not tr.vb.isVisible():
+                    continue
+                for k in range(2):
+                    line = pg.InfiniteLine(angle=90, movable=True, pen=pen, hoverPen=pg.mkPen(c["text"], width=2))
+                    line.setZValue(60)
+                    line.sigPositionChanged.connect(lambda ln, k=k: self._tcur_moved(ln, k))
+                    tr.vb.addItem(line, ignoreBounds=True)
+                    tr.tcur.append(line)
+        if self._acur:
+            tr = self._trace(self._acur[0])
+            if tr is not None:
+                pen = pg.mkPen(c["accent"], width=1)
+                for k in range(2):
+                    line = pg.InfiniteLine(angle=0, movable=True, pen=pen, hoverPen=pg.mkPen(c["text"], width=2))
+                    line.setZValue(60)
+                    line.sigPositionChanged.connect(lambda ln, k=k: self._acur_moved(ln, k))
+                    tr.host.addItem(line, ignoreBounds=True)
+                    self._acur_lines.append((tr.host, line))
+        self._place_cursors()
+
+    def _place_cursors(self):
+        """Cursors keep their place on screen (a fraction of the window / the row) while the
+        view scrolls or rescales; the readout is on the cursor buttons."""
+        self._moving_cursor = True
+        try:
+            if self._tcur and self._traces:
+                t0, t1 = self.visible_range()
+                for tr in self._traces:
+                    for k, line in enumerate(tr.tcur):
+                        line.setValue(t0 + self._tcur[k] * (t1 - t0))
+            if self._acur:
+                tr = self._trace(self._acur[0])
+                if tr is not None and tr.yrange is not None:
+                    lo, hi = tr.yrange
+                    for k, (_vb, line) in enumerate(self._acur_lines):
+                        line.setValue(lo + self._acur[k + 1] * (hi - lo))
+        finally:
+            self._moving_cursor = False
+        dt, da, units = self.cursor_readout()
+        self.tcur_button.setText(f"Δt {dt:.3f} s · {1 / dt:.3g} Hz" if dt else "Time cursors")
+        self.acur_button.setText(f"ΔA {fmt_value(da, units != 'counts')} {units}" if da is not None
+                                 else "Ampl cursors")
+
+    def _tcur_moved(self, line, k):
+        if self._moving_cursor or not self._tcur:
+            return
+        t0, t1 = self.visible_range()
+        if t1 > t0:
+            self._tcur[k] = (line.value() - t0) / (t1 - t0)
+        self._touched = time.monotonic()
+        self._place_cursors()
+
+    def _acur_moved(self, line, k):
+        if self._moving_cursor or not self._acur:
+            return
+        tr = self._trace(self._acur[0])
+        if tr is not None and tr.yrange is not None and tr.yrange[1] > tr.yrange[0]:
+            lo, hi = tr.yrange
+            self._acur[k + 1] = (line.value() - lo) / (hi - lo)
+        self._place_cursors()
 
     # ------------------------------------------------------------------------------------
     # time range
@@ -570,7 +1441,13 @@ class WaveformView(QWidget):
         a latency near the threshold never flips it)."""
         now = time.time()
         stats = self.engine.hub.stats_snapshot()
-        ends = [stats[s]["last_end"] for s in self._sids if s in stats]
+        ends = []
+        for s in self._sids:
+            st = stats.get(s)
+            if st:
+                ends.append(st["last_end"])
+                if st.get("rate"):
+                    self._rates[s] = float(st["rate"])
         if ends:
             self._note_latest(max(ends), now)
         live = now - self._live_lag(now)
@@ -636,6 +1513,8 @@ class WaveformView(QWidget):
         if self._emitted is None or abs(self._emitted[0] - t0) > 1e-3 or abs(self._emitted[1] - t1) > 1e-3:
             self._emitted = (t0, t1)
             self.rangeChanged.emit(t0, t1)
+            if self._tcur:
+                self._place_cursors()
         text = (f"{time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(t0))} – "
                 f"{time.strftime('%H:%M:%S', time.gmtime(t1))} UTC")
         if self.range_label.text() != text:
@@ -647,23 +1526,62 @@ class WaveformView(QWidget):
         if self._live:
             self.set_live(False)
 
-    def _on_wheel(self, ev):
-        """The mouse wheel over a plot (or its time axis). Live: it steps the Window choice -
-        up shorter, down longer - and the view stays live; returns True (handled). Paused:
-        False, the plot zooms as usual."""
+    def _on_wheel(self, ev, vb):
+        """The mouse wheel over a plot (or its time axis): zooms the amplitude; with Shift it
+        steps the window length (both stay live), with Ctrl it scrolls in time (pauses).
+        Returns True (handled)."""
         self._touched = time.monotonic()
-        if not self._live:
-            return False
         self._wheel += ev.delta()
         steps = int(self._wheel / WHEEL_NOTCH)    # whole notches (towards zero for both directions)
         if steps:
             self._wheel -= steps * WHEEL_NOTCH
-            box = self.window_box
-            i = min(box.count() - 1, max(0, box.currentIndex() - steps))
-            if i != box.currentIndex():
-                box.setCurrentIndex(i)            # _set_window: new range, saved
+            mods = ev.modifiers() if hasattr(ev, "modifiers") else Qt.NoModifier
+            if mods & Qt.ShiftModifier:
+                self.step_window(-steps)           # up: shorter
+            elif mods & Qt.ControlModifier:
+                self.pan(-0.1 * steps)             # up: back in time
+            else:
+                self.zoom_amplitude(steps)         # up: larger
         ev.accept()
         return True
+
+    def _on_drag(self, ev, vb):
+        """Shift+drag with the left button selects a time range (all channels); returns True
+        when the drag was taken."""
+        if ev.isStart():   # Shift at the start decides; letting it go during the drag changes nothing
+            mods = ev.modifiers() if hasattr(ev, "modifiers") else Qt.NoModifier
+            self._selecting = ev.button() == Qt.LeftButton and bool(mods & Qt.ShiftModifier)
+        if not self._selecting:
+            return False
+        self._touched = time.monotonic()
+        a = vb.mapToView(ev.buttonDownPos()).x()
+        b = vb.mapToView(ev.pos()).x()
+        lo, hi = min(a, b), max(a, b)
+        if ev.isStart() or not self._sel_items:
+            self._clear_selection()
+            brush = QColor(theme.COLORS["accent"])
+            brush.setAlpha(60)
+            for tr in self._traces:
+                if tr.vb.isVisible():
+                    item = pg.LinearRegionItem((lo, hi), movable=False, brush=brush)
+                    item.setZValue(40)
+                    tr.vb.addItem(item, ignoreBounds=True)
+                    self._sel_items.append((tr.vb, item))
+        for _vb, item in self._sel_items:
+            item.setRegion((lo, hi))
+        if ev.isFinish():
+            self._selecting = False
+            sid = next((tr.sid for tr in self._traces if tr.vb is vb), None)
+            QTimer.singleShot(0, self._clear_selection)
+            if hi - lo > 1e-3:
+                self.selectionMade.emit(lo, hi, sid, QCursor.pos())
+        ev.accept()
+        return True
+
+    def _clear_selection(self):
+        for vb, item in self._sel_items:
+            vb.removeItem(item)
+        self._sel_items = []
 
     def _on_xrange(self, *_args):
         if self._setting_range:
@@ -671,9 +1589,70 @@ class WaveformView(QWidget):
         self._range_moved()
         self._reload.start()  # coalesce the many range changes of one drag
 
+    def _row_at(self, pos):
+        """The trace (and whether over its spectrogram) at a scene position, or (None, False)."""
+        overlay = self._overlay and len(self._traces) > 1
+        for tr in self._traces:
+            if tr.svb is not None and tr.svb.isVisible():
+                r = tr.svb.sceneBoundingRect()
+                r.setLeft(0)
+                if r.contains(pos):
+                    return tr, True
+            if not tr.vb.isVisible():
+                continue
+            r = tr.vb.sceneBoundingRect()
+            r.setLeft(0)
+            if r.contains(pos):
+                return (self._nearest_overlaid(pos) if overlay else tr), False
+        return None, False
+
+    def _nearest_overlaid(self, pos):
+        """In overlay mode: the trace whose curve passes closest to the mouse."""
+        vb = self._traces[0].vb
+        p = vb.mapSceneToView(pos)
+        best, dist = self._traces[0], math.inf
+        for tr in self._traces:
+            x, y = tr.curve.getData()
+            if x is None or not len(x):
+                continue
+            i = min(len(x) - 1, int(np.searchsorted(x, p.x())))
+            if math.isfinite(y[i]) and abs(y[i] - p.y()) < dist:
+                best, dist = tr, abs(y[i] - p.y())
+        return best
+
     def _on_click(self, ev):
         if ev.double() and ev.button() == Qt.LeftButton:
             self.set_live(True)
+        elif ev.button() == Qt.RightButton:
+            tr, _spec = self._row_at(ev.scenePos())
+            self._menu_sid = tr.sid if tr is not None else None
+            ev.accept()
+            self.contextRequested.emit(self._menu_sid, QCursor.pos())
+
+    def _on_mouse_moved(self, pos):
+        tr, over_spec = self._row_at(pos)
+        sid = tr.sid if tr is not None else None
+        if sid != self._active:
+            self._active = sid
+            if sid:
+                self._hovered = sid
+            self._color_traces()
+        if tr is None:
+            self.hoverChanged.emit("")
+            return
+        if over_spec:
+            p = tr.svb.mapSceneToView(pos)
+            text = f"{self._fmt_time(p.x())}   {sid}   {p.y():.3g} Hz"
+        else:
+            p = tr.host.mapSceneToView(pos)
+            text = f"{self._fmt_time(p.x())}   {sid}   {fmt_value(p.y(), tr.units != 'counts')} {tr.units}"
+        self.hoverChanged.emit(text)
+
+    @staticmethod
+    def _fmt_time(t):
+        if not math.isfinite(t):
+            return ""
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(t)) + f".{int((t % 1) * 1000):03d} UTC"
 
     def _on_screen(self):
         win = self.window()
@@ -724,72 +1703,159 @@ class WaveformView(QWidget):
             self._update_note()
 
     def _sensitivity(self, sid):
-        """(value, units) from StationXML, or None. Looked up again after SENS_TTL seconds."""
-        responses = getattr(self.engine, "responses", None)
-        if responses is None:
-            return None
+        """(counts per unit, units) from the calibration the user entered for the channel, else
+        from StationXML, or None. Looked up again after SENS_TTL seconds."""
         now = time.monotonic()
         hit = self._sens.get(sid)
         if hit and now - hit[0] < SENS_TTL:
             return hit[1]
-        try:
-            value = responses.sensitivity(sid)
-        except Exception:
-            log.exception("StationXML sensitivity of %s failed", sid)
-            value = None
-        if value is not None and not value[0]:
-            value = None
+        value = None
+        cal = (self.config.get("calibration") or {}).get(sid)
+        if isinstance(cal, dict):
+            try:
+                v = float(cal.get("sensitivity"))
+                if math.isfinite(v) and v != 0:
+                    value = (v, str(cal.get("units") or "units"))
+            except (TypeError, ValueError):
+                value = None
+        responses = getattr(self.engine, "responses", None)
+        if value is None and responses is not None:
+            try:
+                value = responses.sensitivity(sid)
+            except Exception:
+                log.exception("StationXML sensitivity of %s failed", sid)
+                value = None
+            if value is not None and not value[0]:
+                value = None
         self._sens[sid] = (now, value)
         return value
 
     def _compute(self, tr, t0, t1, width, now):
-        filt = self._filter
-        filtered = dsp.FILTERS[filt]["type"] is not None
-        segs = self.engine.hub.window(tr.sid, t0 - pre_roll(filt), t1)
+        sid = tr.sid
+        ts = self._ts(sid)
+        spec = self.trace_spec(sid)
+        rate_hint = self._rates.get(sid, 0.0)
+        segs = self.engine.hub.window(sid, t0 - pre_roll(spec, rate_hint), t1)
+        fixed = ts["offset"] is not None
         span = t1 - t0
         points = 2.0 * width
-        xs, ys = [], []
-        total, count = 0.0, 0
+        parts = []
+        total, count, sumsq = 0.0, 0, 0.0
+        want_rms = sid in self._details          # one more pass over the data: only for Details
         for start, rate, y in segs:
-            if filtered:
-                y = dsp.apply(y, rate, filt, demean=self._demean)
+            if spec is not None:   # the mean is taken out below (a low-pass keeps it here)
+                y = dsp.apply_spec(y, rate, spec, demean=False)
+            else:
+                y = np.asarray(y, dtype=np.float64)
             i0 = max(0, int(math.ceil((t0 - start) * rate - 1e-6)))   # drop the filter pre-roll
             if i0 >= len(y):
                 continue
             if i0:
                 start += i0 / rate
                 y = y[i0:]
+            total_y = float(np.sum(y))
+            if math.isfinite(total_y):           # no NaN in it (the usual case): one pass
+                good = y
+            else:
+                good = y[np.isfinite(y)]
+                total_y = float(np.sum(good))
+            total += total_y
+            count += len(good)
+            if want_rms:
+                sumsq += float(np.dot(good, good))
+            parts.append((start, rate, y))
+        tr.mean_pre = total / count if count else None   # what Null makes the offset
+        shift = 0.0
+        if fixed:
+            shift = float(ts["offset"])
+        elif self._demean and count:
+            shift = total / count
+        factor, tr.units, tr.has_sens = 1.0, "counts", True
+        if self._units != "counts":
+            sens = self._sensitivity(sid)
+            if sens:
+                factor = float(sens[0])
+                name = str(sens[1])
+                tr.units = UNIT_NAMES.get(name.upper(), name or "units")
+                if self._units == "physical_g" and name.upper() in ACCEL_UNITS:
+                    factor *= G
+                    tr.units = "g"
+            else:
+                tr.has_sens = False
+        tr.filter_text = dsp.describe(spec) if spec is not None else ""
+        tr.rate = parts[0][1] if parts else rate_hint
+        xs, ys = [], []
+        for start, rate, y in parts:
             x, e = dsp.envelope(start, rate, y, max(4, int(points * len(y) / rate / span)))
-            if not filtered and self._demean:
-                total += float(np.sum(y))
-                count += len(y)
             if xs:   # a gap between hub segments: break the line
                 xs.append(np.array([xs[-1][-1]]))
                 ys.append(np.array([np.nan]))
             xs.append(x)
             ys.append(e)
-        tr.units, tr.has_sens = "counts", True
+        tr.stats = None
+        tr.lo = tr.hi = None
         if xs:
+            # offset and units on the decimated points only (the same as on every sample: the
+            # envelope keeps each bin's extremes, which an offset and a factor only move)
             x = np.concatenate(xs)
             y = np.concatenate(ys)
-            if count:
-                y -= total / count
-            if self._units == "physical":
-                sens = self._sensitivity(tr.sid)
-                if sens:
-                    y /= sens[0]
-                    tr.units = UNIT_NAMES.get(str(sens[1]).upper(), str(sens[1]) or "units")
-                else:
-                    tr.has_sens = False
+            if shift:
+                y -= shift
+            if factor != 1.0:
+                y /= factor
             finite = np.isfinite(y)
-            tr.lo, tr.hi = (float(np.min(y[finite])), float(np.max(y[finite]))) if finite.any() else (None, None)
+            if count and finite.any():
+                tr.lo, tr.hi = float(np.min(y[finite])), float(np.max(y[finite]))
+                rms = None
+                if want_rms:
+                    rms = math.sqrt(max(0.0, sumsq / count - tr.mean_pre ** 2)) / abs(factor)
+                tr.stats = {"n": count, "mean": (tr.mean_pre - shift) / factor, "min": tr.lo, "max": tr.hi,
+                            "rms": rms}
             tr.curve.setData(x, y, connect="finite")
         else:
-            tr.has_sens = self._units != "physical" or self._sensitivity(tr.sid) is not None
-            tr.lo = tr.hi = None
+            if self._units != "counts":
+                tr.has_sens = self._sensitivity(sid) is not None
             tr.curve.setData([], [])
+        if self._spec_on(sid) and tr.image is not None:
+            self._compute_spectrogram(tr, parts, shift, factor, t0, t1, width, ts["contrast"])
         tr.t0, tr.t1, tr.version, tr.computed = t0, t1, self._version, now
         self._update_label(tr)
+        self._update_detail_lines(tr)
+
+    def _compute_spectrogram(self, tr, parts, shift, factor, t0, t1, width, contrast):
+        """The spectrogram of the visible data: the segments are laid on one evenly sampled
+        array (gaps quiet), cut into Hann-windowed pieces; colours on a log scale from the
+        brightest level down SPEC_RANGE_DB (contrast steps shift it by SPEC_STEP_DB)."""
+        if not parts:
+            tr.image.clear()
+            return
+        rate = parts[0][1]
+        n = int(round((t1 - t0) * rate))
+        if n < 2 * self._spec_size:
+            tr.image.clear()
+            return
+        arr = np.full(n, np.nan)
+        for start, r, y in parts:
+            if r != rate:
+                continue
+            i = int(round((start - t0) * rate))
+            a, b = max(0, i), min(n, i + len(y))
+            if b > a:
+                arr[a:b] = (y[a - i:b - i] - shift) / factor
+        res = dsp.spectrogram(arr, rate, self._spec_size, max(16, int(width)))
+        if res is None:
+            tr.image.clear()
+            return
+        power, step, first = res
+        db = 10.0 * np.log10(power + 1e-30)
+        top = float(np.percentile(db, 99.5)) - SPEC_STEP_DB * contrast
+        nyq = rate / 2.0
+        tr.image.setImage(db, autoLevels=False, levels=(top - SPEC_RANGE_DB, top))
+        tr.image.setRect(QRectF(t0 + first - step / 2.0, 0.0, step * db.shape[0], nyq))
+        if tr.nyq != nyq:
+            tr.nyq = nyq
+            tr.svb.setLimits(yMin=0.0, yMax=nyq)
+            tr.svb.setYRange(0.0, nyq, padding=0)
 
     def _update_label(self, tr):
         c = theme.COLORS
@@ -797,53 +1863,100 @@ class WaveformView(QWidget):
         sta = ".".join(tr.sid.split(".")[:2])
         desc = self.engine.hub.descriptions.get(sta, "")
         physical = tr.units != "counts"
+        ts = self._ts(tr.sid)
         if tr.lo is None:
             values = "no data in this time range"
         else:
             values = (f"min {fmt_value(tr.lo, physical)} &nbsp;max {fmt_value(tr.hi, physical)} "
                       f"&nbsp;{tr.units}")
-        text = (f"<span style='color:{theme.trace_color(i)}; font-weight:600'>{tr.sid}</span>"
+        extra = []
+        if tr.filter_text:
+            extra.append(tr.filter_text + (" (own)" if ts["filter"] else ""))
+        if ts["scale"] != 1.0:
+            extra.append(fmt_gain(ts["scale"]))
+        if ts["offset"] is not None:
+            extra.append("offset fixed" + (", locked" if ts["locked"] else ""))
+        elif ts["locked"]:
+            extra.append("offset locked")
+        text = (f"<span style='color:{self.trace_color(i, tr.sid)}; font-weight:600'>{tr.sid}</span>"
                 + (f" &nbsp;<span style='color:{c['text']}'>{desc}</span>" if desc else "")
-                + f" &nbsp;<span style='color:{c['muted']}'>{values}</span>")
+                + f" &nbsp;<span style='color:{c['muted']}'>{values}</span>"
+                + (f" &nbsp;<span style='color:{c['accent2']}'>{' · '.join(extra)}</span>" if extra else ""))
         if text != tr.text:
             tr.text = text
             tr.label.setText(text, size="8pt")
+
+    def _update_detail_lines(self, tr):
+        want = tr.sid in self._details and tr.stats is not None
+        if not want:
+            for line in tr.lines.values():
+                tr.host.removeItem(line)
+            tr.lines = {}
+            return
+        c = theme.COLORS
+        for key, style in (("mean", Qt.DotLine), ("min", Qt.SolidLine), ("max", Qt.SolidLine)):
+            line = tr.lines.get(key)
+            if line is None:
+                line = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen(c["text"], style=style))
+                line.setZValue(55)
+                tr.host.addItem(line, ignoreBounds=True)
+                tr.lines[key] = line
+            line.setValue(tr.stats[key])
 
     def _apply_y_ranges(self):
         mode = self._scale
         spans = [tr.hi - tr.lo for tr in self._traces if tr.lo is not None]
         half_common = max(spans) / 2 if spans else 1.0
-        # only these filters take the mean out (a low-pass keeps it when 'Remove mean' is off)
-        centred = self._demean or dsp.FILTERS[self._filter]["type"] in ("highpass", "bandpass")
+        overlay = self._overlay and len(self._traces) > 1
         for tr in self._traces:
-            if tr.lo is None:
+            if overlay and tr is not self._traces[0]:
+                continue
+            ts = self._ts(tr.sid) if tr.sid else TRACE_DEFAULTS
+            lo_, hi_ = tr.lo, tr.hi
+            if overlay:
+                los = [t.lo for t in self._traces if t.lo is not None]
+                his = [t.hi for t in self._traces if t.hi is not None]
+                lo_, hi_ = (min(los), max(his)) if los else (None, None)
+            # traces centred around 0: mean removed, a high- / band-pass, or a fixed offset
+            spec = self.trace_spec(tr.sid) if tr.sid else None
+            centred = (self._demean or ts["offset"] is not None
+                       or (spec is not None and (spec.get("default") or spec.get("hp") is not None)))
+            magnify = self._gain * (1.0 if overlay else float(ts["scale"]))
+            if lo_ is None:
                 lo, hi = -1.0, 1.0
             elif mode == "fixed":
-                mid = 0.0 if centred else (tr.lo + tr.hi) / 2
-                lo, hi = mid - self._fixed, mid + self._fixed
+                mid = 0.0 if centred else (lo_ + hi_) / 2
+                lo, hi = mid - self._fixed / magnify, mid + self._fixed / magnify
             elif mode == "common":
-                mid = (tr.lo + tr.hi) / 2
-                lo, hi = mid - half_common, mid + half_common
+                mid = (lo_ + hi_) / 2
+                half = (half_common if not overlay else (hi_ - lo_) / 2) / magnify
+                lo, hi = mid - half, mid + half
             else:
-                lo, hi = tr.lo, tr.hi
+                mid, half = (lo_ + hi_) / 2, (hi_ - lo_) / 2 / magnify
+                lo, hi = mid - half, mid + half
             if hi - lo <= 0:   # a flat trace: give it some height around its value
-                d = max(abs(lo) * 1e-3, 1e-12 if self._units == "physical" else 1.0)
+                d = max(abs(lo) * 1e-3, 1e-12 if self._units != "counts" else 1.0)
                 lo, hi = lo - d, hi + d
-            if (lo, hi) != tr.yrange:
-                tr.yrange = (lo, hi)
+            if (lo, hi, mode) != tr.ykey:
+                tr.ykey = (lo, hi, mode)
                 tr.vb.setYRange(lo, hi, padding=0 if mode == "fixed" else 0.06)
+                tr.yrange = tuple(float(v) for v in tr.vb.viewRange()[1])
+        if overlay:   # the others are drawn in the first row: they share its range
+            for tr in self._traces[1:]:
+                tr.ykey, tr.yrange = self._traces[0].ykey, self._traces[0].yrange
+        if self._acur:
+            self._place_cursors()
 
     def _update_note(self):
-        if self._units != "physical":
+        if self._units == "counts":
             text = ""
-        elif getattr(self.engine, "responses", None) is None:
-            text = "No StationXML responses available - shown in counts"
         else:
-            missing = [tr.sid for tr in self._traces if not tr.has_sens]
+            missing = [tr.sid for tr in self._traces if tr.sid and not tr.has_sens]
             text = ""
             if missing:
                 more = f" and {len(missing) - 3} more" if len(missing) > 3 else ""
-                text = f"No StationXML response for {', '.join(missing[:3])}{more} - shown in counts"
+                text = (f"No StationXML response or calibration for {', '.join(missing[:3])}{more} - "
+                        "shown in counts")
         if self.note.text() != text:
             self.note.setText(text)
             self.note.setToolTip(text)
@@ -852,15 +1965,30 @@ class WaveformView(QWidget):
     # Qt events
     # ------------------------------------------------------------------------------------
     def eventFilter(self, obj, ev):
-        if obj is self.glw and ev.type() == QEvent.Resize:
+        t = ev.type()
+        if obj is self.glw and t == QEvent.Resize:
             self._fit_rows(ev.size().height() - 2 * self.glw.frameWidth())
             self._version += 1   # more / fewer pixels: decimate again
-        elif obj is self.scroll.viewport() and ev.type() == QEvent.Resize:
+        elif obj is self.scroll.viewport() and t == QEvent.Resize:
             self._size_canvas(ev.size().width(), ev.size().height())
+        elif obj in (self.glw.viewport(), self.empty) and t in (QEvent.DragEnter, QEvent.DragMove, QEvent.Drop):
+            if not ev.mimeData().hasFormat(CHANNEL_MIME):
+                return False
+            ev.acceptProposedAction()
+            if t == QEvent.Drop:
+                sids = bytes(ev.mimeData().data(CHANNEL_MIME)).decode("utf-8").split()
+                added = self.add_channels(sids)
+                if added:
+                    self.channelsDropped.emit(added)
+            return True
         elif obj is self.glw.viewport() and (
-                ev.type() in (QEvent.MouseButtonPress, QEvent.MouseButtonDblClick, QEvent.Wheel)
-                or (ev.type() == QEvent.MouseMove and ev.buttons() != Qt.NoButton)):
+                t in (QEvent.MouseButtonPress, QEvent.MouseButtonDblClick, QEvent.Wheel)
+                or (t == QEvent.MouseMove and ev.buttons() != Qt.NoButton)):
             self._touched = time.monotonic()   # the user is working with the plots: no auto-return yet
+        elif obj is self.glw.viewport() and t == QEvent.Leave and self._active is not None:
+            self._active = None
+            self._color_traces()
+            self.hoverChanged.emit("")
         return super().eventFilter(obj, ev)
 
     def changeEvent(self, ev):

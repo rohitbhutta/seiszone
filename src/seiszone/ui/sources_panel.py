@@ -119,7 +119,7 @@ class PropertiesDialog(QDialog):
 
 class SourcesPanel(QWidget):
     sourceSelected = Signal(str)        # id of the selected source ("" when none)
-    channelsRequested = Signal(list)    # SEED ids to show in the waveform view
+    channelsRequested = Signal(list)    # SEED ids to open in a viewer window
 
     def __init__(self, engine, config, parent=None):
         super().__init__(parent)
@@ -459,7 +459,7 @@ class SourcesPanel(QWidget):
         m = QMenu(self)
         key = self._key(item)
         sids = self.channels_of(item)
-        act = m.addAction(theme.icon("channel"), f"Show channels ({len(sids)})", lambda: self._request_channels(item))
+        act = m.addAction(theme.icon("channel"), f"Open in a viewer ({len(sids)} channels)", lambda: self._request_channels(item))
         act.setEnabled(bool(sids))
         if key and key[0] in ("source", "station"):
             self.tree.setCurrentItem(item)

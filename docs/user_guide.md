@@ -111,24 +111,25 @@ connects to it instead; see **Gecko recorder does not appear / port in use** in 
 
 ## 5. The main window
 
-* **Toolbar**: Add source, Remove, Reconnect, Record, Export, Spectrum, Settings, About.
+* **Toolbar**: Add source, Remove, Reconnect, Open viewer, Record, Export, Settings, About.
 * **Sources** (left): your instruments and servers with a coloured dot:
   green = receiving data, amber = connecting or waiting for data, red = error,
   grey = stopped or switched off. Also listed: the **Gecko receiver** (Geckos connected to this
   PC) and the **SeedLink server** (programs reading data from SeisZone).
-* **Waveforms** (centre): the live traces (section 7).
-* **Channels** (bottom): one row per channel (section 6).
+* **Channels** (centre): one row per channel (section 6). Tick channels and click **Open viewer**
+  to see them live in a viewer window of their own (section 7).
 * **Log** (bottom): what SeisZone is doing, also errors and warnings.
 * **Status bar**: sources receiving, Gecko links, SeedLink server clients, recording state and
   free disk space.
+* **Window** menu: open a new viewer, bring an open viewer to the front, close all viewers.
 
 The panels can be moved, closed and opened again from the **View** menu. The window size and
 layout are remembered.
 
 ## 6. The channels table and its colours
 
-Columns: **Show** (tick = plot this channel), Channel (NET.STA.LOC.CHA), Description, Rate
-(samples per second), Latest sample (UTC), Latency, Packets, Gaps, Source.
+Columns: **View** (tick the channels you want to see together), Channel (NET.STA.LOC.CHA),
+Description, Rate (samples per second), Latest sample (UTC), Latency, Packets, Gaps, Source.
 
 **Latency** is how old the newest sample is. The colour of the row tells you at a glance:
 
@@ -141,39 +142,101 @@ Columns: **Show** (tick = plot this channel), Channel (NET.STA.LOC.CHA), Descrip
 A slow channel (for example 5 samples per second) sends a packet only every minute or so, so
 its latency is naturally larger; SeisZone allows for that.
 
-Use the filter box to find channels, **Show all** / **Hide all** to tick or untick the listed
-channels, and click a column title to sort.
+Use the filter box to find channels, **Tick all** / **Untick all** for the listed channels, and
+click a column title to sort. To see channels:
 
-## 7. The waveform view
+* tick them and click **Open viewer** (or Ctrl+Shift+N): a new viewer window with those
+  channels;
+* **double-click** a channel: a viewer with that channel alone;
+* right-click selected channels: **Open in a new viewer**, or **Add to viewer** (an open one);
+* **drag** channels from the table into an open viewer;
+* in the Sources panel, right-click a source or station: **Open in a viewer**.
 
-The bar above the traces:
+## 7. Viewer windows
 
-* **Window**: how much time is shown (30 s up to 60 min).
-* **Filter**: No filter, High-pass 0.1 Hz or 1 Hz, Low-pass 5 Hz or 20 Hz, Band-pass
-  0.5-5 Hz, 1-10 Hz or 1-20 Hz. The filter changes only the display, never the recorded data.
-* **Units**: Counts (raw numbers from the digitiser) or Physical units (for example m/s or
-  m/s²), calculated with the instrument response from the StationXML. Physical units are
-  only available for channels whose StationXML SeisZone has.
-* **Scale**: Auto (each trace fills its row), Common (all traces with the same scale, good to
-  compare amplitudes), or Fixed ± a value you type.
-* **Remove mean**: centres each trace on zero.
-* **Live / Paused**: Live follows the newest data.
+A viewer is a window of its own (with its own taskbar button, minimize and maximize). Open as
+many as you like, with any channels; the same channel can be in several viewers with different
+settings. Viewers that are open when you quit SeisZone open again at the next start, with all
+their settings. Closing a viewer (X) forgets it.
 
-Mouse:
+### The bar above the traces
 
-* **Mouse wheel** zooms in time, **drag** moves the view. Zooming or moving pauses the live view so
-  you can look at an event calmly.
-* **Double-click** a trace (or click **Paused**) to follow the newest data again.
+* **Channels**: tick which channels this viewer shows.
+* **Window** and **- / +**: how much time is shown (10 s up to 60 min). Keys: Left / Right.
+* **Amplitude - x1 +**: makes every trace larger or smaller in steps of 2 (click x1 to reset).
+  Keys: Up / Down, or the mouse wheel.
+* **Filter**: click to switch the filter of the whole window on or off (key **F**); the arrow
+  beside it chooses the filter: the **Default band-pass** (0.1 to 0.9 of each channel's Nyquist
+  frequency, e.g. 5-45 Hz at 100 sps; 10-30 s period for 1 or 2 sps data), the ready-made
+  high-pass, low-pass and band-pass filters, your saved filters, or **Design...** (Ctrl+F).
+  Filters change only the display, never recorded data.
+* **Units**: Counts, Physical units (m/s, m/s² from StationXML or your calibration), or Physical
+  with acceleration in **g**.
+* **Scale**: Auto (each trace fills its row), Common (all traces the same range, to compare
+  amplitudes), Fixed ± a value you type.
+* **Remove mean**: centres each trace on zero. **Null** (key **N**): fixes each trace's offset
+  at its mean now.
+* **Time cursors**: two vertical lines to drag; the button shows the time between them and the
+  matching frequency. **Ampl cursors**: two horizontal lines on the channel under the mouse;
+  the button shows the difference.
+* **Live / Paused**: Live follows the newest data. A paused viewer turns amber and goes live by
+  itself after 2 minutes without mouse use.
 
-Each trace shows its channel name and the minimum and maximum of what is visible. Breaks in a
-trace are gaps in the data.
+### Mouse
 
-**Spectrum** (toolbar) shows the amplitude spectrum of the shown channels for the time range
-that is visible when you open it.
+* **Wheel**: larger / smaller traces (stays live). **Shift+wheel**: shorter / longer window.
+  **Ctrl+wheel**: scroll back / forward in time (pauses).
+* **Drag**: move in time (pauses). **Double-click**: live again.
+* **Shift+drag**: select a time range. A menu offers: zoom to it, its spectrum, export it to
+  miniSEED, or use it as "noise" or "signal" in the filter design.
+* **Right-click** a channel: the menu below. The status bar shows the time and value under the
+  mouse.
+
+### Right-click menu
+
+For the channel under the mouse:
+
+| Entry | Key | What it does |
+|-------|-----|--------------|
+| Colour... | C | the trace colour |
+| Scale... | S | a scale factor for this channel (2 = twice as large; *2, /2; also for all channels of the station or of the viewer) |
+| Scale others to match | Ctrl+S | every channel gets the amplitude range this one shows |
+| Details... | D | mean, minimum, maximum, difference and RMS of the visible data; type an offset; Null / Zero / Mean removal. The plot shows the mean (dotted) and min / max lines |
+| Filter | | its own filter: same as the window, none, any filter of the list, or Design for this channel |
+| Offset | Z = zero | follow Remove mean, Null now (fix at the mean), Zero (absolute values) |
+| Locked offset | | Null (N) leaves this channel alone |
+| Spectrogram | P | a colour spectrogram under the trace (red = strong, purple = weak). + / - brighter / darker; the wheel over it zooms the frequency |
+| Calibration... | | counts per m/s or m/s² for a channel without StationXML |
+| Remove from this viewer | Del | |
+
+For the whole viewer: Background colour, Show lane lines (L), Overlay channels (O, all traces
+in one row on top of each other), Spectrogram size, All spectrograms on / off (Ctrl+P), Sort by
+(channel, component Z-N-E, station, sample rate, also reversed), Channels..., Label... (the
+viewer's name), Clear window (Ctrl+Del), No caption (F11: full screen without menu and bar,
+F11 again to return), Duplicate (Ctrl+D), and Spectrum / Export / Record these channels / Save
+picture. The menu bar has the same and **Print** (Ctrl+Shift+P); Help > Viewer keys and mouse
+lists every key.
+
+### Filter design
+
+High-pass and low-pass, each on or off, with its corner in Hz or seconds and its order (1-8);
+both on is a band-pass. The graph shows the response for a chosen sample rate. Left-click in the
+graph sets the high-pass corner, right-click the low-pass corner. Spectra of selected time
+ranges (Shift+drag in the viewer, "Use as noise / signal in the filter design") are drawn under
+it, to put the corners where the event is stronger than the noise. **Apply** / **OK** use the
+design; **Auto-apply** uses every change at once; **Save...** keeps it under a name for every
+viewer. Opened from a channel's menu, the design is for that channel only.
+
+Each trace shows its channel name, the minimum and maximum of what is visible, and its filter,
+scale factor and offset when they are set. Breaks in a trace are gaps in the data.
 
 ## 8. Recording
 
-Click **Record** (or Ctrl+R). The window shows all recordings and lets you start new ones.
+Click **Record** (or Ctrl+R). The Recordings window shows all recordings (top) and lets you
+start new ones (bottom). It is a window of its own: minimize it, maximize it, or keep it open
+beside SeisZone. Drag the **divider** between the two parts up or down to make the recordings
+list bigger or smaller; size and divider are remembered. From a viewer, **Record these
+channels** opens it with that viewer's channels ticked.
 
 Start a recording:
 
