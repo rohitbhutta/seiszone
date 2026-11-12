@@ -29,6 +29,8 @@ import time
 
 import numpy as np
 
+from . import history
+
 log = logging.getLogger("seiszone")
 
 GAP_TOLERANCE = 0.5     # in samples: a jump bigger than this between records is a gap / overlap
@@ -185,6 +187,7 @@ class DataHub:
         self.seq = 0                                         # sequence of the newest packet
         self.buffer_seconds = buffer_seconds
         self.buffers = {}                                    # sid -> StreamBuffer
+        self.summaries = {}                                  # sid -> history.Summary (the last day)
         self.stats = {}                                      # sid -> dict (see _new_stats)
         self.descriptions = {}                               # "NET.STA" -> site description
         self.listeners = []                                  # fn(rec, source_id)
@@ -227,6 +230,10 @@ class DataHub:
                 if st is None or abs(st["rate"] - rec.rate) > 1e-6:
                     st = self.stats[sid] = self._new_stats(rec, source_id)
                     self.buffers[sid] = StreamBuffer(rec.rate, self.buffer_seconds)
+                    old = self.summaries.get(sid)
+                    if old is None or abs(getattr(old, "rate", rec.rate) - rec.rate) > 1e-6:
+                        self.summaries[sid] = history.Summary()
+                    self.summaries[sid].rate = rec.rate
                 else:
                     tol = GAP_TOLERANCE / rec.rate
                     if rec.start > st["last_end"] + tol:
@@ -243,6 +250,7 @@ class DataHub:
                 st["latency"] = now - st["last_end"]
                 st["last_value"] = float(samples[-1])
                 self.buffers[sid].add(rec.start, samples)
+                self.summaries[sid].add(rec.start, rec.rate, samples)
             rec._samples = None   # the ring keeps raw bytes only; the live buffer holds a copy
         for ev in list(self._waiters):
             ev.set()
@@ -339,6 +347,38 @@ class DataHub:
             buf = self.buffers.get(sid)
             return buf.window(t0, t1) if buf else []
 
+    def summary(self, sid, t0, t1):
+        """Per-second (first bin, lo, hi, sum, count) of the last day for [t0, t1), or None."""
+        with self.lock:
+            s = self.summaries.get(sid)
+            return s.query(t0, t1) if s is not None else None
+
+    def first_time(self, sid):
+        """Start of the oldest sample the live buffer holds for sid (None: nothing)."""
+        with self.lock:
+            buf = self.buffers.get(sid)
+            return buf.first if buf else None
+
+    def save_history(self, path):
+        """Keep the per-second summaries of the last day for the next start."""
+        with self.lock:
+            sums = dict(self.summaries)
+            rates = {sid: getattr(s, "rate", 0.0) for sid, s in sums.items()}
+            return history.save_summaries(path, sums, rates)
+
+    def load_history(self, path):
+        """The summaries saved by the last run (merged with anything already received)."""
+        loaded = history.load_summaries(path)
+        with self.lock:
+            for sid, (rate, s) in loaded.items():
+                cur = self.summaries.get(sid)
+                if cur is None:
+                    s.rate = rate
+                    self.summaries[sid] = s
+                elif abs(getattr(cur, "rate", rate) - rate) < 1e-6:
+                    cur.load(s.arrays(-1))
+        return len(loaded)
+
     def latest_time(self):
         with self.lock:
             ends = [st["last_end"] for st in self.stats.values()]
@@ -351,6 +391,7 @@ class DataHub:
         with self.lock:
             self.stats.pop(sid, None)
             self.buffers.pop(sid, None)
+            self.summaries.pop(sid, None)
 
     def set_buffer_seconds(self, seconds):
         with self.lock:

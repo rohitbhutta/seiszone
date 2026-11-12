@@ -128,7 +128,7 @@ class SpectrumDialog(QDialog):
             if seconds < (self.t1 - self.t0) * 0.98:
                 notes.append(f"{sid}: gaps in the window - longest gap-free part used ({seconds:.0f} s)")
             good = (freq > 0) & (amp > 0) & np.isfinite(amp)
-            curve = self.plot.plot(freq[good], amp[good], pen=pg.mkPen(theme.trace_color(i), width=1.2),
+            curve = self.plot.plot(freq[good], amp[good], pen=pg.mkPen(theme.trace_color(i, sid), width=1.2),
                                    name=sid)
             self.curves[sid] = curve
         label = " or ".join(sorted(units)) if units else "counts"

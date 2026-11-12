@@ -46,9 +46,12 @@ port 80 (status, data streams, StationXML ~0.9 MB — about a minute over the sl
 Tests must never contact these or listen on 58772, 18000 or 18010 (the real Gecko connects to
 58772; the old service holds 18010; SeisZone's own server runs on 18000).
 
-## Status (2026-11-11, version 1.1.0)
+## Status (2026-11-12, version 1.2.0)
 
 * Project at `C:\D Drive\Only Coding\seiszone` (git repository, local only - not pushed).
+* **Version 1.2.0** (see "Version 1.2.0" below): closing any window no longer quits SeisZone;
+  history of the last day in the viewers; Scream-like time scale, label panel, colours, filter
+  design by mouse; protocol by port; log colours in light mode.
 * **Version 1.1.0** (see "Version 1.1.0" below): the live waveforms are in viewer windows of
   their own with the full set of display tools of the user's earlier viewer (filters per window
   and per channel, filter design, offsets, spectrograms, cursors, ...); the Recordings window can
@@ -81,6 +84,40 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   new resume command `DATA n <time>` is accepted by all three Fortimus servers; each backfilled
   ~22-24 h of history (~5,850 packets per source) with 0 gaps and no errors.
 * Not yet done: Gecko field test; user installs and accepts 1.0.2.
+
+### Version 1.2.0 (2026-11-12)
+
+Why (the user's reports on 1.1.0, with screenshots of their earlier viewer):
+1. Closing a Details box, the Label box, a viewer or the Recordings window closed ALL of
+   SeisZone (log: "SeisZone was asked to close by another program"). Cause: the 1.0.x
+   ExternalCloseFilter waited for WM_SYSCOMMAND/SC_CLOSE to recognise a user's close, but Windows
+   SENDS that message straight to the window procedure and Qt's native filters never see it, so
+   every user close looked like taskkill. Proven with real windows (scratch closetest.py). Now:
+   a WM_CLOSE seen twice in a row came through the queue (posted: taskkill / installer); seen once
+   is the user's. Real taskkill on a test process still ends it; tests with real Windows messages.
+2. Viewers and the Recordings window reopened at every start: reopening viewers is now a Settings
+   option, off by default (the Recordings window was never restored by itself).
+3. A viewer showed no history ("backfill") - only data since SeisZone started. Now one day:
+   hub per-second summaries (saved/loaded, `view_history.npz`), the recordings read in the
+   background (`core/history.py`), and SeedLink TIME for a station's first connection (checked
+   read-only on 10.8.0.180: TIME is accepted and sends data from 6 h back). The Gecko link sends
+   live data only: its history comes from recordings (the user records SS.SMR03).
+4. Time window like their viewer: arrows and pixels per second, up to 1440 minutes.
+5. Filter design like their viewer: red / green parts, Hz + secs + order, Gain (dB), left / right
+   mouse drag of the corners, axis in Hz and seconds.
+6. Typing only an IP or IP:18000 seemed to "take GCF": the probe did pick SeedLink (checked
+   read-only on 10.8.0.180), but the channel list showed the instrument's GCF stream names.
+   Now the GCF names show only for a GCF connection, and the port rules are explicit.
+7. Label panel on the left like their viewer (station, channel, units such as g) with colours by
+   component (Z green, N red, E sky blue, others blue); "Label..." names a channel (shown there);
+   the viewer's own name is "Window title...".
+8. Light mode: old log lines kept the dark theme's pale colour - they are coloured again.
+* SMR03 has no StationXML: "g" needs a Calibration (counts per m/s²) for its channels.
+* The viewer's tool bar is a QToolBar now: the old bar forced the window wider than the screen
+  (found by a width check in tests).
+* Tests: tests/test_history.py (new), test_ui_viewer (panel, labels, design drag, time scale),
+  test_probe (port rules), test_seedlink (first-connection TIME), test_ui_shell (close filter
+  with real messages, log colours, reopen option).
 
 ### Version 1.1.0 (2026-11-11)
 
@@ -280,9 +317,10 @@ User files: `%APPDATA%\SeisZone` (config.json, state.json, stationxml\), `%LOCAL
 
 ## Open items / next steps
 
-1. (done) 1.0.1 = 5c60396, 1.0.2 = 4092142; 1.1.0 committed after its build.
-2. User installs build/dist/SeisZoneSetup.exe 1.1.0 (UAC), ticks channels and opens viewers,
-   tries the filters / right-click menu, and checks "SeedLink server :18000" is listening.
+1. (done) 1.0.1 = 5c60396, 1.0.2 = 4092142, 1.1.0 = 465a94a; 1.2.0 committed after its build.
+2. User installs build/dist/SeisZoneSetup.exe 1.2.0 (UAC); checks closing viewers / dialogs keeps
+   SeisZone running, a 1-day window shows the history, the filter design drag, the label panel.
+3. Optional: a Calibration for SS.SMR03 channels so they can be shown in g.
 3. The user chooses to stop the old GeckoSeedLink service: installer task "stopoldservice" or
    the Sources panel's "Free the port" / "Stop old service". Then check that "Gecko receiver"
    shows the SMR03 link (W610 redial time unknown, usually within a minute) - the SMR03 field test.

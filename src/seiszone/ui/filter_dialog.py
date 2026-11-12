@@ -17,11 +17,12 @@ Auto-apply does it at every change. Save keeps the design under a name.
 
 import logging
 import math
+import weakref
 
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QGridLayout, QHBoxLayout,
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QFrame, QGridLayout, QHBoxLayout,
                                QInputDialog, QLabel, QMessageBox, QPushButton, QSpinBox, QVBoxLayout)
 
 from ..core import dsp
@@ -115,7 +116,7 @@ class _CornerRow:
         self.secs.setSuffix(" s")
         self.order = QSpinBox()
         self.order.setRange(1, dsp.MAX_ORDER)
-        self.order.setPrefix("order ")
+        self.order.setSuffix(" th order")
         self._busy = False
         self._freq = 1.0
         self._on_change = on_change
@@ -171,9 +172,96 @@ class _CornerRow:
             self._on_change()
 
 
+class _FreqAxis(pg.AxisItem):
+    """Frequency axis of the design graph: "0.01 Hz" with "100 s" under it (log mode)."""
+
+    def __init__(self):
+        super().__init__("bottom")
+        self.log = True
+        self.setHeight(38)
+
+    def tickStrings(self, values, scale, spacing):
+        out = []
+        for v in values:
+            f = 10 ** v if self.log else v
+            if f <= 0:
+                out.append("")
+                continue
+            hz = f"{f:g} Hz"
+            out.append(f"{hz}\n{1 / f:g} s" if self.log else hz)
+        return out
+
+
+class _DesignBox(pg.ViewBox):
+    """The design graph's mouse, like the user's earlier viewer: the left button (click or drag)
+    sets the high-pass corner, the right button the low-pass corner; a corner line itself can
+    be grabbed and dragged with the left button."""
+
+    GRAB_PX = 6
+
+    def __init__(self, dialog):
+        super().__init__(enableMenu=False)
+        self._dialog = weakref.ref(dialog)
+        self._dragging = None            # "hp" / "lp" while a drag moves that corner
+        self.setMouseEnabled(x=False, y=False)
+
+    def _freq(self, pos):
+        d = self._dialog()
+        x = self.mapToView(pos).x()
+        return 10 ** x if d is not None and d.log_box.currentData() else x
+
+    def _near_line(self, pos):
+        d = self._dialog()
+        if d is None:
+            return None
+        for which, line in (("lp", d.lp_line), ("hp", d.hp_line)):
+            if line.isVisible():
+                px = self.mapViewToScene(pg.Point(line.value(), 0)).x()
+                if abs(self.mapToScene(pos).x() - px) <= self.GRAB_PX:
+                    return which
+        return None
+
+    def _which(self, ev):
+        if ev.button() == Qt.LeftButton:
+            return self._near_line(ev.buttonDownPos() if hasattr(ev, "buttonDownPos") else ev.pos()) or "hp"
+        if ev.button() == Qt.RightButton:
+            return "lp"
+        return None
+
+    def mouseClickEvent(self, ev):
+        d = self._dialog()
+        which = self._which(ev)
+        if d is None or which is None:
+            return
+        ev.accept()
+        d.drag_corner(which, self._freq(ev.pos()))
+
+    def mouseDragEvent(self, ev, axis=None):
+        d = self._dialog()
+        if d is None:
+            return
+        if ev.isStart():
+            self._dragging = self._which(ev)
+        if self._dragging is None:
+            return
+        ev.accept()
+        d.drag_corner(self._dragging, self._freq(ev.pos()), final=ev.isFinish())
+        if ev.isFinish():
+            self._dragging = None
+
+    def wheelEvent(self, ev, axis=None):
+        ev.ignore()
+
+
 class FilterDesignDialog(QDialog):
     """Design a filter for a viewer (its whole window, or one channel). `apply_fn(spec)` gets
-    the design (None: no filter) on Apply, OK and - with Auto-apply - every change."""
+    the design (None: no filter) on Apply, OK and - with Auto-apply - every change.
+
+    Laid out like the user's earlier viewer's filter design: the high-pass part on red, the
+    low-pass part on green (each: on/off, corner in Hz and in seconds, order), the gain in dB,
+    the response graph (left button: high-pass corner, right button: low-pass corner, click or
+    drag; the corner lines can also be dragged), Log / Lin and the sample rate below it, and
+    Auto-Apply, Save, OK, Cancel, Apply."""
 
     applied = Signal(object)
     saved = Signal(str)          # a design was saved under this name (every viewer offers it)
@@ -186,15 +274,43 @@ class FilterDesignDialog(QDialog):
         self._default = False  # showing the default band-pass, not changed yet: it stays the default
         self.setWindowTitle(f"Filter design - {target}")
         self.setWindowIcon(theme.icon("spectrum"))
-        self.resize(760, 560)
+        self.resize(820, 580)
         c = theme.COLORS
-        self.hp = _CornerRow("High-pass", c["danger"], self._edited)
-        self.lp = _CornerRow("Low-pass", c["ok"], self._edited)
-        grid = QGridLayout()
-        for row, part in enumerate((self.hp, self.lp)):
-            for col, w in enumerate(part.widgets()):
-                grid.addWidget(w, row, col)
-        grid.setColumnStretch(4, 1)
+        self.hp = _CornerRow("Highpass", "#b00000", self._edited)
+        self.lp = _CornerRow("Lowpass", "#006400", self._edited)
+
+        def part(row, bg):
+            box = QFrame()
+            box.setObjectName("designPart")
+            box.setStyleSheet(f"QFrame#designPart {{ background: {bg}; border-radius: 4px; }}"
+                              "QFrame#designPart QLabel { color: #101010; }")
+            g = QGridLayout(box)
+            g.setContentsMargins(8, 6, 8, 6)
+            g.addWidget(row.on, 0, 0)
+            g.addWidget(row.hz, 0, 1)
+            g.addWidget(QLabel("Hz"), 0, 2)
+            g.addWidget(row.order, 1, 0)
+            g.addWidget(row.secs, 1, 1)
+            g.addWidget(QLabel("Secs"), 1, 2)
+            return box
+
+        mouse = QLabel("Left button\n= high-pass\nRight button\n= low-pass")
+        mouse.setAlignment(Qt.AlignCenter)
+        mouse.setStyleSheet(f"color: {c['muted']}; font-size: 8pt;")
+        self.gain = QDoubleSpinBox()
+        self.gain.setRange(-dsp.MAX_GAIN_DB, dsp.MAX_GAIN_DB)
+        self.gain.setDecimals(1)
+        self.gain.setSuffix(" dB")
+        self.gain.setToolTip("Gain of the filtered trace (also when both parts are off)")
+        self.gain.valueChanged.connect(lambda _v: self._edited())
+        gain_box = QVBoxLayout()
+        gain_box.addWidget(QLabel("Gain (dB)"))
+        gain_box.addWidget(self.gain)
+        top = QHBoxLayout()
+        top.addWidget(part(self.hp, "#f4b4b4"), 3)
+        top.addWidget(mouse)
+        top.addWidget(part(self.lp, "#a8e6a8"), 3)
+        top.addLayout(gain_box)
 
         self.rate_box = QComboBox()
         rates = sorted({float(r) for r in rates if r and r > 0}, reverse=True) or [100.0]
@@ -204,17 +320,17 @@ class FilterDesignDialog(QDialog):
                                  "(display only - every channel is filtered at its own rate)")
         self.rate_box.currentIndexChanged.connect(self._rate_changed)
         self.log_box = QComboBox()
-        self.log_box.addItem("Log frequency", True)
-        self.log_box.addItem("Linear frequency", False)
+        self.log_box.addItem("Log", True)
+        self.log_box.addItem("Lin", False)
         self.log_box.currentIndexChanged.connect(self._set_log)
 
-        self.plot = pg.PlotWidget(background=c["plot_bg"])
+        self.box = _DesignBox(self)
+        self.freq_axis = _FreqAxis()
+        self.plot = pg.PlotWidget(background=c["plot_bg"], viewBox=self.box, axisItems={"bottom": self.freq_axis})
         self.plot.setMenuEnabled(False)
-        self.plot.setMouseEnabled(x=False, y=False)
         self.plot.hideButtons()
         self.plot.showGrid(x=True, y=True, alpha=0.25)
-        self.plot.setLabel("bottom", "Frequency (Hz)", color=c["muted"])
-        self.plot.setLabel("left", "Gain (dB)", color=c["muted"])
+        self.plot.setLabel("left", "Magnitude (dB)", color=c["muted"])
         for name in ("left", "bottom"):
             ax = self.plot.getAxis(name)
             ax.setPen(pg.mkPen(c["border"]))
@@ -222,27 +338,26 @@ class FilterDesignDialog(QDialog):
             ax.enableAutoSIPrefix(False)
         self.noise_curve = self.plot.plot([], [], pen=pg.mkPen(c["muted"], width=1))
         self.signal_curve = self.plot.plot([], [], pen=pg.mkPen(c["text"], width=1))
-        self.curve = self.plot.plot([], [], pen=pg.mkPen(c["accent"], width=2))
-        self.hp_line = pg.InfiniteLine(angle=90, pen=pg.mkPen(c["danger"], style=Qt.DashLine))
-        self.lp_line = pg.InfiniteLine(angle=90, pen=pg.mkPen(c["ok"], style=Qt.DashLine))
+        self.curve = self.plot.plot([], [], pen=pg.mkPen("#3b7dff", width=2))
+        self.hp_line = pg.InfiniteLine(angle=90, pen=pg.mkPen("#ff3030", width=2))
+        self.lp_line = pg.InfiniteLine(angle=90, pen=pg.mkPen("#20c020", width=2))
         self.half_line = pg.InfiniteLine(angle=0, pos=-6.0, pen=pg.mkPen(c["grid"], style=Qt.DotLine))
         for line in (self.hp_line, self.lp_line, self.half_line):
             self.plot.addItem(line)
-        self.plot.scene().sigMouseClicked.connect(self._clicked)
         self.plot.setLogMode(x=True, y=False)
-        self.plot.getPlotItem().vb.disableAutoRange()
+        self.box.disableAutoRange()
         self.plot.setYRange(FLOOR_DB, 6, padding=0)
 
         self.message = QLabel()
         self.message.setWordWrap(True)
-        hint = QLabel("Left click in the graph: high-pass corner. Right click: low-pass corner. "
-                      "Shift+drag over a channel in the viewer and choose \"Use as noise / signal in the filter "
-                      "design\" to see its spectrum here.")
+        hint = QLabel("Click or drag in the graph: left button = high-pass corner (red), right button = low-pass "
+                      "corner (green); a corner line can also be grabbed and dragged. Shift+drag over a channel in "
+                      "the viewer and choose \"Use as noise / signal in the filter design\" to see its spectrum here.")
         hint.setWordWrap(True)
         hint.setStyleSheet(f"color: {c['muted']};")
-        self.auto = QCheckBox("Auto-apply")
+        self.auto = QCheckBox("Auto-Apply")
         self.auto.setToolTip("Every change is applied to the viewer at once")
-        save = QPushButton("Save...")
+        save = QPushButton("Save")
         save.setToolTip("Keep this design under a name: it is offered in every viewer's filter list")
         save.clicked.connect(self.save_preset)
         self.apply_button = QPushButton("Apply")
@@ -255,23 +370,19 @@ class FilterDesignDialog(QDialog):
         for b in (save, self.apply_button, cancel):
             b.setAutoDefault(False)
 
-        opts = QHBoxLayout()
-        opts.addWidget(QLabel("Graph for"))
-        opts.addWidget(self.rate_box)
-        opts.addWidget(self.log_box)
-        opts.addStretch(1)
-        buttons = QHBoxLayout()
-        buttons.addWidget(self.auto)
-        buttons.addStretch(1)
-        for b in (save, self.apply_button, self.ok_button, cancel):
-            buttons.addWidget(b)
+        bottom = QHBoxLayout()
+        bottom.addWidget(self.log_box)
+        bottom.addWidget(self.rate_box)
+        bottom.addStretch(1)
+        bottom.addWidget(self.auto)
+        for b in (save, self.ok_button, cancel, self.apply_button):
+            bottom.addWidget(b)
         lay = QVBoxLayout(self)
-        lay.addLayout(grid)
+        lay.addLayout(top)
         lay.addWidget(self.plot, 1)
-        lay.addLayout(opts)
+        lay.addLayout(bottom)
         lay.addWidget(hint)
         lay.addWidget(self.message)
-        lay.addLayout(buttons)
 
         self.set_spec(spec)
 
@@ -293,6 +404,9 @@ class FilterDesignDialog(QDialog):
             hpo, lpo = spec["hp_order"], spec["lp_order"]
         self.hp.set(hp, hpo, hp_on)
         self.lp.set(lp, lpo, lp_on)
+        self.gain.blockSignals(True)
+        self.gain.setValue(dsp.spec_gain(spec))
+        self.gain.blockSignals(False)
         self._changed(apply=False)
 
     def rate(self):
@@ -304,11 +418,12 @@ class FilterDesignDialog(QDialog):
         if self._default:
             return dict(dsp.DEFAULT_SPEC)
         hp, lp = self.hp.freq(), self.lp.freq()
-        if hp is None and lp is None:
+        gain = round(self.gain.value(), 1)
+        if hp is None and lp is None and not gain:
             return None
         if hp is not None and lp is not None and hp >= lp:
             return False
-        return dsp.make_spec(hp, lp, self.hp.order.value(), self.lp.order.value())
+        return dsp.make_spec(hp, lp, self.hp.order.value(), self.lp.order.value(), gain)
 
     def set_spectrum(self, kind, freqs, amps):
         """Show the amplitude spectrum of a selected time range ("noise" or "signal")."""
@@ -340,7 +455,8 @@ class FilterDesignDialog(QDialog):
             self.apply()
 
     def _set_log(self, _index):
-        self.plot.setLogMode(x=bool(self.log_box.currentData()), y=False)
+        self.freq_axis.log = bool(self.log_box.currentData())
+        self.plot.setLogMode(x=self.freq_axis.log, y=False)
         self._redraw()
 
     def _redraw(self, *_args):
@@ -371,19 +487,12 @@ class FilterDesignDialog(QDialog):
         else:
             self.plot.setXRange(0, nyq, padding=0)
 
-    def _clicked(self, ev):
-        vb = self.plot.getPlotItem().vb
-        if not vb.sceneBoundingRect().contains(ev.scenePos()):
-            return
-        x = vb.mapSceneToView(ev.scenePos()).x()
-        f = 10 ** x if self.log_box.currentData() else x
-        if not (MIN_HZ <= f <= MAX_HZ):
-            return
-        if ev.button() == Qt.LeftButton:
-            self.click_corner("hp", f)
-        elif ev.button() == Qt.RightButton:
-            self.click_corner("lp", f)
-        ev.accept()
+    def drag_corner(self, which, f, final=True):
+        """The mouse in the graph (a click, or every step of a drag): that corner follows it,
+        kept inside the graph's frequency range."""
+        nyq = self.rate() / 2.0
+        f = min(max(f, MIN_HZ, nyq / 1e5), nyq * 0.999, MAX_HZ)
+        self.click_corner(which, f)
 
     def click_corner(self, which, f):
         """A click in the graph: set that corner and switch the part on. Clicking beyond the

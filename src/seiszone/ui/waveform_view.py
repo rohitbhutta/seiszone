@@ -47,6 +47,7 @@ scroll vertically (the time axis is under the last trace).
 """
 
 import collections
+import html
 import json
 import logging
 import math
@@ -57,8 +58,8 @@ import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import QEvent, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QActionGroup, QColor, QCursor, QDoubleValidator, QFont, QIcon
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QGraphicsGridLayout, QGraphicsWidget, QHBoxLayout,
-                               QLabel, QLineEdit, QMenu, QScrollArea, QSizePolicy, QStackedWidget, QToolButton,
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QGraphicsGridLayout, QGraphicsWidget,
+                               QLabel, QLineEdit, QMenu, QScrollArea, QSizePolicy, QStackedWidget, QToolBar, QToolButton,
                                QVBoxLayout, QWidget)
 
 from ..core import dsp
@@ -70,9 +71,16 @@ log = logging.getLogger("seiszone")
 
 CHANNEL_MIME = "application/x-seiszone-channels"   # channel ids, one per line (Channels table -> viewer)
 WINDOWS = [(10, "10 s"), (30, "30 s"), (60, "1 min"), (120, "2 min"), (300, "5 min"), (600, "10 min"),
-           (1800, "30 min"), (3600, "60 min")]
-UNITS = [("counts", "Counts"), ("physical", "Physical units"), ("physical_g", "Physical, acceleration in g")]
-SCALES = [("auto", "Auto (each trace)"), ("common", "Common (all traces)"), ("fixed", "Fixed ±")]
+           (1800, "30 min"), (3600, "60 min"), (7200, "2 h"), (21600, "6 h"), (43200, "12 h"),
+           (86400, "24 h")]   # (the default window of a new viewer, in Settings)
+# the time scale, as the user's earlier viewer shows it: pixels per second, stepped with the
+# arrows; the window shown is (plot width / scale), from MIN_WINDOW up to one day
+PPS_STEPS = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500]
+MIN_WINDOW = 2.0
+MAX_WINDOW = 24 * 3600.0   # 1440 minutes (history.HISTORY_SECONDS)
+SUMMARY_PX = 2.0           # seconds per pixel from which a trace is drawn from per-second summaries
+UNITS = [("counts", "Counts"), ("physical", "Physical"), ("physical_g", "Physical, g")]
+SCALES = [("auto", "Auto"), ("common", "Common"), ("fixed", "Fixed ±")]
 SPEC_SIZES = [32, 64, 128, 256]
 GAIN_RANGE = (1.0 / 64, 4096.0)   # amplitude zoom of the whole window, in x2 steps
 G = 9.80665                      # m/s² per g
@@ -82,6 +90,7 @@ FORCED_BUDGET = 0.25    # the same right after a setting / channel change (the u
 PAUSED_RELOAD = 2.0     # re-read a trace at least this often (backfilled data, paused views)
 SENS_TTL = 30.0         # seconds a looked-up sensitivity is trusted (StationXML files may be added)
 AXIS_WIDTH = 66         # left axis width: the same on every plot so the traces line up
+PANEL_WIDTH = 86        # the label panel left of the axis (station, channel, units)
 TIME_AXIS_HEIGHT = 26   # the time axis under the bottom plot
 ROW_GAP = 4             # space between two plots (the hidden bottom axis of the upper one)
 MIN_ROW = 24            # pixels of a trace at least (more channels than fit: the plots scroll)
@@ -96,7 +105,7 @@ SPEC_STEP_DB = 6.0      # one contrast step (+/- keys): the data x2 or /2
 UNIT_NAMES = {"M/S": "m/s", "M/S**2": "m/s²", "M/S2": "m/s²", "M/SEC": "m/s", "M": "m", "PA": "Pa",
               "V": "V", "COUNTS": "counts", "G": "g"}
 TRACE_DEFAULTS = {"color": None, "scale": 1.0, "filter": None, "custom": None, "offset": None, "locked": False,
-                  "spectrogram": False, "contrast": 0}
+                  "spectrogram": False, "contrast": 0, "label": ""}
 
 
 def nearest_window(seconds):
@@ -167,6 +176,59 @@ class _TraceLabel(pg.LabelItem):
             p.drawRect(self.boundingRect().adjusted(0, 0, -1, -1))
 
 
+class _LanePanel(QGraphicsWidget):
+    """The label panel left of a trace, like the user's earlier viewer: a box in the trace's
+    colour with the station, the channel and the units ("g", "m/s²", "counts") - pale, and in
+    full colour for the channel under the mouse. In overlay mode the first row's panel shows a
+    box for every channel."""
+
+    BOX_LINES = 3
+
+    def __init__(self, font):
+        super().__init__()
+        self.font = QFont(font)
+        self.bold = QFont(font)
+        self.bold.setBold(True)
+        self.entries = []            # [(lines, colour, active)]
+        self.bg = QColor(0, 0, 0)
+        self.setMinimumWidth(PANEL_WIDTH)
+        self.setMaximumWidth(PANEL_WIDTH)
+
+    def set_entries(self, entries, bg):
+        entries = [(tuple(lines), str(color), bool(active)) for lines, color, active in entries]
+        bg = QColor(bg)
+        if entries != self.entries or bg != self.bg:
+            self.entries, self.bg = entries, bg
+            self.update()
+
+    def paint(self, p, *args):
+        r = self.rect()
+        p.fillRect(r, self.bg)
+        line_h = 13
+        box_h = line_h * self.BOX_LINES + 6
+        y = 2.0
+        for lines, color, active in self.entries:
+            if y >= r.height():
+                break
+            h = min(box_h, r.height() - y - 1)
+            full = QColor(color)
+            pale = QColor(int(full.red() * 0.45 + 255 * 0.55), int(full.green() * 0.45 + 255 * 0.55),
+                          int(full.blue() * 0.45 + 255 * 0.55))
+            box = QRectF(2, y, r.width() - 5, h)
+            p.fillRect(box, full if active else pale)
+            if active:
+                p.setPen(pg.mkPen("#000000", width=2))
+                p.drawRect(box)
+            p.setPen(pg.mkPen("#000000"))
+            for k, text in enumerate(lines[:self.BOX_LINES]):
+                if (k + 1) * line_h > h:
+                    break
+                p.setFont(self.bold if k < 2 else self.font)
+                p.drawText(QRectF(5, y + 2 + k * line_h, r.width() - 9, line_h), Qt.AlignLeft | Qt.AlignVCenter,
+                           text)
+            y += box_h + 3
+
+
 class _PlotBox(pg.ViewBox):
     """ViewBox that offers its mouse wheel and drags to the view first (the wheel zooms the
     amplitude, Shift+drag selects). The view is held weakly: no reference cycle through Qt."""
@@ -191,12 +253,14 @@ class _PlotBox(pg.ViewBox):
 class _Trace:
     """One plot row on screen - its plot parts and what was last computed for the channel in it."""
 
-    __slots__ = ("sid", "vb", "left", "bottom", "curve", "label", "host", "svb", "saxis", "image", "t0", "t1",
+    __slots__ = ("sid", "vb", "left", "bottom", "curve", "label", "panel", "host", "svb", "saxis", "image", "t0",
+                 "t1",
                  "version", "computed", "lo", "hi", "yrange", "text", "units", "has_sens", "stats", "mean_pre",
-                 "filter_text", "rate", "nyq", "lines", "tcur", "ykey")
+                 "filter_text", "rate", "nyq", "lines", "tcur", "ykey", "pending", "hist_gen", "unfiltered")
 
-    def __init__(self, vb, left, bottom, curve, label):
+    def __init__(self, vb, left, bottom, curve, label, panel):
         self.vb, self.left, self.bottom, self.curve, self.label = vb, left, bottom, curve, label
+        self.panel = panel
         self.host = vb          # the ViewBox drawing the curve (the first row's in overlay mode)
         self.svb = self.saxis = self.image = None   # spectrogram row, made when first needed
         self.lines = {}         # details lines: "mean" / "min" / "max" -> InfiniteLine
@@ -205,7 +269,7 @@ class _Trace:
 
     def items(self):
         """The layout items of this row."""
-        return [x for x in (self.left, self.vb, self.bottom, self.saxis, self.svb) if x is not None]
+        return [x for x in (self.panel, self.left, self.vb, self.bottom, self.saxis, self.svb) if x is not None]
 
     def reset(self, sid):
         """Show another channel in this plot: forget everything computed for the old one."""
@@ -222,6 +286,9 @@ class _Trace:
         self.stats = None
         self.mean_pre = None
         self.filter_text = ""
+        self.pending = False    # recorded history still being read: computed again when it is there
+        self.hist_gen = -1
+        self.unfiltered = False  # older data shown without its filter (only the day summary had it)
         self.rate = 0.0
         self.nyq = None
         self.curve.setData([], [])
@@ -246,7 +313,7 @@ class WaveformView(QWidget):
         self.config = config
         st = state if isinstance(state, dict) else {}
         v = config.get("view") or {}
-        self._window = nearest_window(st.get("window", v.get("window_seconds", 300)))
+        self._pps = self._initial_pps(st, v)
         self._filter_on, self._filter_key, self._custom = self._initial_filter(st, v)
         units = st.get("units", v.get("units"))
         self._units = units if units in dict(UNITS) else "counts"
@@ -363,6 +430,30 @@ class WaveformView(QWidget):
         return False, "default", None
 
     @staticmethod
+    def _initial_pps(st, v):
+        """The time scale of a saved viewer, or the one for the default window length."""
+        try:
+            pps = float(st.get("pps"))
+            if math.isfinite(pps) and pps > 0:
+                return pps
+        except (TypeError, ValueError):
+            pass
+        window = nearest_window(st.get("window", v.get("window_seconds", 300)))
+        return min(PPS_STEPS, key=lambda p: abs(math.log(p) - math.log(1400.0 / window)))
+
+    @property
+    def _window(self):
+        """Seconds shown: the plot width at the time scale (pixels per second), at most a day."""
+        return min(MAX_WINDOW, max(MIN_WINDOW, self._plot_width() / self._pps))
+
+    @_window.setter
+    def _window(self, seconds):
+        self._pps = self._plot_width() / max(MIN_WINDOW, min(MAX_WINDOW, float(seconds)))
+
+    def pps(self):
+        return self._pps
+
+    @staticmethod
     def _clamp_gain(g):
         try:
             g = float(g)
@@ -396,11 +487,13 @@ class WaveformView(QWidget):
         return b
 
     def _build_bar(self):
-        bar = QFrame()
+        """The tool bar above the traces: a QToolBar, so a narrow window gets its "»" overflow
+        button instead of being forced wider than the screen by the bar."""
+        bar = QToolBar()
         bar.setObjectName("waveformBar")
-        h = QHBoxLayout(bar)
-        h.setContentsMargins(6, 3, 6, 3)
-        h.setSpacing(4)
+        bar.setMovable(False)
+        bar.setFloatable(False)
+        bar.setContentsMargins(4, 1, 4, 1)
 
         def caption(text):
             lab = QLabel(text)
@@ -410,10 +503,14 @@ class WaveformView(QWidget):
         self.channels_button = self._tool("Channels", "Choose the channels of this viewer (you can also drag "
                                                       "channels here from the Channels table)")
         self.channels_button.clicked.connect(self.channelsButton)
-        self.window_box = self._combo([(w, t) for w, t in WINDOWS], self._window,
-                                      "Length of the time window shown (Left / Right arrow keys, Shift+wheel)")
-        self.time_in = self._tool("−", "Shorter time window (Left arrow, Shift+wheel up)")
-        self.time_out = self._tool("+", "Longer time window (Right arrow, Shift+wheel down)")
+        self.time_in = self._tool("◂▸", "Expand the traces in time: more pixels per second, a shorter window "
+                                        "(Left arrow, Shift+wheel up)")
+        self.time_out = self._tool("▸◂", "Squash the traces in time: fewer pixels per second, a longer window - "
+                                         "up to 1440 minutes, one day (Right arrow, Shift+wheel down)")
+        self.pps_button = self._tool("", "")
+        self.pps_button.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.pps_button.clicked.connect(lambda: self.step_window(-1))                 # left click: expand
+        self.pps_button.customContextMenuRequested.connect(lambda _p: self.step_window(1))   # right: squash
         self.time_in.clicked.connect(lambda: self.step_window(-1))
         self.time_out.clicked.connect(lambda: self.step_window(1))
         self.amp_out = self._tool("−", "Smaller traces (Down arrow, mouse wheel down)")
@@ -438,7 +535,6 @@ class WaveformView(QWidget):
                                      "Auto: each trace fills its row. Common: the same amplitude range for all "
                                      "traces. Fixed: ± the value given. The amplitude zoom applies to all three")
         # bound methods only (no lambdas holding self: they would keep the widget alive forever)
-        self.window_box.currentIndexChanged.connect(self._set_window)
         self.units_box.currentIndexChanged.connect(self._set_units)
         self.scale_box.currentIndexChanged.connect(self._set_scale)
         self.fixed_edit = QLineEdit(f"{self._fixed:g}")
@@ -475,24 +571,25 @@ class WaveformView(QWidget):
         self.range_label = QLabel()
         self.range_label.setObjectName("barRange")
 
-        def sep():
-            line = QFrame()
-            line.setFrameShape(QFrame.VLine)
-            line.setObjectName("barSep")
-            return line
-
-        for w in (self.channels_button, sep(), caption("Window"), self.window_box, self.time_in, self.time_out,
-                  sep(), caption("Amplitude"), self.amp_out, self.gain_label, self.amp_in, sep(),
+        sep = None
+        for w in (self.channels_button, sep, caption("Time"), self.time_in, self.pps_button, self.time_out,
+                  sep, caption("Amplitude"), self.amp_out, self.gain_label, self.amp_in, sep,
                   self.filter_button, caption("Units"), self.units_box, caption("Scale"), self.scale_box,
-                  self.fixed_edit, self.demean_box, self.null_button, sep(), self.tcur_button, self.acur_button,
-                  sep(), self.live_button):
-            h.addWidget(w)
-        h.addSpacing(6)
-        h.addWidget(self.note, 1)
-        h.addWidget(self.range_label)
-        self.fixed_edit.setVisible(self._scale == "fixed")
+                  self.fixed_edit, self.demean_box, self.null_button, sep, self.tcur_button, self.acur_button,
+                  sep, self.live_button):
+            if w is None:
+                bar.addSeparator()
+            else:
+                action = bar.addWidget(w)
+                if w is self.fixed_edit:
+                    self._fixed_action = action
+        self.note.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.note.setMinimumWidth(0)
+        bar.addWidget(self.note)   # (the time range is in the viewer window's status bar)
+        self._fixed_action.setVisible(self._scale == "fixed")
         self._update_filter_button()
         self._update_live_button()
+        self._update_pps_button()
         return bar
 
     def _new_trace(self, row):
@@ -514,10 +611,12 @@ class WaveformView(QWidget):
             vb.setXLink(self._traces[0].vb)
         curve = pg.PlotDataItem([], [], connect="finite")
         vb.addItem(curve)
-        self.grid.addItem(left, 3 * row, 0)
-        self.grid.addItem(vb, 3 * row, 1)
-        self.grid.addItem(bottom, 3 * row + 2, 1)
-        return _Trace(vb, left, bottom, curve, _TraceLabel(vb))
+        panel = _LanePanel(self._font)
+        self.grid.addItem(panel, 3 * row, 0)
+        self.grid.addItem(left, 3 * row, 1)
+        self.grid.addItem(vb, 3 * row, 2)
+        self.grid.addItem(bottom, 3 * row + 2, 2)
+        return _Trace(vb, left, bottom, curve, _TraceLabel(vb), panel)
 
     def _ensure_spec_row(self, tr, row):
         """The spectrogram row of a plot (made the first time a channel in it wants one)."""
@@ -536,8 +635,8 @@ class WaveformView(QWidget):
         image.setLookupTable(self._lut)
         svb.addItem(image)
         tr.svb, tr.saxis, tr.image = svb, saxis, image
-        self.grid.addItem(saxis, 3 * row + 1, 0)
-        self.grid.addItem(svb, 3 * row + 1, 1)
+        self.grid.addItem(saxis, 3 * row + 1, 1)
+        self.grid.addItem(svb, 3 * row + 1, 2)
         c = theme.COLORS
         saxis.setPen(pg.mkPen(c["border"]))
         saxis.setTextPen(pg.mkPen(c["muted"]))
@@ -581,7 +680,7 @@ class WaveformView(QWidget):
             tr.label.setParentItem(host)
             tr.label.anchor(itemPos=(0, 0), parentPos=(0, 0), offset=(4, 2 + (LABEL_STEP * i if overlay else 0)))
             visible = i == 0 or not overlay
-            for item in (tr.vb, tr.left):
+            for item in (tr.vb, tr.left, tr.panel):
                 item.setVisible(visible)
             spec = self._spec_on(sid)
             if spec:
@@ -659,10 +758,10 @@ class WaveformView(QWidget):
         self.glw.setBackground(self._background())
         self.empty.setStyleSheet(f"color: {c['muted']}; font-size: 11pt; background: {c['plot_bg']};")
         self.bar.setStyleSheet(
-            f"QFrame#waveformBar {{ background: {c['panel']}; border-bottom: 1px solid {c['border']}; }}"
+            f"QToolBar#waveformBar {{ background: {c['panel']}; border: none; "
+            f"border-bottom: 1px solid {c['border']}; spacing: 3px; }}"
             f"QLabel#barCaption, QLabel#barRange {{ color: {c['muted']}; }}"
             f"QLabel#barNote {{ color: {c['warn']}; }}"
-            f"QFrame#barSep {{ color: {c['border']}; }}"
             f"QToolButton:checked {{ background: {c['select']}; border-radius: 3px; }}")
         self._color_traces()
         self._update_live_button()
@@ -672,7 +771,7 @@ class WaveformView(QWidget):
 
     def trace_color(self, i, sid=None):
         own = self._ts(sid)["color"] if sid else None
-        return own if own and QColor.isValidColorName(own) else theme.trace_color(i)
+        return own if own and QColor.isValidColorName(own) else theme.trace_color(i, sid)
 
     def _color_traces(self):
         """Pens, caption colours, lane lines (also after a reorder). The data stay."""
@@ -691,6 +790,33 @@ class WaveformView(QWidget):
             tr.label.update()
             if tr.t0 is not None:
                 self._update_label(tr)
+        self._update_panels()
+
+    @staticmethod
+    def panel_lines(sid, units, label=""):
+        """The three lines of a channel's label box: its label (else the station),
+        location.channel, units."""
+        parts = sid.split(".")
+        loc_cha = f"{parts[2]}.{parts[3]}" if len(parts) == 4 and parts[2] else parts[-1]
+        return (label or ".".join(parts[:2])), loc_cha, units
+
+    def set_trace_label(self, sid, text):
+        """A name for the channel, shown in its box on the left and in its caption."""
+        self._set_ts(sid, label=str(text or "").strip()[:40])
+        self._update_panels()
+
+    def _update_panels(self):
+        """The label boxes left of the traces (all channels in the first row's panel when
+        overlaid)."""
+        bg = theme.COLORS["panel2"]
+        entries = [(self.panel_lines(tr.sid, tr.units, self._ts(tr.sid)["label"]), self.trace_color(i, tr.sid),
+                    tr.sid == self._active) for i, tr in enumerate(self._traces) if tr.sid]
+        overlay = self._overlay and len(self._traces) > 1
+        for i, tr in enumerate(self._traces):
+            if overlay:
+                tr.panel.set_entries(entries if i == 0 else [], bg)
+            else:
+                tr.panel.set_entries(entries[i:i + 1], bg)
 
     # ------------------------------------------------------------------------------------
     # public contract
@@ -781,7 +907,9 @@ class WaveformView(QWidget):
             return
         self.set_live(False)
         self._touched = time.monotonic()
+        self._pps = self._plot_width() / (t1 - t0)
         self._set_range(t0, t1)
+        self._update_pps_button()
         self._reload_now()
 
     def state(self):
@@ -791,7 +919,7 @@ class WaveformView(QWidget):
             own = {k: v for k, v in self._tset.get(sid, {}).items() if v != TRACE_DEFAULTS[k]}
             if own:
                 traces[sid] = own
-        return {"sids": list(self._sids), "window": self._window, "filter_on": self._filter_on,
+        return {"sids": list(self._sids), "pps": self._pps, "window": self._window, "filter_on": self._filter_on,
                 "filter": self._filter_key, "custom": self._custom, "units": self._units, "scale": self._scale,
                 "fixed": self._fixed, "demean": self._demean, "gain": self._gain, "lanes": self._lanes,
                 "overlay": self._overlay, "background": self._bg, "spec_size": self._spec_size,
@@ -809,22 +937,46 @@ class WaveformView(QWidget):
         self._reload_now()
         self.changed.emit()
 
-    def _set_window(self, _index):
-        self._window = int(self.window_box.currentData())
+    def set_pps(self, pps):
+        """A new time scale (pixels per second): live, the window ends at the newest data; paused,
+        the right edge the user chose stays."""
+        self._pps = float(pps)
         self._anchored = False
         if self._live:
             self._set_range(*self._live_range())
         else:  # keep the right edge the user chose, change only the length
             _t0, t1 = self.visible_range()
             self._set_range(t1 - self._window, t1)
+        self._update_pps_button()
         self._changed()
 
+    def set_window(self, seconds):
+        """Show this many seconds (the time scale follows the plot width)."""
+        self.set_pps(self._plot_width() / max(MIN_WINDOW, min(MAX_WINDOW, float(seconds))))
+
     def step_window(self, steps):
-        """Longer (steps > 0) or shorter time window, by the offered steps."""
-        box = self.window_box
-        i = min(box.count() - 1, max(0, box.currentIndex() + int(steps)))
-        if i != box.currentIndex():
-            box.setCurrentIndex(i)            # _set_window: new range, saved
+        """Longer (steps > 0: fewer pixels per second) or shorter time window, in the steps of
+        PPS_STEPS; never longer than a day."""
+        i = min(range(len(PPS_STEPS)), key=lambda k: abs(math.log(PPS_STEPS[k]) - math.log(self._pps)))
+        j = min(len(PPS_STEPS) - 1, max(0, i - int(steps)))
+        if steps > 0 and self._window >= MAX_WINDOW - 1e-6:
+            return                                  # a whole day is shown already
+        new = PPS_STEPS[j]
+        if j == i and abs(new - self._pps) < 1e-9:
+            return
+        if self._plot_width() / new > MAX_WINDOW:  # the next step would pass a day: exactly a day
+            new = self._plot_width() / MAX_WINDOW
+        self.set_pps(new)
+
+    def _update_pps_button(self):
+        pps = self._pps
+        text = f"{pps:.3g}"
+        w = self._window
+        span = (f"{w / 3600:.3g} h" if w >= 7200 else f"{w / 60:.3g} min" if w >= 120 else f"{w:.3g} s")
+        self.pps_button.setText(text)
+        self.pps_button.setToolTip(f"Time scale: {text} pixels per second - this window shows {span}. Left "
+                                   "click (or Left arrow): expand; right click (or Right arrow): squash. Up to "
+                                   "1440 minutes (one day), with the history of the last day.")
 
     def zoom_amplitude(self, steps):
         """Larger (steps > 0) or smaller traces, x2 per step; the view stays live."""
@@ -1047,7 +1199,7 @@ class WaveformView(QWidget):
 
     def _set_scale(self, _index):
         self._scale = scale = self.scale_box.currentData()
-        self.fixed_edit.setVisible(scale == "fixed")
+        self._fixed_action.setVisible(scale == "fixed")
         self._changed()
 
     def _fixed_edited(self):
@@ -1586,6 +1738,10 @@ class WaveformView(QWidget):
     def _on_xrange(self, *_args):
         if self._setting_range:
             return
+        t0, t1 = self.visible_range()
+        if t1 > t0 and abs(self._plot_width() / (t1 - t0) - self._pps) > 1e-9 * self._pps:
+            self._pps = self._plot_width() / (t1 - t0)   # a mouse zoom changes the time scale
+            self._update_pps_button()
         self._range_moved()
         self._reload.start()  # coalesce the many range changes of one drag
 
@@ -1658,6 +1814,18 @@ class WaveformView(QWidget):
         win = self.window()
         return self.isVisible() and not (win is not None and win.isMinimized())
 
+    def _width_changed(self):
+        """The plot got wider or narrower: at the same time scale it shows more or less time."""
+        if not self._traces:
+            return
+        t0, t1 = self.visible_range()
+        if abs((t1 - t0) - self._window) > 1e-3:
+            if self._live:
+                self._set_range(*self._live_range())
+            else:
+                self._set_range(t1 - self._window, t1)
+        self._update_pps_button()
+
     def _plot_width(self):
         w = self._traces[0].vb.width() if self._traces else 0
         return max(200.0, float(w) or 1000.0)
@@ -1676,6 +1844,9 @@ class WaveformView(QWidget):
             return True
         if abs(t1 - tr.t1) >= px or abs(t0 - tr.t0) >= px:
             return True
+        history = getattr(self.engine, "history", None)
+        if tr.pending and history is not None and history.generation != tr.hist_gen:
+            return True          # recorded history it waited for has been read
         return now - tr.computed >= PAUSED_RELOAD
 
     def _update_traces(self, urgent, started=None):
@@ -1701,6 +1872,7 @@ class WaveformView(QWidget):
         if done:
             self._apply_y_ranges()
             self._update_note()
+            self._update_panels()
 
     def _sensitivity(self, sid):
         """(counts per unit, units) from the calibration the user entered for the channel, else
@@ -1735,12 +1907,32 @@ class WaveformView(QWidget):
         ts = self._ts(sid)
         spec = self.trace_spec(sid)
         rate_hint = self._rates.get(sid, 0.0)
-        segs = self.engine.hub.window(sid, t0 - pre_roll(spec, rate_hint), t1)
-        fixed = ts["offset"] is not None
         span = t1 - t0
         points = 2.0 * width
+        hub = self.engine.hub
+        history = getattr(self.engine, "history", None)
+        tr.pending, tr.unfiltered = False, False
+        tr.hist_gen = history.generation if history is not None else -1
+        pre = pre_roll(spec, rate_hint)
+        hub_first = hub.first_time(sid) if hasattr(hub, "first_time") else None
+        summary = span / width >= SUMMARY_PX   # long window: older data from per-second summaries
+        if summary:
+            full_t0 = t0 if hub_first is None and history is None else max(t0, hub_first if hub_first else t1)
+        else:
+            full_t0 = t0
+        segs = hub.window(sid, full_t0 - pre, t1) if full_t0 < t1 else []
+        if not summary and history is not None and (hub_first is None or t0 < hub_first):
+            older, pending = history.segments(sid, t0 - pre, min(t1, hub_first) if hub_first else t1)
+            tr.pending = pending
+            segs = older + list(segs)          # the recordings before the live buffer
+        bins = None
+        if summary and full_t0 > t0:
+            bins = self._summary_bins(tr, sid, t0, full_t0, spec, span / width)
+        fixed = ts["offset"] is not None
         parts = []
         total, count, sumsq = 0.0, 0, 0.0
+        if bins is not None:
+            total, count = bins[4], bins[5]
         want_rms = sid in self._details          # one more pass over the data: only for Details
         for start, rate, y in segs:
             if spec is not None:   # the mean is taken out below (a low-pass keeps it here)
@@ -1785,6 +1977,9 @@ class WaveformView(QWidget):
         tr.filter_text = dsp.describe(spec) if spec is not None else ""
         tr.rate = parts[0][1] if parts else rate_hint
         xs, ys = [], []
+        if bins is not None and len(bins[0]):
+            xs.append(bins[0])
+            ys.append(bins[1].copy())
         for start, rate, y in parts:
             x, e = dsp.envelope(start, rate, y, max(4, int(points * len(y) / rate / span)))
             if xs:   # a gap between hub segments: break the line
@@ -1807,7 +2002,7 @@ class WaveformView(QWidget):
             if count and finite.any():
                 tr.lo, tr.hi = float(np.min(y[finite])), float(np.max(y[finite]))
                 rms = None
-                if want_rms:
+                if want_rms and bins is None:   # (per-second summaries keep no squares)
                     rms = math.sqrt(max(0.0, sumsq / count - tr.mean_pre ** 2)) / abs(factor)
                 tr.stats = {"n": count, "mean": (tr.mean_pre - shift) / factor, "min": tr.lo, "max": tr.hi,
                             "rms": rms}
@@ -1821,6 +2016,66 @@ class WaveformView(QWidget):
         tr.t0, tr.t1, tr.version, tr.computed = t0, t1, self._version, now
         self._update_label(tr)
         self._update_detail_lines(tr)
+
+    def _summary_bins(self, tr, sid, t0, t1, spec, px):
+        """Points for [t0, t1) from per-second summaries, about two per pixel: the recordings
+        (filtered as asked, read in the background) where they hold data, else the hub's
+        summary of the last day (raw: it cannot be filtered - noted). Returns (x, y, ..., sum,
+        count) - x / y the points (NaN breaks the line), sum / count of the samples (for the
+        mean)."""
+        b0 = int(math.floor(t0))
+        b1 = max(b0 + 1, int(math.ceil(t1)))
+        n = b1 - b0
+        lo = np.full(n, np.nan)
+        hi = np.full(n, np.nan)
+        sm = np.zeros(n)
+        ct = np.zeros(n, dtype=np.int64)
+        history = getattr(self.engine, "history", None)
+        if history is not None:
+            from ..core.history import CHUNK
+            hour = (b0 // CHUNK) * CHUNK
+            while hour < b1:
+                res, pending = history.chunk(sid, hour, spec)
+                tr.pending = tr.pending or pending
+                if res is not None:
+                    a, b = max(b0, hour), min(b1, hour + CHUNK)
+                    src = slice(a - hour, b - hour)
+                    dst = slice(a - b0, b - b0)
+                    have = res["cnt"][src] > 0
+                    lo[dst] = np.where(have, res["lo"][src], lo[dst])
+                    hi[dst] = np.where(have, res["hi"][src], hi[dst])
+                    sm[dst] = np.where(have, res["sum"][src], sm[dst])
+                    ct[dst] = np.where(have, res["cnt"][src], ct[dst])
+                hour += CHUNK
+        q = self.engine.hub.summary(sid, b0, b1) if hasattr(self.engine.hub, "summary") else None
+        if q is not None:
+            qb0, qlo, qhi, qsum, qcnt = q
+            off = qb0 - b0
+            if 0 <= off < n:
+                m = min(len(qcnt), n - off)
+                dst = slice(off, off + m)
+                use = (ct[dst] == 0) & (qcnt[:m] > 0)
+                if use.any():
+                    tr.unfiltered = tr.unfiltered or spec is not None
+                    lo[dst] = np.where(use, qlo[:m], lo[dst])
+                    hi[dst] = np.where(use, qhi[:m], hi[dst])
+                    sm[dst] = np.where(use, qsum[:m], sm[dst])
+                    ct[dst] = np.where(use, qcnt[:m], ct[dst])
+        g = max(1, int(round(px)))                      # bins per pixel: two points each
+        pad = (-n) % g
+        if pad:
+            lo = np.concatenate([lo, np.full(pad, np.nan)])
+            hi = np.concatenate([hi, np.full(pad, np.nan)])
+        glo = np.where(np.isnan(lo), np.inf, lo).reshape(-1, g).min(axis=1)
+        ghi = np.where(np.isnan(hi), -np.inf, hi).reshape(-1, g).max(axis=1)
+        glo[~np.isfinite(glo)] = np.nan
+        ghi[~np.isfinite(ghi)] = np.nan
+        starts = b0 + np.arange(len(glo)) * g
+        x = np.empty(2 * len(glo))
+        y = np.empty(2 * len(glo))
+        x[0::2], x[1::2] = starts, starts + g / 2.0
+        y[0::2], y[1::2] = glo, ghi
+        return x, y, None, None, float(sm.sum()), int(ct.sum())
 
     def _compute_spectrogram(self, tr, parts, shift, factor, t0, t1, width, contrast):
         """The spectrogram of the visible data: the segments are laid on one evenly sampled
@@ -1878,7 +2133,8 @@ class WaveformView(QWidget):
             extra.append("offset fixed" + (", locked" if ts["locked"] else ""))
         elif ts["locked"]:
             extra.append("offset locked")
-        text = (f"<span style='color:{self.trace_color(i, tr.sid)}; font-weight:600'>{tr.sid}</span>"
+        name = html.escape(ts["label"]) + f" ({tr.sid})" if ts["label"] else tr.sid
+        text = (f"<span style='color:{self.trace_color(i, tr.sid)}; font-weight:600'>{name}</span>"
                 + (f" &nbsp;<span style='color:{c['text']}'>{desc}</span>" if desc else "")
                 + f" &nbsp;<span style='color:{c['muted']}'>{values}</span>"
                 + (f" &nbsp;<span style='color:{c['accent2']}'>{' · '.join(extra)}</span>" if extra else ""))
@@ -1957,6 +2213,14 @@ class WaveformView(QWidget):
                 more = f" and {len(missing) - 3} more" if len(missing) > 3 else ""
                 text = (f"No StationXML response or calibration for {', '.join(missing[:3])}{more} - "
                         "shown in counts")
+        notes = [text] if text else []
+        if any(tr.pending for tr in self._traces):
+            notes.append("Reading the recorded history...")
+        raw = [tr.sid for tr in self._traces if tr.sid and tr.unfiltered]
+        if raw:
+            notes.append(f"Older data of {', '.join(raw[:2])}{' and more' if len(raw) > 2 else ''} not recorded: "
+                         "shown without the filter")
+        text = " · ".join(notes)
         if self.note.text() != text:
             self.note.setText(text)
             self.note.setToolTip(text)
@@ -1969,6 +2233,7 @@ class WaveformView(QWidget):
         if obj is self.glw and t == QEvent.Resize:
             self._fit_rows(ev.size().height() - 2 * self.glw.frameWidth())
             self._version += 1   # more / fewer pixels: decimate again
+            QTimer.singleShot(0, self._width_changed)   # the time scale stays: the window follows
         elif obj is self.scroll.viewport() and t == QEvent.Resize:
             self._size_canvas(ev.size().width(), ev.size().height())
         elif obj in (self.glw.viewport(), self.empty) and t in (QEvent.DragEnter, QEvent.DragMove, QEvent.Drop):

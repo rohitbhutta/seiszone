@@ -67,6 +67,9 @@ def win(qapp, engine):
     w.show()
     pump(qapp, 0.15)
     w.view.refresh()
+    pump(qapp, 0.1)
+    w.view.set_window(600)
+    w.view.refresh()
     yield w
     w.quitting = True
     w.close()
@@ -377,7 +380,7 @@ def test_context_menu_two_parts(win):
         assert t in channel, t
     assert any(t.startswith("Filter (") for t in channel)
     for t in ("Background colour...", "Show lane lines", "Overlay channels", "Spectrogram size",
-              "All spectrograms on / off", "Sort by", "Channels...", "Label...", "Clear window",
+              "All spectrograms on / off", "Sort by", "Channels...", "Window title...", "Clear window",
               "No caption (full screen)", "Duplicate"):
         assert t in window, t
     shortcuts = {a.text(): a.shortcut().toString() for a in m.actions()}
@@ -465,8 +468,9 @@ def test_keys_are_on_the_window(win):
     assert v.gain() == 2.0
     win.a_amp_reset.trigger()
     win.a_time_in.trigger()
-    assert v._window == 300
+    assert v.pps() == 5                     # the next step of the time scale (from about 2.2 px/s)
     win.a_time_out.trigger()
+    assert v.pps() == 2
     win.a_filter.trigger()
     assert v.filter_on()
     win.a_filter.trigger()
@@ -529,6 +533,7 @@ def test_state_round_trip_and_window_functions(win, engine, qapp, tmp_path):
     assert v2.trace_settings(SIDS[1])["scale"] == 4.0 and w2.title() == "North array"
     w2.quitting = True
     w2.close()
+    w2.deleteLater()
     # a saved state with junk in it still opens
     w3 = ViewerWindow(engine, engine.config, {"sids": [SIDS[0], 7], "gain": "x", "spec_size": 3, "background": "nope",
                                                "traces": {SIDS[0]: {"color": "zzz", "bogus": 1}}, "units": "?"})
@@ -536,6 +541,7 @@ def test_state_round_trip_and_window_functions(win, engine, qapp, tmp_path):
     assert w3.view._bg is None and w3.view._units == "counts"
     w3.quitting = True
     w3.close()
+    w3.deleteLater()
     # no caption: menu, tool bar and status bar go, full screen; again: back
     win.toggle_caption()
     assert not win.menuBar().isVisible() and not v.bar.isVisible() and win.isFullScreen()
@@ -546,6 +552,7 @@ def test_state_round_trip_and_window_functions(win, engine, qapp, tmp_path):
     assert dup is not win and dup.view.channels() == v.channels() and dup.view.filter_key() == "hp1"
     dup.quitting = True
     dup.close()
+    dup.deleteLater()
     # picture
     path = str(tmp_path / "pic" / "view.png")
     assert win.save_picture(path) and os.path.getsize(path) > 10000
@@ -561,12 +568,14 @@ def test_closing_by_the_user_is_reported(qapp, engine):
     w.closedByUser.connect(got.append)
     w.show()
     w.close()
+    w.deleteLater()
     assert got == [w]
     w2 = ViewerWindow(engine, engine.config, {"sids": SIDS[:1]})
     w2.closedByUser.connect(got.append)
     w2.quitting = True                                     # SeisZone quits: the viewer stays saved
     w2.show()
     w2.close()
+    w2.deleteLater()
     assert got == [w]
 
 
@@ -582,6 +591,7 @@ def test_empty_viewer_and_clear(qapp, engine, monkeypatch):
     assert w.view.channels() == []
     w.quitting = True
     w.close()
+    w.deleteLater()
 
 
 def test_viewer_screenshot(win, qapp):
@@ -733,6 +743,7 @@ def test_saved_filter_changes_reach_every_viewer(qapp, engine):
     for w in (a, b):
         w.quitting = True
         w.close()
+        w.deleteLater()
 
 
 def test_filter_menus_do_not_grow(win, engine):
@@ -797,3 +808,121 @@ def test_design_keeps_typed_seconds_and_the_untouched_default(win, qapp):
     d.close()
     pump(qapp)
     v.set_filter_on(False)
+
+
+# ------------------------------------------------------------------------------------------
+# version 1.2.0: label panel, channel labels, filter design by mouse, the time scale
+# ------------------------------------------------------------------------------------------
+def test_label_panel_on_the_left_with_component_colours(win):
+    v = win.view
+    tr = {t.sid: t for t in v._traces}
+    entries = tr[SIDS[0]].panel.entries
+    assert entries == [(("WB.KUM", "0J.HNZ", "counts"), theme.COMPONENTS_DARK["Z"], False)]
+    assert tr[SIDS[1]].panel.entries[0][1] == theme.COMPONENTS_DARK["N"]      # north: red
+    assert tr[SIDS[2]].panel.entries[0][1] == theme.COMPONENTS_DARK["E"]      # east: sky blue
+    assert tr[SIDS[3]].panel.entries[0][0] == ("SS.SMR03", "HHZ", "counts")
+    v._active = SIDS[2]
+    v._color_traces()
+    assert tr[SIDS[2]].panel.entries[0][2] is True                             # under the mouse: full colour
+    v._active = None
+    # a channel's own label is its box's first line and in its caption
+    m = win.build_context_menu(SIDS[0])
+    channel = [a.text() for a in m.actions()][:[a.text() for a in m.actions()].index("")]
+    assert "Label..." in channel
+    v.set_trace_label(SIDS[0], "Kumari vertical")
+    assert tr[SIDS[0]].panel.entries[0][0][0] == "Kumari vertical"
+    v.redraw()
+    assert "Kumari vertical" in tr[SIDS[0]].label.text
+    assert win.state()["traces"][SIDS[0]]["label"] == "Kumari vertical"
+    v.set_trace_label(SIDS[0], "")
+    # overlay: every channel's box in the first row's panel
+    v.set_overlay(True)
+    assert len(v._traces[0].panel.entries) == 4 and not v._traces[1].panel.isVisible()
+    v.set_overlay(False)
+    # units in the box follow physical units (g)
+    engine = v.engine
+    engine.config.set_value("calibration", {SIDS[3]: {"sensitivity": 4e5, "units": "M/S**2"}})
+    v.calibration_changed()
+    v.set_units("physical_g")
+    assert tr[SIDS[3]].panel.entries[0][0][2] == "g"
+    v.set_units("counts")
+    engine.config.set_value("calibration", {})
+    v.calibration_changed()
+
+
+def test_filter_design_corners_follow_the_mouse(win, qapp):
+    import math
+    v = win.view
+    d = v.open_filter_design(None)
+    d.rate_box.setCurrentIndex(d.rate_box.findData(200.0))
+    d.set_spec({"hp": 0.025, "lp": 1.366})
+    box = d.box
+
+    class Drag:
+        def __init__(self, btn, x0, x1, start, finish):
+            self.btn, self.x0, self.x1, self.start, self.finish = btn, x0, x1, start, finish
+
+        def button(self):
+            return self.btn
+
+        def buttonDownPos(self):
+            return box.mapFromView(QPointF(math.log10(self.x0), -20))
+
+        def pos(self):
+            return box.mapFromView(QPointF(math.log10(self.x1), -20))
+
+        def isStart(self):
+            return self.start
+
+        def isFinish(self):
+            return self.finish
+
+        def accept(self):
+            pass
+
+    box.mouseDragEvent(Drag(Qt.LeftButton, 0.2, 0.1, True, False))       # left button: the high-pass corner
+    assert d.hp.freq() == pytest.approx(0.1, rel=1e-3)
+    box.mouseDragEvent(Drag(Qt.LeftButton, 0.2, 0.05, False, True))
+    assert d.hp.freq() == pytest.approx(0.05, rel=1e-3) and d.lp.freq() == pytest.approx(1.366)
+    box.mouseDragEvent(Drag(Qt.RightButton, 3, 12, True, True))           # right button: the low-pass corner
+    assert d.lp.freq() == pytest.approx(12, rel=1e-3)
+    box.mouseDragEvent(Drag(Qt.LeftButton, 12, 20, True, True))           # the green line grabbed with the left
+    assert d.lp.freq() == pytest.approx(20, rel=1e-3) and d.hp.freq() == pytest.approx(0.05, rel=1e-3)
+    assert d.hp_line.value() == pytest.approx(math.log10(0.05)) and d.lp_line.value() == pytest.approx(math.log10(20))
+    d.gain.setValue(6)
+    assert d.spec()["gain"] == 6.0 and d.curve.getData()[1].max() == pytest.approx(6.0, abs=0.1)
+    d.accept_design()
+    assert v.window_spec()["gain"] == 6.0 and "+6 dB" in v.window_filter_text()
+    v.set_filter_on(False)
+    pump(qapp)
+
+
+def test_time_scale_up_to_a_day(win, qapp):
+    from seiszone.ui.waveform_view import MAX_WINDOW, PPS_STEPS
+    v = win.view
+    width = v._plot_width()
+    v.set_pps(10)
+    assert v._window == pytest.approx(width / 10) and v.pps_button.text() == "10"
+    assert "pixels per second" in v.pps_button.toolTip()
+    v.step_window(-1)
+    assert v.pps() == 20
+    for _ in range(len(PPS_STEPS)):
+        v.step_window(1)
+    assert v._window == pytest.approx(MAX_WINDOW)              # 1440 minutes, not more
+    t0, t1 = v.visible_range()
+    assert t1 - t0 == pytest.approx(MAX_WINDOW, abs=1)
+    pps = v.pps()
+    v.step_window(1)
+    assert v.pps() == pps
+    v.pps_button.customContextMenuRequested.emit(v.pps_button.rect().center())   # right click: squash (no more)
+    assert v.pps() == pps
+    v.pps_button.click()                                        # left click: expand
+    assert v.pps() > pps
+    # a narrower window at the same scale shows less time
+    v.set_pps(5)
+    win.resize(900, 860)
+    pump(qapp, 0.2)
+    assert v.pps() == 5 and v.visible_range()[1] - v.visible_range()[0] == pytest.approx(v._plot_width() / 5, abs=0.5)
+    win.resize(1400, 860)
+    pump(qapp, 0.2)
+    v.set_window(600)

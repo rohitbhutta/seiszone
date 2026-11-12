@@ -2,6 +2,8 @@ import os
 import sys
 import tempfile
 
+import pytest
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 sys.path.insert(0, os.path.join(ROOT, "tests"))
@@ -13,6 +15,17 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
 _STATUS = []
+
+
+@pytest.fixture(autouse=True)
+def _delete_closed_widgets():
+    """After each test: run Qt's pending deleteLater()s, so the windows (and the data their
+    engines hold) of finished tests are freed instead of piling up for the whole run."""
+    yield
+    if "PySide6.QtWidgets" in sys.modules:
+        from PySide6.QtCore import QCoreApplication, QEvent
+        if QCoreApplication.instance() is not None:
+            QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
 
 def pytest_sessionfinish(session, exitstatus):

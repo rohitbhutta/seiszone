@@ -10,7 +10,7 @@ import logging
 import os
 import time
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QEvent, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QFont, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
 
@@ -42,6 +42,7 @@ class LogPanel(QWidget):
         super().__init__(parent)
         self._seen = 0                       # logsetup counter already shown
         self._lines = collections.deque(maxlen=MAX_LINES)  # (level, text) for re-filtering
+        self._colors = dict(theme.COLORS)    # the theme the lines were coloured with
 
         self.filter = QLineEdit()
         self.filter.setPlaceholderText("Filter log (text or level, e.g. WARNING)")
@@ -118,6 +119,16 @@ class LogPanel(QWidget):
         self._lines.extend(rows)
         self._append([r for r in rows if self._matches(*r)])
         self._update_count()
+
+    def changeEvent(self, ev):
+        """Light / dark switched: every line is coloured again (the colours are part of each
+        line, so the old lines kept the other theme's colour - pale grey on white)."""
+        super().changeEvent(ev)
+        if (ev.type() in (QEvent.PaletteChange, QEvent.ApplicationPaletteChange)
+                and getattr(self, "_colors", None) is not None and theme.COLORS != self._colors):
+            self._colors = dict(theme.COLORS)
+            self.count.setStyleSheet(f"color: {theme.COLORS['muted']};")
+            self._rebuild()
 
     def lines(self):
         """Texts currently held (all levels, filter not applied)."""

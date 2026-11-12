@@ -66,9 +66,123 @@ def _sext(v, bits):
     return v - (1 << bits) if v & (1 << (bits - 1)) else v
 
 
+# Steim word layouts: (code c, Steim2 dnib or None) -> (bit shifts of the differences, bits each)
+_STEIM1 = {(1, None): ((24, 16, 8, 0), 8), (2, None): ((16, 0), 16), (3, None): ((0,), 32)}
+_STEIM2 = {(1, None): ((24, 16, 8, 0), 8),
+           (2, 1): ((0,), 30), (2, 2): ((15, 0), 15), (2, 3): ((20, 10, 0), 10),
+           (3, 0): ((24, 18, 12, 6, 0), 6), (3, 1): ((25, 20, 15, 10, 5, 0), 5),
+           (3, 2): ((24, 20, 16, 12, 8, 4, 0), 4)}
+
+
+def _sext_np(v, bits):
+    v = v & ((1 << bits) - 1)
+    return v - (((v >> (bits - 1)) & 1) << bits)
+
+
+def decode_many(recs):
+    """Samples of many records at once (a whole recording file): a list of int32 / float arrays
+    in the order of `recs`. The Steim records of one kind are decoded together with numpy -
+    word by word, a day of 200 sps data takes minutes; together, seconds. A record that is
+    damaged gets None (as reading it alone would raise ValueError); the others are kept."""
+    out = [None] * len(recs)
+    groups = {}
+    for i, r in enumerate(recs):
+        if r.nsamp == 0:
+            out[i] = np.zeros(0, dtype=np.int32)
+        elif r.encoding in (10, 11):
+            groups.setdefault((r.encoding, r.endian), []).append(i)
+        else:
+            try:
+                out[i] = r.samples
+            except (ValueError, struct.error):
+                out[i] = None
+    for (enc, endian), idx in groups.items():
+        _decode_steim_group([recs[i] for i in idx], 1 if enc == 10 else 2, endian, idx, out)
+    return out
+
+
+def _decode_steim_group(recs, version, endian, idx, out):
+    global xn_mismatches
+    bodies, nfr = [], []
+    for r in recs:
+        b = r.raw[r.data_off:r.reclen]
+        n = len(b) // 64
+        bodies.append(b[:n * 64])
+        nfr.append(n)
+    nfr = np.asarray(nfr, dtype=np.int64)
+    nsamp = np.asarray([r.nsamp for r in recs], dtype=np.int64)
+    if not nfr.sum():
+        return
+    words = np.frombuffer(b"".join(bodies), dtype=endian + "u4").astype(np.int64).reshape(-1, 16)
+    frame_rec = np.repeat(np.arange(len(recs)), nfr)            # record of every frame
+    first_frame = np.concatenate(([0], np.cumsum(nfr)[:-1]))     # its first frame
+    has = nfr > 0
+    x0 = np.zeros(len(recs), dtype=np.int64)
+    xn = np.zeros(len(recs), dtype=np.int64)
+    x0[has] = _sext_np(words[first_frame[has], 1], 32)
+    xn[has] = _sext_np(words[first_frame[has], 2], 32)
+    nib = words[:, 0]
+    codes = np.stack([(nib >> (30 - 2 * k)) & 3 for k in range(1, 16)], axis=1)
+    codes[first_frame[has], 0] = 0                              # x0 and xn are no differences
+    codes[first_frame[has], 1] = 0
+    w = words[:, 1:].ravel()
+    c = codes.ravel()
+    word_rec = np.repeat(frame_rec, 15)
+    diffs = np.zeros((len(w), 7), dtype=np.int64)
+    count = np.zeros(len(w), dtype=np.int64)
+    dn = w >> 30
+    for (code, d), (shifts, bits) in (_STEIM1 if version == 1 else _STEIM2).items():
+        sel = (c == code) if d is None else ((c == code) & (dn == d))
+        k = np.nonzero(sel)[0]
+        for j, sh in enumerate(shifts):
+            diffs[k, j] = _sext_np(w[k] >> sh, bits)
+        count[k] = len(shifts)
+    bad_word = np.zeros(len(w), dtype=bool) if version == 1 else \
+        (((c == 2) & (dn == 0)) | ((c == 3) & (dn == 3)))
+    # differences before each word, counted within its record
+    total = np.cumsum(count)
+    rec_total = np.bincount(word_rec, weights=count, minlength=len(recs)).astype(np.int64)
+    rec_first_diff = np.concatenate(([0], np.cumsum(rec_total)[:-1]))
+    before = total - count - rec_first_diff[word_rec]
+    damaged = np.zeros(len(recs), dtype=bool)
+    hit = bad_word & (before < nsamp[word_rec])
+    damaged[word_rec[hit]] = True
+    damaged |= (rec_total < nsamp) | ~has
+    flat = diffs[np.arange(7)[None, :] < count[:, None]]
+    flat_rec = np.repeat(word_rec, count)
+    pos = np.arange(len(flat)) - rec_first_diff[flat_rec]
+    keep = (pos < nsamp[flat_rec]) & ~damaged[flat_rec]
+    steps = flat[keep]
+    steps_rec = flat_rec[keep]
+    steps_pos = pos[keep]
+    steps[steps_pos == 0] = 0                                    # the first difference refers back
+    csum = np.cumsum(steps)
+    good = np.nonzero(~damaged)[0]
+    ends = np.cumsum(nsamp[good])
+    starts = ends - nsamp[good]
+    base = np.where(starts > 0, csum[np.maximum(starts - 1, 0)], 0)
+    vals = np.repeat(x0[good] - base, nsamp[good]) + csum
+    vals = ((vals + 0x80000000) & 0xFFFFFFFF) - 0x80000000
+    del steps_rec
+    for j, g in enumerate(good):
+        y = vals[starts[j]:ends[j]].astype(np.int32)
+        if len(y) and int(y[-1]) != int(xn[g]):
+            xn_mismatches += 1
+        out[idx[g]] = y
+    for g in np.nonzero(damaged)[0]:
+        out[idx[g]] = None
+
+
 def steim_decode(data, nsamp, version, endian=">", strict_xn=False):
     """Steim1/Steim2 frames -> list of int. ValueError if damaged (sample count, dnib, no
-    frames); an Xn mismatch is an error only with strict_xn, otherwise it is counted."""
+    frames); an Xn mismatch is an error only with strict_xn, otherwise it is counted. One
+    record word by word (the live path: a single record, where numpy would only add overhead);
+    whole files: decode_many."""
+    return steim_decode_py(data, nsamp, version, endian, strict_xn)
+
+
+def steim_decode_py(data, nsamp, version, endian=">", strict_xn=False):
+    """The word-by-word decoder (also the reference decode_many is tested against)."""
     global xn_mismatches
     out = []
     x0 = xn = None

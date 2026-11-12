@@ -56,6 +56,7 @@ class ViewerWindow(QMainWindow):
         self.setCentralWidget(self.view)
         self.readout = QLabel()
         self.statusBar().addWidget(self.readout, 1)
+        self.statusBar().addPermanentWidget(self.view.range_label)   # the time range shown
         self.view.hoverChanged.connect(self.readout.setText)
         self.view.changed.connect(self._changed)
         self.view.contextRequested.connect(self.show_context_menu)
@@ -180,7 +181,7 @@ class ViewerWindow(QMainWindow):
         self.a_caption = A("No caption (full screen)", self.toggle_caption, "F11", checkable=True)
         self.a_duplicate = A("Duplicate", self.duplicate, "Ctrl+D")
         self.a_channels = A("Channels...", self.choose_channels)
-        self.a_label = A("Label...", self.ask_label)
+        self.a_label = A("Window title...", self.ask_label)
         self.a_background = A("Background colour...", self.choose_background)
         self.a_spectrum = A("Spectrum of the visible range...", self.open_spectrum)
         self.a_export = A("Export the visible range...", self.open_export)
@@ -290,6 +291,8 @@ class ViewerWindow(QMainWindow):
             on_this = bool(v._acur and v._acur[0] == sid)
             acur.setCheckable(True)
             acur.setChecked(on_this)
+            m.addAction("Label..." + (f" ({ts['label']})" if ts["label"] else ""),
+                        lambda: self.ask_channel_label(sid))
             m.addAction("Calibration...", lambda: self.calibrate(sid))
             m.addAction(self._item("Remove from this viewer", self.a_remove, lambda: v.remove_channel(sid)))
             m.addSeparator()
@@ -422,8 +425,15 @@ class ViewerWindow(QMainWindow):
         if ans == QMessageBox.Yes:
             self.view.clear()
 
+    def ask_channel_label(self, sid):
+        """A name for one channel: shown in its box in the panel on the left (empty: the station)."""
+        text, ok = QInputDialog.getText(self, "Label", f"Label of {sid} (shown on the left; empty: none):",
+                                        text=self.view.trace_settings(sid)["label"])
+        if ok:
+            self.view.set_trace_label(sid, text)
+
     def ask_label(self):
-        text, ok = QInputDialog.getText(self, "Label", "Name of this viewer (empty: its channels):",
+        text, ok = QInputDialog.getText(self, "Window title", "Name of this viewer window (empty: its channels):",
                                         text=self._label)
         if ok:
             self._label = text.strip()

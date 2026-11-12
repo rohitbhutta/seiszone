@@ -1,6 +1,14 @@
 """Find out everything about an instrument from its IP address (and optionally a port), so the
 user only has to type 'IP' or 'IP:port' to add it.
 
+Which protocol (the user's rule, version 1.2.0):
+  - 'IP' alone       -> SeedLink on 18000 (miniSEED, with backfill). Only when no SeedLink server
+                        answers there (asked SEEDLINK_TRIES times: over a VPN one HELLO can be
+                        lost) is GCF on 1567 tried, and the result says so.
+  - 'IP:18000'       -> SeedLink only.
+  - 'IP:1567'        -> GCF only (UDP, then TCP) - never switched to the unit's SeedLink server.
+  - 'IP:other port'  -> SeedLink, then GCF on that port (serial-to-TCP bridges).
+
 What is tried (read-only: nothing on the instrument is changed):
   - SeedLink   (default 18000): HELLO, INFO STREAMS / STATIONS -> network, station, site
                 description, channels
@@ -38,6 +46,7 @@ SEEDLINK_PORT = 18000
 GCF_PORT = 1567
 HTTP_PORT = 80
 WEB_TRIES = 3
+SEEDLINK_TRIES = 3          # HELLO attempts before SeedLink counts as "not there"
 WEB_RETRY_PAUSE = 2         # s between tries of the web page
 GCF_SAMPLE_SECONDS = 12     # s of GCF data read to learn the streams and rates
 WEB_WAIT = 150              # s the probe waits at most for the web reader (StationXML download)
@@ -401,7 +410,7 @@ def guralp_web(host, log=lambda m: None, need_xml=None, box=None):
 # Putting it together
 # --------------------------------------------------------------------------
 
-METHOD_TEXT = {"seedlink": "SeedLink", "gcf-udp": "GCF over UDP (Scream protocol)", "gcf-tcp": "GCF over TCP"}
+METHOD_TEXT = {"seedlink": "SeedLink (miniSEED)", "gcf-udp": "GCF over UDP (Scream protocol)", "gcf-tcp": "GCF over TCP"}
 
 
 def _json_safe(v):
@@ -580,11 +589,16 @@ def probe(text, log=None, prefer_direct=True, need_xml=None, web=_UNREAD):
         return web
 
     ports = [port] if port else [SEEDLINK_PORT, GCF_PORT]
-    # 1. SeedLink: read natively, with backfill after outages, so it is preferred
-    sl_ports = ports if port else [SEEDLINK_PORT]
+    # 1. SeedLink: read natively, with backfill after outages, so it is preferred - except on the
+    #    GCF port, where the user asked for GCF
+    sl_ports = [] if port == GCF_PORT else ([port] if port else [SEEDLINK_PORT])
     for p in sl_ports:
-        log(f"Trying SeedLink on {host}:{p} ...")
-        banner = seedlink_hello(host, p)
+        banner = None
+        for k in range(SEEDLINK_TRIES):
+            log(f"Trying SeedLink on {host}:{p} ..." + (f" (again, {k + 1} of {SEEDLINK_TRIES})" if k else ""))
+            banner = seedlink_hello(host, p)
+            if banner:
+                break
         if not banner:
             continue
         inst.method, inst.port = "seedlink", p
@@ -619,8 +633,12 @@ def probe(text, log=None, prefer_direct=True, need_xml=None, web=_UNREAD):
                                   "channels": chans})
         log(f"SeedLink server found: {len(inst.stations)} station(s).")
         return inst
-    # 2. GCF over UDP (Scream protocol), then GCF over TCP on the same port
-    gcf_ports = ports if port else [GCF_PORT]
+    # 2. GCF over UDP (Scream protocol), then GCF over TCP on the same port; typed 18000 is
+    #    SeedLink only
+    gcf_ports = [] if port == SEEDLINK_PORT else ([port] if port else [GCF_PORT])
+    use_direct = prefer_direct and port != GCF_PORT   # a typed 1567 stays GCF
+    if not port:
+        log(f"No SeedLink server answered on {host}:{SEEDLINK_PORT} - trying GCF on {GCF_PORT} ...")
     for p in gcf_ports:
         log(f"Trying GCF (Scream UDP) on {host}:{p} ...")
         res = gcf_udp_sample(host, p)
@@ -628,20 +646,24 @@ def probe(text, log=None, prefer_direct=True, need_xml=None, web=_UNREAD):
             inst.method, inst.port = "gcf-udp", p
             web = finish()
             inst = _finish_gcf(inst, res, web, log)
-            return _direct(inst, f"{host}:{p}", log, web) if prefer_direct else inst
+            if not port:
+                inst.notes.insert(0, f"No SeedLink server answered on port {SEEDLINK_PORT}, so this "
+                                     f"instrument is read with GCF on port {GCF_PORT}.")
+            return _direct(inst, f"{host}:{p}", log, web) if use_direct else inst
         log(f"Trying GCF over TCP on {host}:{p} ...")
         res = gcf_tcp_sample(host, p)
         if res:
             inst.method, inst.port = "gcf-tcp", p
             web = finish()
             inst = _finish_gcf(inst, res, web, log)
-            return _direct(inst, f"{host}:{p}", log, web) if prefer_direct else inst
+            return _direct(inst, f"{host}:{p}", log, web) if use_direct else inst
     web = finish()
     if web:  # a Guralp unit whose data ports did not answer
         inst.notes.append("The instrument's web page answered, but no data port did "
                           f"({', '.join(map(str, ports))}). Check its Network / Data Stream settings.")
     else:
-        inst.notes.append(f"Nothing answered at {host}" + (f":{port}" if port else
+        what = {SEEDLINK_PORT: " (SeedLink)", GCF_PORT: " (GCF)"}.get(port, "")
+        inst.notes.append(f"Nothing answered at {host}" + (f":{port}{what}" if port else
                           f" (tried SeedLink {SEEDLINK_PORT} and GCF {GCF_PORT})") + ".")
     return inst
 
@@ -705,9 +727,9 @@ def _direct(inst, typed, log, web):
     if not (direct.found and want <= {(s["net"], s["sta"]) for s in direct.stations}):
         return inst
     direct.details["typed"] = typed
-    direct.notes = [f"Typed {typed} (GCF). SeisZone connects to the instrument's own SeedLink server "
-                    f"{inst.host}:{sl_port} instead, so it fetches missed data after VPN or PC outages. "
-                    "Untick 'Connect directly' to pull GCF instead."]
+    direct.notes = [f"Typed {typed}. SeisZone connects to the instrument's own SeedLink server "
+                    f"{inst.host}:{sl_port}, so it fetches missed data after VPN or PC outages. "
+                    f"Type {inst.host}:{GCF_PORT} to read GCF instead."]
     return direct
 
 

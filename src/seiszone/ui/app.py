@@ -217,33 +217,39 @@ def install_excepthook():
 # --------------------------------------------------------------------------------------------
 
 WM_CLOSE = 0x0010
-WM_SYSCOMMAND = 0x0112
-SC_CLOSE = 0xF060
 
 
 class ExternalCloseFilter(QAbstractNativeEventFilter):
     """Tells a close by the user from a close request of another program.
 
-    The user's close (title-bar X, Alt+F4, taskbar "Close window") always arrives as
-    WM_SYSCOMMAND/SC_CLOSE first and only hides SeisZone to the tray. `taskkill /PID` (and so the
-    installer before it replaces the program) posts a bare WM_CLOSE: that means "end now", and
-    SeisZone then stops its engine cleanly instead of being killed a few seconds later."""
+    `taskkill /PID` (and so the installer before it replaces the program) POSTS a WM_CLOSE to
+    each window: that means "end now", and SeisZone then stops its engine cleanly instead of
+    being killed a few seconds later. When the user closes a window (title-bar X, Alt+F4, the
+    taskbar's "Close window"), Windows SENDS the WM_CLOSE straight to the window procedure.
+
+    Qt hands a posted message to native event filters twice - first from the message queue,
+    then again in the window procedure - and a sent message once. So: a WM_CLOSE seen a second
+    time, with no other message between, came through the queue and is another program's
+    request (it is swallowed and SeisZone ends once, after the event); one seen once is the
+    user's and closes only that window. (Version 1.1.0 waited for the WM_SYSCOMMAND/SC_CLOSE
+    of a user's close instead - but Windows SENDS that one too and filters never see it, so
+    closing any window, a Details or Label box included, ended SeisZone.)"""
 
     def __init__(self, on_external_close):
         super().__init__()
         self.on_external_close = on_external_close
-        self._user_close = False
+        self._pending = None          # (hwnd) of a WM_CLOSE just seen once
 
-    def on_message(self, message, wparam):
+    def on_message(self, message, hwnd=0):
         """True when the message is an external close request (it is then swallowed)."""
-        if message == WM_SYSCOMMAND and (wparam & 0xFFF0) == SC_CLOSE:
-            self._user_close = True
-        elif message == WM_CLOSE:
-            if self._user_close:
-                self._user_close = False
-                return False
+        if message != WM_CLOSE:
+            self._pending = None
+            return False
+        if self._pending == hwnd:     # the second sighting: it came through the message queue
+            self._pending = None
             QTimer.singleShot(0, self.on_external_close)
             return True
+        self._pending = hwnd          # the queue's sighting of a posted one, or a user's (sent) close
         return False
 
     def nativeEventFilter(self, event_type, message):
@@ -251,7 +257,7 @@ class ExternalCloseFilter(QAbstractNativeEventFilter):
             return False, 0
         from ctypes import wintypes
         msg = wintypes.MSG.from_address(int(message))
-        return self.on_message(msg.message, msg.wParam or 0), 0
+        return self.on_message(msg.message, int(msg.hWnd or 0)), 0
 
 
 # --------------------------------------------------------------------------------------------

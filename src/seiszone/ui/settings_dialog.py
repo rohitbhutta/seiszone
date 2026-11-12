@@ -298,8 +298,10 @@ class SettingsDialog(QDialog):
         self.start_min.setChecked(bool(u.get("start_minimized", False)))
         self.autostart = QCheckBox("Start SeisZone when I log in to Windows")
         self.autostart.setChecked(bool(u.get("start_with_windows", False)))
+        self.reopen = QCheckBox("Open the viewer windows again that were open when SeisZone was closed")
+        self.reopen.setChecked(bool(u.get("reopen_viewers", False)))
         lay = QVBoxLayout(w)
-        for cb in (self.tray, self.start_min, self.autostart):
+        for cb in (self.tray, self.start_min, self.autostart, self.reopen):
             lay.addWidget(cb)
         lay.addWidget(self._hint("Data is received, served and recorded only while SeisZone runs: keep it in the "
                                  "tray and let it start with Windows on a station PC."))
@@ -344,7 +346,8 @@ class SettingsDialog(QDialog):
             "view": {"window_seconds": self.window_box.currentData()},
             "ui": {"theme": self.theme_box.currentData(), "minimize_to_tray": self.tray.isChecked(),
                    "start_minimized": self.start_min.isChecked(),
-                   "start_with_windows": self.autostart.isChecked()},
+                   "start_with_windows": self.autostart.isChecked(),
+                   "reopen_viewers": self.reopen.isChecked()},
             "buffer_minutes": self.buffer.value(),
         }
 

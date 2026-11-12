@@ -243,6 +243,22 @@ def test_log_panel_shows_new_lines(qapp):
     panel.filter.setText("")
     assert f"{marker} info" in panel.text.toPlainText()
 
+    def info_color():
+        doc = panel.text.document()
+        for i in range(doc.blockCount()):
+            block = doc.findBlockByNumber(i)
+            if f"{marker} info" in block.text():
+                return block.begin().fragment().charFormat().foreground().color().name()
+    assert info_color() == theme.DARK["text"]
+    try:
+        theme.apply(qapp, "light")          # the old lines take the light theme's text colour too
+        pump(qapp, 0.05)
+        assert info_color() == theme.LIGHT["text"]
+    finally:
+        theme.apply(qapp, "dark")
+        pump(qapp, 0.05)
+    assert info_color() == theme.DARK["text"]
+
 
 def test_log_panel_keeps_at_most_5000_lines(qapp):
     logsetup.setup(folder=paths.log_dir())
@@ -385,18 +401,53 @@ def test_main_second_instance_only_signals(qapp, monkeypatch):
 
 
 def test_external_close_filter(qapp):
-    """The title-bar X (SC_CLOSE, then WM_CLOSE) is the user's; a bare WM_CLOSE (taskkill, the
-    installer) asks SeisZone to end and is handled once, after the event."""
+    """A WM_CLOSE the filter sees once was SENT (the user closed a window: only that window
+    closes); one seen twice in a row came through the message queue (taskkill, the installer)
+    and asks SeisZone to end - handled once, after the event."""
     called = []
     f = app_mod.ExternalCloseFilter(lambda: called.append(1))
-    assert not f.on_message(app_mod.WM_SYSCOMMAND, app_mod.SC_CLOSE | 0x3)   # low bits: how it was asked
-    assert not f.on_message(app_mod.WM_CLOSE, 0)
+    assert not f.on_message(app_mod.WM_CLOSE, 11)      # the user closes window 11 (sent: seen once)
+    assert not f.on_message(0x0200, 11)                 # ... then life goes on
+    assert not f.on_message(app_mod.WM_CLOSE, 11)       # and closes it again later: still the user's
+    assert not f.on_message(0x000F, 11)
+    assert not f.on_message(app_mod.WM_CLOSE, 12)       # another window, once
+    assert not f.on_message(app_mod.WM_CLOSE, 13)
     pump(qapp, 0.05)
     assert called == []
-    assert f.on_message(app_mod.WM_CLOSE, 0)
-    assert not f.on_message(0x0200, 0)   # other messages pass
+    assert not f.on_message(app_mod.WM_CLOSE, 14)       # posted: from the queue ...
+    assert f.on_message(app_mod.WM_CLOSE, 14)           # ... and again in the window: another program
     pump(qapp, 0.05)
     assert called == [1]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows messages")
+def test_external_close_filter_with_real_windows_messages(qapp):
+    """The real thing: a close sent the way Windows does for the title-bar X / Alt+F4 closes only
+    that window; a posted WM_CLOSE (what taskkill does) asks SeisZone to end."""
+    import ctypes
+    from ctypes import wintypes
+    from PySide6.QtWidgets import QDialog
+    u32 = ctypes.WinDLL("user32")
+    u32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    u32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    called = []
+    f = app_mod.ExternalCloseFilter(lambda: called.append(1))
+    qapp.installNativeEventFilter(f)
+    try:
+        if qapp.platformName() != "windows":
+            pytest.skip("needs real windows (QT_QPA_PLATFORM=windows)")
+        user, other = QDialog(), QDialog()
+        user.show()
+        other.show()
+        pump(qapp, 0.2)
+        u32.SendMessageW(int(user.winId()), 0x0112, 0xF060, 0)      # WM_SYSCOMMAND / SC_CLOSE
+        pump(qapp, 0.2)
+        assert not user.isVisible() and called == []                # only that window closed
+        u32.PostMessageW(int(other.winId()), app_mod.WM_CLOSE, 0, 0)
+        pump(qapp, 0.2)
+        assert called == [1] and other.isVisible()                  # swallowed; SeisZone would end
+    finally:
+        qapp.removeNativeEventFilter(f)
 
 
 def test_parse_args():
@@ -544,6 +595,17 @@ def test_viewers_open_from_the_ticked_channels_and_come_back(qapp, tmp_path):
     # quitting keeps the open viewer; the next start opens it again with its settings
     saved = Config(config.path).get("viewers")
     assert len(saved) == 1 and saved[0]["filter"] == "bp1-10" and saved[0]["geometry"]
+    # by default the next start shows the main window alone; what is open at the quit is saved
+    w = _window_with_hub(config)
+    try:
+        w.show()
+        pump(qapp, 0.3)
+        assert w.viewers == []
+        w.open_viewer(state=saved[0])
+    finally:
+        _close(qapp, w)
+    assert len(Config(config.path).get("viewers")) == 1
+    config.set("ui", "reopen_viewers", True)            # Settings: open them again
     w = _window_with_hub(config)
     try:
         assert w.viewers == []
@@ -600,4 +662,4 @@ def test_settings_default_window_is_for_new_viewers(qapp, window, monkeypatch):
     window.config.update_section("view", {"window_seconds": 3600})    # what Settings > OK saves
     window._settings_applied()
     v = window.open_viewer(["WB.KUM.0J.HNZ"])
-    assert v.view._window == 3600 and v.view.window_box.currentData() == 3600
+    assert v.view.pps() == 0.5            # the time scale nearest to an hour on the plot

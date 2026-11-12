@@ -187,9 +187,9 @@ def view(qapp, engine):
     v.resize(1400, 800)
     v.show()
     pump(qapp)
-    v.window_box.setCurrentIndex(v.window_box.findData(600))
     v.set_channels(SIDS)
     pump(qapp, 0.1)
+    v.set_window(600)      # once the plots have their width (the time scale follows it)
     v.refresh()
     yield v
     v.close()
@@ -249,11 +249,12 @@ def test_gaps_break_the_line(qapp, tmp_path):
     v = WaveformView(eng, eng.config)
     v.resize(900, 300)
     v.show()
-    v.window_box.setCurrentIndex(v.window_box.findData(60))
+    v.set_window(60)
     v.set_channels([sid])
     x, y = v._traces[0].curve.getData()
     assert np.isnan(y).sum() == 1
     v.close()
+    v.deleteLater()
 
 
 def test_refresh_speed(view, qapp):
@@ -333,6 +334,7 @@ def test_refresh_stays_smooth_with_12_channels_60_minutes(qapp, tmp_path):
     assert first < 0.5
     assert worst < 0.15
     v.close()
+    v.deleteLater()
 
 
 def test_theme_change_recolours(view, qapp):
@@ -341,12 +343,13 @@ def test_theme_change_recolours(view, qapp):
         theme.apply(qapp, "light")
         pump(qapp)
         assert view.glw.backgroundBrush().color().name() == theme.LIGHT["plot_bg"]
-        assert tr.curve.opts["pen"].color().name() == theme.TRACES_LIGHT[0]
-        assert theme.TRACES_LIGHT[0] in tr.label.text
+        # colour-coded components: the vertical channel is green
+        assert tr.curve.opts["pen"].color().name() == theme.COMPONENTS_LIGHT["Z"]
+        assert theme.COMPONENTS_LIGHT["Z"] in tr.label.text
     finally:
         theme.apply(qapp, "dark")
         pump(qapp)
-    assert tr.curve.opts["pen"].color().name() == theme.TRACES_DARK[0]
+    assert tr.curve.opts["pen"].color().name() == theme.COMPONENTS_DARK["Z"]
 
 
 def test_filters_units_scale(view, engine):
@@ -387,13 +390,13 @@ def test_filters_units_scale(view, engine):
     spans = {round(tr.yrange[1] - tr.yrange[0], 3) for tr in view._traces}
     assert len(spans) == 1
     view.scale_box.setCurrentIndex(view.scale_box.findData("fixed"))
-    assert view.fixed_edit.isVisible()
+    assert view._fixed_action.isVisible()     # (in the bar, or in its » menu when narrow)
     view.fixed_edit.setText("5000")
     view.fixed_edit.editingFinished.emit()
     assert all(tr.yrange == (-5000.0, 5000.0) for tr in view._traces)
     assert view.state()["fixed"] == 5000.0
     view.scale_box.setCurrentIndex(view.scale_box.findData("auto"))
-    assert not view.fixed_edit.isVisible()
+    assert not view._fixed_action.isVisible()
     assert tr.ykey[:2] == (tr.lo, tr.hi)
 
     # demean off keeps the raw offset; on removes it
@@ -403,12 +406,12 @@ def test_filters_units_scale(view, engine):
     assert abs(tr.lo + tr.hi) < 0.5 * (tr.hi - tr.lo)
 
     # settings come back in a new view made from the saved state
-    view.window_box.setCurrentIndex(view.window_box.findData(120))
+    view.set_window(120)
     again = WaveformView(engine, engine.config, state=view.state())
-    assert again._window == 120 and again._scale == "auto" and again._demean is True
+    assert again.pps() == pytest.approx(view.pps()) and again._scale == "auto" and again._demean is True
     assert again.channels() == SIDS and again.filter_key() == "hp1" and not again.filter_on()
     again.deleteLater()
-    view.window_box.setCurrentIndex(view.window_box.findData(600))
+    view.set_window(600)
 
 
 def test_pause_live_and_range(view, qapp):
@@ -433,7 +436,7 @@ def test_pause_live_and_range(view, qapp):
     view.refresh()
     assert view.visible_range() == pytest.approx((t0 + 200, t0 + 260), abs=0.01)
     # window length while paused keeps the right edge
-    view.window_box.setCurrentIndex(view.window_box.findData(120))
+    view.set_window(120)
     assert view.visible_range() == pytest.approx((t0 + 140, t0 + 260), abs=0.01)
     # back to live
     view.live_button.setChecked(True)
@@ -443,7 +446,7 @@ def test_pause_live_and_range(view, qapp):
     view.set_live(False)
     assert not view.is_live() and not view.live_button.isChecked()
     view.set_live(True)
-    view.window_box.setCurrentIndex(view.window_box.findData(600))
+    view.set_window(600)
 
 
 def test_hidden_view_does_no_work(view):
@@ -546,6 +549,7 @@ def test_fixed_scale_low_pass_keeps_the_offset(qapp, tmp_path):
     lo, hi = tr.yrange
     assert hi - lo == pytest.approx(2000) and lo < tr.lo and tr.hi < hi, (tr.yrange, tr.lo, tr.hi)
     v.close()
+    v.deleteLater()
 
 
 def test_many_channels_scroll(qapp, tmp_path):
@@ -576,6 +580,7 @@ def test_many_channels_scroll(qapp, tmp_path):
     pump(qapp, 0.1)
     assert v.scroll.verticalScrollBar().maximum() == 0
     v.close()
+    v.deleteLater()
 
 
 # ------------------------------------------------------------------------------------------
@@ -774,7 +779,7 @@ class _Wheel:
 
 
 def test_wheel_zooms_amplitude_shift_steps_the_window_ctrl_scrolls(view, engine):
-    assert view.is_live() and view._window == 600
+    assert view.is_live() and view._window == pytest.approx(600)
     vb = view._traces[1].vb
     tr = view._traces[1]
     span = tr.ykey[1] - tr.ykey[0]
@@ -786,19 +791,24 @@ def test_wheel_zooms_amplitude_shift_steps_the_window_ctrl_scrolls(view, engine)
     assert view.gain() == 0.5 and view.gain_label.text() == "×1/2" and view.state()["gain"] == 0.5
     view.reset_amplitude()
     assert view.gain() == 1.0
-    # Shift+wheel: the window length, still live
-    vb.wheelEvent(_Wheel(120, vb, Qt.ShiftModifier))      # up: shorter
-    assert view._window == 300 and view.window_box.currentData() == 300 and view.is_live()
+    # Shift+wheel: the time scale (pixels per second), still live
+    width = view._plot_width()
+    pps = view.pps()                                      # about 2.2 px/s: 600 s on the plot
+    vb.wheelEvent(_Wheel(120, vb, Qt.ShiftModifier))      # up: expand, the next step of the scale
+    assert view.pps() == 5 and view.pps_button.text() == "5" and view.is_live()
     t0, t1 = view.visible_range()
-    assert t1 - t0 == pytest.approx(300, abs=0.01)
+    assert t1 - t0 == pytest.approx(width / 5, abs=0.01)
     vb.wheelEvent(_Wheel(-60, vb, Qt.ShiftModifier))      # half a notch (a touchpad): not yet
-    assert view._window == 300
+    assert view.pps() == 5
     vb.wheelEvent(_Wheel(-60, vb, Qt.ShiftModifier))
-    assert view._window == 600 and view.is_live()
-    for _ in range(9):                                    # stops at the longest choice
+    assert view.pps() == 2 and view.is_live()
+    for _ in range(20):                                   # squashes until a whole day is shown
         vb.wheelEvent(_Wheel(-120, vb, Qt.ShiftModifier))
-    assert view._window == 3600 and view.is_live()
-    view.window_box.setCurrentIndex(view.window_box.findData(600))
+    assert view._window == pytest.approx(86400) and view.is_live()
+    t0, t1 = view.visible_range()
+    assert t1 - t0 == pytest.approx(86400, abs=1)
+    assert pps != view.pps()
+    view.set_window(600)
     # Ctrl+wheel: scrolls back in time (a tenth of the window per notch) and pauses
     t0, t1 = view.visible_range()
     vb.wheelEvent(_Wheel(120, vb, Qt.ControlModifier))
@@ -816,7 +826,7 @@ def test_drag_pauses_and_the_wheel_keeps_the_time_range(view, qapp):
     vb.wheelEvent(_Wheel(240, vb))                       # paused: the wheel still zooms the amplitude
     assert not view.is_live() and view.visible_range() == pytest.approx((a, b)) and view.gain() == 4.0
     view.reset_amplitude()
-    assert view._window == 600 and view.window_box.currentData() == 600
+    assert view._window == pytest.approx(600)
     view.set_live(True)
     assert view.visible_range()[1] - view.visible_range()[0] == pytest.approx(600, abs=0.01)
 

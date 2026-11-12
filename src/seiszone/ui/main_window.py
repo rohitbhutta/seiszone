@@ -434,10 +434,13 @@ class MainWindow(QMainWindow):
 
     def restore_viewers(self):
         """Open the viewers that were open when SeisZone was last closed (once, at the first
-        show - a start in the tray opens them when the window is first shown)."""
+        show - a start in the tray opens them when the window is first shown) - only when the
+        user ticked that in Settings: by default SeisZone starts with its main window alone."""
         if self._restored:
             return
         self._restored = True
+        if not self.config.get("ui", "reopen_viewers", False):
+            return
         saved = [v for v in (self.config.get("viewers") or []) if isinstance(v, dict) and v.get("sids")]
         for st in saved:
             self._safe("restore viewer", self.open_viewer, None, st)

@@ -7,6 +7,7 @@ sections, which stays stable even for 0.1 Hz at 200 sps). A filter is a "spec":
 
     {"hp": 1.0, "hp_order": 4, "lp": 10.0, "lp_order": 4}   high-pass and/or low-pass corners in
                                                             Hz (None: that part is off), orders 1-8
+                                                            (+ "gain": dB, optional, +-60)
     {"default": True}                                       the default band-pass of the stream's
                                                             rate (default_band)
 
@@ -51,8 +52,23 @@ def spec_of(name):
     return None
 
 
-def make_spec(hp=None, lp=None, hp_order=ORDER, lp_order=ORDER):
-    return {"hp": hp, "hp_order": hp_order, "lp": lp, "lp_order": lp_order}
+MAX_GAIN_DB = 60.0
+
+
+def make_spec(hp=None, lp=None, hp_order=ORDER, lp_order=ORDER, gain=0.0):
+    spec = {"hp": hp, "hp_order": hp_order, "lp": lp, "lp_order": lp_order}
+    if gain:
+        spec["gain"] = float(gain)
+    return spec
+
+
+def spec_gain(spec):
+    """The gain of a spec in dB (0 when none)."""
+    try:
+        g = float((spec or {}).get("gain") or 0.0)
+    except (TypeError, ValueError, AttributeError):
+        return 0.0
+    return max(-MAX_GAIN_DB, min(MAX_GAIN_DB, g)) if math.isfinite(g) else 0.0
 
 
 def _corner(value):
@@ -78,11 +94,12 @@ def normalize_spec(spec):
     if spec.get("default"):
         return dict(DEFAULT_SPEC)
     hp, lp = _corner(spec.get("hp")), _corner(spec.get("lp"))
-    if hp is None and lp is None:
+    gain = spec_gain(spec)
+    if hp is None and lp is None and not gain:
         return None
     if hp is not None and lp is not None and hp >= lp:
         return None
-    return make_spec(hp, lp, _order(spec.get("hp_order")), _order(spec.get("lp_order")))
+    return make_spec(hp, lp, _order(spec.get("hp_order")), _order(spec.get("lp_order")), gain)
 
 
 def default_band(rate):
@@ -122,11 +139,16 @@ def describe(spec):
         text = f"Band-pass {hp:g}-{hz(lp)}"
     elif hp is not None:
         text = f"High-pass {hz(hp)}"
-    else:
+    elif lp is not None:
         text = f"Low-pass {hz(lp)}"
+    else:
+        text = "Gain"
     orders = {o for o, v in ((spec["hp_order"], hp), (spec["lp_order"], lp)) if v is not None}
-    if orders != {ORDER}:
+    if orders and orders != {ORDER}:
         text += " (order " + "/".join(str(o) for o in sorted(orders)) + ")"
+    gain = spec_gain(spec)
+    if gain:
+        text += f" {gain:+g} dB"
     return text
 
 
@@ -173,6 +195,9 @@ def apply_spec(y, rate, spec, demean=True):
     y = np.array(y, dtype=np.float64)
     r = resolve(spec, float(rate)) if spec else None
     sos = design(*r, float(rate)) if r else None
+    gain = spec_gain(spec)
+    if gain:
+        y *= 10.0 ** (gain / 20.0)
     bad = ~np.isfinite(y)
     if (sos is None and not demean) or bad.all():
         return y
@@ -206,10 +231,11 @@ def response(spec, rate, freqs):
     freqs = np.asarray(freqs, dtype=np.float64)
     r = resolve(spec, float(rate)) if spec else None
     sos = design(*r, float(rate)) if r else None
+    gain = spec_gain(spec)
     if sos is None:
-        return np.zeros_like(freqs)
+        return np.zeros_like(freqs) + gain
     _w, h = signal.sosfreqz(sos, worN=freqs, fs=rate)
-    return 40.0 * np.log10(np.maximum(np.abs(h), 1e-12))
+    return 40.0 * np.log10(np.maximum(np.abs(h), 1e-12)) + gain
 
 
 def spectrogram(y, rate, bins, max_columns):

@@ -23,11 +23,14 @@ saved is never given to another packet after SeisZone restarts.
 import asyncio
 import errno
 import logging
+import os
 import threading
 import time
 
 from .. import config as cfg_mod
+from .. import paths
 from . import ports
+from .history import RecordedData
 from .gcf_link import GcfLink
 from .gecko import GeckoReceiver
 from .hub import DataHub
@@ -113,6 +116,9 @@ class Engine:
         self.responses = ResponseStore()
         self.recorder = RecordingManager(self.hub, self.state, self.config.get("recording", "folder"))
         self._recorder_open = True
+        self.history = RecordedData(self.recording_folders)   # the viewers' look into the recordings
+        self.history_path = self._history_path()
+        self._history_loaded = False
         self.gecko = GeckoReceiver(self.hub, rename=self.config.get("gecko", "rename") or {})
         self.server = None            # SeedLinkServer while the listener is open
         self.started = None           # wall time of start()
@@ -144,6 +150,14 @@ class Engine:
             if not self._recorder_open:   # started again after stop(): a fresh recorder
                 self.recorder = RecordingManager(self.hub, self.state, self.config.get("recording", "folder"))
                 self._recorder_open = True
+            if not self._history_loaded:
+                self._history_loaded = True
+                try:
+                    n = self.hub.load_history(self.history_path)
+                    if n:
+                        log.info("viewer history of the last day: %d channel(s)", n)
+                except Exception:
+                    log.exception("viewer history not loaded")
             self._loop = asyncio.new_event_loop()
             self._quit = asyncio.Event()
             self._ready.clear()
@@ -171,6 +185,12 @@ class Engine:
             else:
                 log.info("engine stopped")
         self._save_seq()
+        if self._history_loaded and self.hub.summaries:
+            try:
+                self.hub.save_history(self.history_path)
+            except Exception:
+                log.exception("viewer history not saved")
+        self.history.stop()
         with self._lock:
             if self._recorder_open:
                 self._recorder_open = False
@@ -179,6 +199,25 @@ class Engine:
                 except Exception:
                     log.exception("recorder close failed")
         self.state.flush()
+
+    def recording_folders(self):
+        """Where the viewers look for recorded data: the recording folder setting and the
+        folder of every recording there has been."""
+        folders = [self.config.get("recording", "folder") or paths.recordings_dir()]
+        try:
+            folders += [s.get("folder") for s in self.recorder.sessions() if s.get("folder")]
+        except Exception:
+            pass
+        return list(dict.fromkeys(f for f in folders if f))
+
+    def _history_path(self):
+        """The user's own config: LOCALAPPDATA\\SeisZone\\view_history.npz; another config file
+        (a field trial, a test): beside it, so it never touches the user's."""
+        path = getattr(self.config, "path", None)
+        own = paths.config_file()
+        if path and os.path.normcase(os.path.abspath(path)) != os.path.normcase(os.path.abspath(own)):
+            return os.path.join(os.path.dirname(os.path.abspath(path)), "view_history.npz")
+        return os.path.join(paths.local_dir(), "view_history.npz")
 
     @property
     def running(self):

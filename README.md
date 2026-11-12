@@ -8,7 +8,7 @@ SeedLink so other programs can read it.
 It is built only on open standards: SeedLink 3, Guralp GCF / Scream protocol, Kelunji Gecko
 telemetry framing, miniSEED 2 and FDSN StationXML.
 
-Version 1.1.0. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
+Version 1.2.0. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
 
 ## Features
 
@@ -18,9 +18,12 @@ Version 1.1.0. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
   `10.8.0.182:1567` (GCF), or any public SeedLink server.
 * **Kelunji Gecko SMR03** over a USR-W610 serial-to-WiFi/LAN converter: the Gecko connects
   *in* to this PC on TCP port 58772. No other software is needed.
-* **Viewer windows**: tick channels and open them in a viewer window of its own (any number,
-  saved and reopened at the next start). Many channels stacked or overlaid, time window 10 s
-  to 60 min, amplitude zoom, the window filter switched on and off (F) and every channel's own
+* **Viewer windows**: tick channels and open them in a viewer window of its own (any number;
+  reopened at the next start if wanted). Many channels stacked or overlaid with a label box per
+  channel (station, channel, units; colours by component), a time scale in pixels per second up
+  to one day with the **history of the last day** (per-second summaries kept and saved by
+  SeisZone, the user's recordings read in the background, a new SeedLink station's last day
+  fetched at its first connection), amplitude zoom, the window filter switched on and off (F) and every channel's own
   filter (default band-pass, high-pass, low-pass, band-pass, own designs in a filter design
   window, saved filters), counts or physical units (StationXML or a calibration you enter,
   acceleration also in g), auto / common / fixed scaling and per-channel scale factors, offsets

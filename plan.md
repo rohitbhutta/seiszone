@@ -342,6 +342,25 @@ Panels read only `engine.status()`, `engine.hub.stats_snapshot()`, `engine.hub.w
 `engine.recorder.sessions()` and change things only through Engine/RecordingManager methods
 (the one exception: `SourcesPanel.free_ports()` calls `ports.stop_old_service()`).
 
+1.2.0: `ExternalCloseFilter` (ui/app.py) tells an outside close from the user's by how Qt sees the
+WM_CLOSE: a POSTED one (taskkill, the installer) reaches native filters twice in a row (queue,
+then window procedure) -> SeisZone ends; a SENT one (title-bar X, Alt+F4 - Windows sends it
+straight to the window procedure, as it does the SC_CLOSE before it, which filters never see) is
+seen once -> only that window closes. `config["ui"]["reopen_viewers"]` (default False). Viewers:
+`_LanePanel` per row (grid column 0: station or channel label, LOC.CHA, units; colour by component
+`theme.trace_color(i, sid)`), the time scale `pps` (pixels per second, `PPS_STEPS`, window = plot
+width / pps, `MIN_WINDOW` 2 s to `MAX_WINDOW` one day; a mouse zoom sets the scale), the tool bar
+is a QToolBar (overflow instead of a minimum width), per-channel `label`. Long windows (>=
+`SUMMARY_PX` 2 s per pixel): the part older than the live buffer is drawn from per-second
+summaries (`core/history.py`: hub `Summary` of the last day, saved to `view_history.npz` beside the
+config at engine stop and loaded at start; `RecordedData` reads the recording folders in a
+background thread - full-resolution segments for short windows, per-hour filtered summaries for
+long ones; `generation` tells the viewer to recompute). `mseed.decode_many` decodes whole files
+with numpy. SeedLink client: no resume number yet -> `TIME <now - BACKFILL_SECONDS (1 day)>`, then
+DATA. Probe: IP only -> SeedLink (3 HELLO tries), GCF 1567 only when no SeedLink answers; IP:18000
+-> SeedLink only; IP:1567 -> GCF only, never switched. Filter specs have an optional `gain` (dB);
+the design dialog's graph takes left / right button clicks and drags (`_DesignBox`).
+
 `SourcesPanel`: when `status()["gecko"|"server"]["owner"] == "old-service"` the rows show the
 reason, a bar above the tree and the rows' context menu offer "Free the port – stop the old
 Gecko SeedLink service" (`free_ports()`); the first time per run that the Gecko port is held

@@ -68,13 +68,20 @@ Examples for our Guralp Fortimus units:
 | Kangsabati Down | `10.8.0.181:18000` | `10.8.0.181:1567` |
 | Kumari | `10.8.0.182:18000` | `10.8.0.182:1567` |
 
-* **Port 18000 = SeedLink.** Best choice: after a break (VPN down, PC off) the instrument sends
-  the missed data again, so recordings have no gaps.
-* **Port 1567 = GCF** (Scream protocol). Use it if SeedLink is switched off on the instrument.
+What you type decides how SeisZone reads the instrument:
+
+| You type | SeisZone reads |
+|----------|----------------|
+| `10.8.0.182` (IP only) | **SeedLink** (miniSEED) on port 18000. Only if no SeedLink server answers there does it try GCF on 1567 (and says so). |
+| `10.8.0.182:18000` | **SeedLink** only |
+| `10.8.0.182:1567` | **GCF** only (Scream protocol) |
+
+* **SeedLink is the best choice:** after a break (VPN down, PC off) the instrument sends the
+  missed data again, so recordings have no gaps. The first time SeisZone reads a station it
+  also asks for the instrument's **last day** of data, so a new viewer shows that day at once.
+* **GCF (1567)**: use it if SeedLink is switched off on the instrument.
 * You can also add any other SeedLink server on the Internet or your network, for example a
   public data centre server on port 18000.
-* If you do not know the port, type only the IP address: SeisZone tries SeedLink (18000) and
-  GCF (1567) itself.
 
 If nothing answers, the notes say why (wrong address, VPN not connected, port closed). You can
 still click **Add anyway as SeedLink**: SeisZone then keeps trying to connect in the
@@ -156,13 +163,35 @@ click a column title to sort. To see channels:
 
 A viewer is a window of its own (with its own taskbar button, minimize and maximize). Open as
 many as you like, with any channels; the same channel can be in several viewers with different
-settings. Viewers that are open when you quit SeisZone open again at the next start, with all
-their settings. Closing a viewer (X) forgets it.
+settings. Closing a viewer (X) closes only that viewer, never SeisZone. SeisZone starts with its
+main window alone; tick **Open the viewer windows again that were open when SeisZone was
+closed** in Settings > Program to have them back at every start.
+
+On the left of every trace a box shows its **station** (or the label you gave the channel), its
+**location.channel** and its **units** (counts, m/s, m/s² or g). The colours follow the
+component: **Z green, N red, E sky blue**, others blue. The box
+of the channel under the mouse is drawn in full colour.
+
+**History of the last day.** A viewer can show up to **1440 minutes (one day)**, also of times
+before SeisZone was started:
+
+* SeisZone keeps a per-second summary (minimum, maximum) of every channel for the last day and
+  saves it when it stops, so a long window shows the whole day also after a restart.
+* Older times are read from your **recordings** (in the background; "Reading the recorded
+  history..." shows meanwhile): full detail for short windows, and filtered views of long ones.
+  Record a station continuously and its whole history can be viewed.
+* Data that was received but not recorded can be shown in long windows only, and without a
+  filter (the note says so). The live data in memory (Settings: "Live data kept in memory")
+  always has full detail.
 
 ### The bar above the traces
 
 * **Channels**: tick which channels this viewer shows.
-* **Window** and **- / +**: how much time is shown (10 s up to 60 min). Keys: Left / Right.
+* **Time ◂▸ 2 ▸◂**: the time scale in **pixels per second**.
+  ◂▸ (or a left click on the number, the Left arrow, Shift+wheel up) expands the traces in time;
+  ▸◂ (a right click on the number, the Right arrow, Shift+wheel down) squashes them, up to
+  1440 minutes (one day) in the window. The status bar shows the time range on screen. A wider
+  window shows more time at the same scale.
 * **Amplitude - x1 +**: makes every trace larger or smaller in steps of 2 (click x1 to reset).
   Keys: Up / Down, or the mouse wheel.
 * **Filter**: click to switch the filter of the whole window on or off (key **F**); the arrow
@@ -206,12 +235,14 @@ For the channel under the mouse:
 | Offset | Z = zero | follow Remove mean, Null now (fix at the mean), Zero (absolute values) |
 | Locked offset | | Null (N) leaves this channel alone |
 | Spectrogram | P | a colour spectrogram under the trace (red = strong, purple = weak). + / - brighter / darker; the wheel over it zooms the frequency |
-| Calibration... | | counts per m/s or m/s² for a channel without StationXML |
+| Amplitude cursors on this channel | | the two amplitude cursors on this channel |
+| Label... | | a name for the channel, shown in its box on the left (empty: the station) |
+| Calibration... | | counts per m/s or m/s² for a channel without StationXML (then **g** works too) |
 | Remove from this viewer | Del | |
 
 For the whole viewer: Background colour, Show lane lines (L), Overlay channels (O, all traces
 in one row on top of each other), Spectrogram size, All spectrograms on / off (Ctrl+P), Sort by
-(channel, component Z-N-E, station, sample rate, also reversed), Channels..., Label... (the
+(channel, component Z-N-E, station, sample rate, also reversed), Channels..., Window title... (the
 viewer's name), Clear window (Ctrl+Del), No caption (F11: full screen without menu and bar,
 F11 again to return), Duplicate (Ctrl+D), and Spectrum / Export / Record these channels / Save
 picture. The menu bar has the same and **Print** (Ctrl+Shift+P); Help > Viewer keys and mouse
@@ -219,9 +250,13 @@ lists every key.
 
 ### Filter design
 
-High-pass and low-pass, each on or off, with its corner in Hz or seconds and its order (1-8);
-both on is a band-pass. The graph shows the response for a chosen sample rate. Left-click in the
-graph sets the high-pass corner, right-click the low-pass corner. Spectra of selected time
+The **Highpass** part on red and the **Lowpass** part
+on green, each on or off, with its corner in Hz or seconds and its order (1-8); both on is a
+band-pass. **Gain (dB)** makes the filtered trace larger or smaller. The graph shows the response
+for a chosen sample rate (Log or Lin, frequencies in Hz and seconds). **Click or drag with the
+left mouse button** in the graph to move the high-pass corner (red line), **with the right
+button** to move the low-pass corner (green line); a line can also be grabbed and dragged with the
+left button. Spectra of selected time
 ranges (Shift+drag in the viewer, "Use as noise / signal in the filter design") are drawn under
 it, to put the corners where the event is stronger than the noise. **Apply** / **OK** use the
 design; **Auto-apply** uses every change at once; **Save...** keeps it under a name for every

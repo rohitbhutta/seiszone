@@ -441,7 +441,7 @@ def test_probe_seedlink_offline(fast):
     assert validate_source(part)["stations"][0]["selectors"] == ["0JHN?", "9JBNZ"]
 
     text = inst.summary_lines()
-    assert text[1] == f"Connection: SeedLink on 127.0.0.1:{port}"
+    assert text[1] == f"Connection: SeedLink (miniSEED) on 127.0.0.1:{port}"
     assert any(t.startswith(f"Station CI.TEDT 'Tetar Dam Top CH1050': {len(chans)} channel(s)") for t in text)
     assert text[-1] == "StationXML: not found (values are shown in counts)"
 
@@ -470,7 +470,7 @@ def test_probe_prefers_direct_seedlink(fake, fast):
     assert (src["kind"], src["host"], src["port"]) == ("seedlink", "127.0.0.1", port)
     assert src["details"]["typed"] == f"127.0.0.1:{fake.udp_port}" and src["details"]["hostname"]
     text = direct.summary_lines()
-    assert text[1] == f"Connection: SeedLink on 127.0.0.1:{port} (typed 127.0.0.1:{fake.udp_port})"
+    assert text[1] == f"Connection: SeedLink (miniSEED) on 127.0.0.1:{port} (typed 127.0.0.1:{fake.udp_port})"
     assert any(t.startswith("StationXML: found on the instrument") for t in text)
 
 
@@ -567,3 +567,31 @@ def test_probe_does_not_wait_for_the_web_page_of_a_plain_seedlink_server(fast):
         took = time.monotonic() - t
     assert inst.found and inst.method == "seedlink"
     assert took < 2.5, f"the probe waited {took:.1f} s for a web page that is not there"
+
+
+def test_the_typed_port_decides_the_protocol(fake, fast):
+    """The user's rule: IP alone and IP:18000 -> SeedLink; IP:1567 -> GCF, never switched; IP
+    alone falls back to GCF only when no SeedLink server answers (and says so)."""
+    fast.setattr(ip, "HTTP_PORT", fake.http_port)
+    fast.setattr(ip, "GCF_PORT", fake.udp_port)           # the fake GCF unit plays port 1567
+    with seedlink_server(tedt_hub()) as port:
+        fast.setattr(ip, "SEEDLINK_PORT", port)            # and its SeedLink server port 18000
+        alone = ip.probe("127.0.0.1", log=lambda m: None)
+        typed_sl = ip.probe(f"127.0.0.1:{port}", log=lambda m: None)
+        typed_gcf = ip.probe(f"127.0.0.1:{fake.udp_port}", log=lambda m: None)
+    assert alone.method == "seedlink" and alone.port == port
+    assert typed_sl.method == "seedlink"
+    assert typed_gcf.method == "gcf-udp" and typed_gcf.port == fake.udp_port   # not switched
+    # no SeedLink server: IP alone -> GCF with a note; IP:18000 -> nothing (no GCF on 18000)
+    closed = Closer()
+    try:
+        fast.setattr(ip, "SEEDLINK_PORT", closed.port)
+        lines = []
+        fallback = ip.probe("127.0.0.1", log=lines.append)
+        none = ip.probe(f"127.0.0.1:{closed.port}", log=lambda m: None)
+    finally:
+        closed.close()
+    assert fallback.method == "gcf-udp" and "No SeedLink server answered" in fallback.notes[0]
+    assert sum("Trying SeedLink" in x for x in lines) == ip.SEEDLINK_TRIES
+    assert not none.found and "no data port did" in none.notes[-1]          # (the fake has a web page)
+    assert none.method is None

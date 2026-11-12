@@ -375,7 +375,7 @@ class AddSourceDialog(QDialog):
                     rate = ch.get("rate") or 0
                     note = "state of health" if ch.get("cha") in NOT_DATA else \
                         ("" if rate or inst.method == "seedlink" else "rate unknown")
-                    if ch.get("gcf"):
+                    if ch.get("gcf") and str(inst.method).startswith("gcf"):   # only when read as GCF
                         note = (note + "  " if note else "") + f"GCF {ch['gcf']}"
                     item = QTreeWidgetItem(top, [f"{ch.get('loc') or '--'}.{ch['cha']}",
                                                  f"{rate:g}" if rate else "", ch.get("units") or "", note])

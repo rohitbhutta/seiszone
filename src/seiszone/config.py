@@ -69,7 +69,7 @@ DEFAULTS = {
     "filters": [],
     "calibration": {},
     "ui": {"theme": "dark", "minimize_to_tray": True, "start_minimized": False,
-           "start_with_windows": False, "geometry": "", "state": ""},
+           "start_with_windows": False, "reopen_viewers": False, "geometry": "", "state": ""},
 }
 
 

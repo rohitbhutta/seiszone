@@ -27,6 +27,9 @@ CHANS = ("HNZ", "HNN", "HNE")
 @pytest.fixture(autouse=True)
 def fast_reconnect(monkeypatch):
     monkeypatch.setattr(links, "RECONNECT_DELAY", 0.2)
+    # the test records are from 2025: a first connection's "last day" (TIME) would skip them;
+    # test_first_connection_asks_for_the_last_day checks that request with records of today
+    monkeypatch.setattr(seedlink_client, "BACKFILL_SECONDS", 0)
 
 
 def make_records(t0, seconds, chans=CHANS, rate=100, net="WB", sta="KUM", loc="0J", reclen=512):
@@ -850,6 +853,36 @@ def test_idle_client_closed_and_keepalive(monkeypatch):
             assert seen and seen[0] != 0
             if hasattr(socket, "TCP_KEEPIDLE"):
                 assert seen[1] == 60
+        finally:
+            await stop_server(aserver)
+
+    asyncio.run(main())
+
+
+def test_first_connection_asks_for_the_last_day(tmp_path, monkeypatch):
+    """No resume position yet (a new instrument): TIME <a day ago> - the server's history of the
+    last day comes first (older records are not asked for), then live data."""
+    monkeypatch.setattr(seedlink_client, "BACKFILL_SECONDS", 3600)
+    now = time.time()
+
+    async def main():
+        hub1 = DataHub()
+        for rec in make_records(now - 7200, 20) + make_records(now - 600, 20):   # 2 h ago and 10 min ago
+            hub1.add_record(rec, "test")
+        srv, aserver, port = await start_server(hub1)
+        hub2 = DataHub()
+        try:
+            link = client(port, hub2, new_state(tmp_path))
+            assert link._data_commands("WB.KUM")[0].startswith("TIME ")
+            async with Running(link):
+                await wait_until(lambda: len(hub2.packets) >= len(make_records(now - 600, 20)))
+                await asyncio.sleep(0.3)
+                starts = [r.start for _seq, r in hub2.packets]
+                assert min(starts) >= now - 3600 - 1          # the last hour only: not the 2-hour-old data
+                live = make_records(now - 30, 10)
+                for rec in live:
+                    hub1.add_record(rec, "test")
+                await wait_until(lambda: len(hub2.packets) >= len(make_records(now - 600, 20)) + len(live))
         finally:
             await stop_server(aserver)
 

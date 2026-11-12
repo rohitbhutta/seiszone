@@ -366,7 +366,7 @@ def test_cli_probe_add_list(remote, tmp_path, capsys, monkeypatch, quiet_log):
     target = f"127.0.0.1:{remote.port}"
     assert cli.main(["--probe", target]) == 0
     out = capsys.readouterr().out
-    assert f"Connection: SeedLink on {target}" in out
+    assert f"Connection: SeedLink (miniSEED) on {target}" in out
     assert "Station WB.KUM 'remote KUMARI': 3 channel(s)" in out  # rates come from the web page or StationXML
 
     cfg_path = str(tmp_path / "cli" / "config.json")
@@ -410,7 +410,7 @@ def test_cli_probe_and_receive_is_read_only(remote, tmp_path, capsys, monkeypatc
     assert cli.main(["--engine", "--probe", target, "--seconds", "2", "--interval", "1",
                      "--config", cfg_path]) == 0
     out = capsys.readouterr().out
-    assert f"Connection: SeedLink on {target}" in out
+    assert f"Connection: SeedLink (miniSEED) on {target}" in out
     assert "WB.KUM.0J.HNZ" in out
     assert "Gecko receiver" not in out and "SeedLink server:" not in out
     assert open(cfg_path, encoding="utf-8").read() == before

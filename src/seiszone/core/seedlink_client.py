@@ -7,6 +7,10 @@ Negotiation (multi-station mode, one block per configured station):
     STATION sta net             -> OK | ERROR (station not on this server: skipped, noted)
     SELECT x                    -> OK | ERROR, one per selector of the station
     DATA <last seq + 1> <time>  -> OK | ERROR (some servers refuse it: DATA <seq>, then DATA)
+    TIME <a day ago>            -> instead of DATA the first time a station is read (no resume
+                                   number yet): the server sends what it holds of the last day
+                                   (BACKFILL_SECONDS), so a new instrument's viewer shows its day
+                                   at once; a server that refuses TIME gets plain DATA
     END                         -> the server streams "SL" + 6 hex digits + 512-byte record
 
 With no stations configured the uni-station form is used (SELECTs, then DATA starts the
@@ -29,6 +33,7 @@ from .links import CONNECTED, CONNECTING, ERROR, STOPPED, Link
 log = logging.getLogger("seiszone")
 
 PACKET = 520                 # "SL" + 6 hex digits + 512-byte record
+BACKFILL_SECONDS = 24 * 3600  # history asked for the first time a station is read (TIME)
 MASK = 0xFFFFFF
 CONNECT_TIMEOUT = 15
 REPLY_TIMEOUT = 30           # one answer during negotiation
@@ -179,7 +184,10 @@ class SeedLinkClient(Link):
         store = self.state_store
         seq = store.get_seq(self.id, key) if store is not None else None
         if seq is None:
-            return ["DATA"]
+            if BACKFILL_SECONDS <= 0:
+                return ["DATA"]
+            begin = time.strftime("%Y,%m,%d,%H,%M,%S", time.gmtime(time.time() - BACKFILL_SECONDS))
+            return [f"TIME {begin}", "DATA"]
         cmd = f"DATA {(int(seq) + 1) & MASK:06X}"
         t = store.get_seq_time(self.id, key)
         if t is None:

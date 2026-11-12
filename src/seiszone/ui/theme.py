@@ -36,7 +36,19 @@ TRACES_DARK = ["#4fd1c5", "#f6ad55", "#90cdf4", "#f687b3", "#9ae6b4", "#fbd38d",
 TRACES_LIGHT = ["#0f766e", "#b45309", "#1d4ed8", "#be185d", "#15803d", "#a16207", "#6d28d9", "#b91c1c"]
 
 
-def trace_color(i):
+# colour-coded components, as the user's earlier viewer draws them: vertical green, north red,
+# east sky blue, anything else blue (then the palette above)
+COMPONENTS_DARK = {"Z": "#21e021", "N": "#ff3434", "E": "#3fd2ff", "OTHER": "#4d7dff"}
+COMPONENTS_LIGHT = {"Z": "#118c11", "N": "#cc1f1f", "E": "#0a92bf", "OTHER": "#2350d0"}
+COMPONENT_OF = {"Z": "Z", "U": "Z", "N": "N", "1": "N", "E": "E", "2": "E"}
+
+
+def trace_color(i, sid=None):
+    """Colour of trace i; with its channel id: by component (Z green, N / 1 red, E / 2 sky
+    blue, others blue)."""
+    if sid:
+        comp = COMPONENT_OF.get(sid.rsplit(".", 1)[-1][-1:].upper(), "OTHER")
+        return (COMPONENTS_DARK if MODE == "dark" else COMPONENTS_LIGHT)[comp]
     lst = TRACES_DARK if MODE == "dark" else TRACES_LIGHT
     return lst[i % len(lst)]
 
