@@ -539,7 +539,7 @@ def test_fixed_scale_low_pass_keeps_the_offset(qapp, tmp_path):
         eng.hub.add_record(rec, "test")
     eng.config.update_section("view", {"filter": "lp5", "demean": False, "scale": "fixed",
                                        "fixed_scale": 1000.0, "window_seconds": 60})
-    v = WaveformView(eng, eng.config)
+    v = WaveformView(eng, eng.config, state={"scale": "fixed"})
     v.resize(900, 300)
     v.show()
     v.set_channels(["XX.OFF..HHZ"])

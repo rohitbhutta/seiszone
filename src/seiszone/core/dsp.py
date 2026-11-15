@@ -311,6 +311,18 @@ def spectrum(y, rate):
     return f[1:], np.sqrt(pxx[1:])
 
 
+def psd(y, rate):
+    """Power spectral density (units² / Hz) by Welch's method, mean removed: (frequencies
+    without 0 Hz, densities); empty arrays for fewer than 16 good samples."""
+    y = np.asarray(y, dtype=np.float64)
+    y = y[np.isfinite(y)]
+    if len(y) < 16 or rate <= 0:
+        return np.zeros(0), np.zeros(0)
+    nperseg = min(len(y), max(64, 2 ** int(math.log2(len(y) / 4))))
+    f, pxx = signal.welch(y, fs=rate, nperseg=nperseg, detrend="constant", scaling="density")
+    return f[1:], pxx[1:]
+
+
 def stats(y):
     """{"n", "min", "max", "mean", "rms"} of the finite samples; rms is taken around the mean."""
     y = np.asarray(y, dtype=np.float64)

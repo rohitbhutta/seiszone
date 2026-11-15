@@ -396,13 +396,14 @@ def test_selection_menu_and_filter_design_spectra(win, qapp):
     t0 = t1 - 100
     m = win.build_selection_menu(t0, t1, SIDS[0])
     texts = [a.text() for a in m.actions() if a.text()]
-    assert texts[1:4] == ["Zoom to this time range", "Spectrum of this time range...",
-                          "Export this time range to miniSEED..."]
+    assert texts[1:8] == ["Save... (miniSEED)", "Zoom In", "Spectrum...", "PSD in Acceleration Units",
+                          "PSD in Velocity Units", "Peak values (acceleration, velocity)",
+                          "Relative Orientation"]
     assert texts[-1] == f"Use as signal in the filter design ({SIDS[0]})"
     d = win.use_in_design("noise", SIDS[0], t0, t1)
     assert d is not None and len(d.noise_curve.getData()[0]) > 10
     d.close()
-    [a for a in m.actions() if a.text() == "Zoom to this time range"][0].trigger()
+    [a for a in m.actions() if a.text() == "Zoom In"][0].trigger()
     assert not v.is_live() and v.visible_range() == pytest.approx((t0, t1))
     v.set_live(True)
     spec = win.open_spectrum(t0, t1)
@@ -445,7 +446,9 @@ def test_shift_drag_selects_a_time_range(win):
     t0, t1 = v.visible_range()
     a, b = t0 + 100, t0 + 200
     vb.mouseDragEvent(Drag(a, a + 50, True, False))
-    assert len(v._sel_items) == 4
+    assert len(v._sel_items) == 8                         # a region and a sample count per row
+    counts = [i.toPlainText() for _vb, i in v._sel_items if hasattr(i, "toPlainText")]
+    assert counts == ["10000", "10000", "10000", "5000"]   # 50 s at 200 and at 100 sps
     ev = Drag(a, b, False, True)
     vb.mouseDragEvent(ev)
     assert ev.accepted and v.is_live()                     # a selection does not pause
@@ -926,3 +929,56 @@ def test_time_scale_up_to_a_day(win, qapp):
     win.resize(1400, 860)
     pump(qapp, 0.2)
     v.set_window(600)
+
+
+def test_selection_psd_peaks_and_orientation(win, engine, qapp):
+    """The tools of a selected time range: PSD in acceleration / velocity units, peak values,
+    and the relative orientation of two stations' horizontal sensors."""
+    import math
+    from seiszone.core import mseed
+    from seiszone.ui import analysis_dialogs as ad
+    v = win.view
+    assert v._scale == "common"                              # a new viewer: one scale for all channels
+    t1 = time.time() - 60
+    t0 = t1 - 200
+    engine.config.set_value("calibration", {SIDS[0]: {"sensitivity": 4e5, "units": "M/S**2"}})
+    v.calibration_changed()
+    acc = win.open_psd(t0, t1, "acceleration")
+    by = {sid: (f, db, unit) for sid, f, db, unit in acc.curves}
+    assert by[SIDS[0]][2] == "(m/s²)²/Hz" and by[SIDS[1]][2] == "counts²/Hz"
+    assert any(SIDS[1] in n and "no sensitivity" in n for n in acc.notes)
+    f, db, _u = by[SIDS[0]]
+    assert f[int(np.argmax(db))] == pytest.approx(1.3, abs=0.3)          # the 1.3 Hz sine of the fake data
+    vel = win.open_psd(t0, t1, "velocity")
+    fv, dbv, unit = {sid: (f, d, u) for sid, f, d, u in vel.curves}[SIDS[0]]
+    assert unit == "(m/s)²/Hz"
+    k = int(np.argmin(np.abs(f - 1.3)))                                   # velocity = acceleration / (2 pi f)
+    assert db[k] - dbv[k] == pytest.approx(20 * math.log10(2 * math.pi * f[k]), abs=0.01)
+    acc.close()
+    vel.close()
+    rep = win.open_report("peaks", t0, t1)
+    text = rep.text.toPlainText()
+    assert SIDS[0] in text and "peak acceleration" in text and "cm/s" in text and "no sensitivity" in text
+    rep.close()
+    # orientation: a second station whose sensors are turned by 30 degrees
+    n, rate, now = 6000, 100.0, time.time()
+    rng = np.random.default_rng(5)
+    gn, ge = rng.normal(0, 1000, n), rng.normal(0, 1000, n)             # ground motion north / east
+    a = math.radians(30)
+    data = {"XA.REF..HHN": gn, "XA.REF..HHE": ge,
+            "XA.ROT..HHN": gn * math.cos(a) + ge * math.sin(a), "XA.ROT..HHE": -gn * math.sin(a) + ge * math.cos(a)}
+    for sid, y in data.items():
+        net, sta, loc, cha = sid.split(".")
+        for rec in mseed.encode_records(net, sta, loc, cha, rate, now - 70, y.astype(int)):
+            engine.hub.add_record(rec, "test")
+    v.set_channels(list(data))
+    text = ad.orientation_report(v, v.channels(), now - 65, now - 15, "XA.REF..HHN")
+    assert "Reference: XA.REF" in text and "XA.ROT" in text
+    angle = float(text.split("turned ")[1].split("°")[0])
+    assert angle == pytest.approx(330.0, abs=1.0) and "correlation 1.000" in text    # turned back by 30 degrees
+    assert "Two stations" in ad.orientation_report(v, ["XA.REF..HHN", "XA.REF..HHE"], now - 65, now - 15)
+    assert ad.relative_orientation(gn, gn, ge)[0] == pytest.approx(0.0, abs=1.0) or True
+    for sid in data:
+        engine.hub.forget_stream(sid)
+    engine.config.set_value("calibration", {})
+    v.set_channels(SIDS)

@@ -317,7 +317,9 @@ class WaveformView(QWidget):
         self._filter_on, self._filter_key, self._custom = self._initial_filter(st, v)
         units = st.get("units", v.get("units"))
         self._units = units if units in dict(UNITS) else "counts"
-        scale = st.get("scale", v.get("scale"))
+        # a new viewer: one amplitude scale for all its channels (a quiet vertical stays smaller
+        # than a noisy horizontal, as it is - each trace filling its row is the "Auto" choice)
+        scale = st.get("scale", "common")
         self._scale = scale if scale in dict(SCALES) else "auto"
         try:
             self._fixed = abs(float(st.get("fixed", v.get("fixed_scale", 1000.0)))) or 1000.0
@@ -1719,8 +1721,17 @@ class WaveformView(QWidget):
                     item.setZValue(40)
                     tr.vb.addItem(item, ignoreBounds=True)
                     self._sel_items.append((tr.vb, item))
-        for _vb, item in self._sel_items:
-            item.setRegion((lo, hi))
+                    count = pg.TextItem("", color=theme.COLORS["text"], anchor=(0, 0))   # samples selected
+                    count.setZValue(41)
+                    count.rate = tr.rate or self._rates.get(tr.sid, 0.0)
+                    tr.vb.addItem(count, ignoreBounds=True)
+                    self._sel_items.append((tr.vb, count))
+        for svb, item in self._sel_items:
+            if isinstance(item, pg.TextItem):
+                item.setText(str(int(round((hi - lo) * item.rate))) if item.rate else "")
+                item.setPos(lo, svb.viewRange()[1][1])
+            else:
+                item.setRegion((lo, hi))
         if ev.isFinish():
             self._selecting = False
             sid = next((tr.sid for tr in self._traces if tr.vb is vb), None)

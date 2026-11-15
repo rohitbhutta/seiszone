@@ -341,9 +341,14 @@ class ViewerWindow(QMainWindow):
         head = m.addAction(f"{time.strftime('%H:%M:%S', time.gmtime(t0))} - "
                            f"{time.strftime('%H:%M:%S', time.gmtime(t1))} UTC ({t1 - t0:.2f} s)")
         head.setEnabled(False)
-        m.addAction("Zoom to this time range", lambda: self.view.show_range(t0, t1))
-        m.addAction("Spectrum of this time range...", lambda: self.open_spectrum(t0, t1))
-        m.addAction("Export this time range to miniSEED...", lambda: self.open_export(t0, t1))
+        m.addAction("Save... (miniSEED)", lambda: self.open_export(t0, t1))
+        m.addAction("Zoom In", lambda: self.view.show_range(t0, t1))
+        m.addSeparator()
+        m.addAction("Spectrum...", lambda: self.open_spectrum(t0, t1))
+        m.addAction("PSD in Acceleration Units", lambda: self.open_psd(t0, t1, "acceleration"))
+        m.addAction("PSD in Velocity Units", lambda: self.open_psd(t0, t1, "velocity"))
+        m.addAction("Peak values (acceleration, velocity)", lambda: self.open_report("peaks", t0, t1, sid))
+        m.addAction("Relative Orientation", lambda: self.open_report("orientation", t0, t1, sid))
         if sid:
             m.addSeparator()
             m.addAction(f"Use as noise in the filter design ({sid})",
@@ -351,6 +356,30 @@ class ViewerWindow(QMainWindow):
             m.addAction(f"Use as signal in the filter design ({sid})",
                         lambda: self.use_in_design("signal", sid, t0, t1))
         return m
+
+    def open_psd(self, t0, t1, want):
+        from .analysis_dialogs import PsdDialog
+        sids = self._sids_or_message()
+        if not sids:
+            return None
+        dlg = PsdDialog(self.view, sids, t0, t1, want, self)
+        dlg.setAttribute(Qt.WA_DeleteOnClose)
+        dlg.show()
+        return dlg
+
+    def open_report(self, kind, t0, t1, sid=None):
+        from .analysis_dialogs import ReportDialog, orientation_report, peak_report
+        sids = self._sids_or_message()
+        if not sids:
+            return None
+        if kind == "peaks":
+            title, text = "Peak values", peak_report(self.view, sids, t0, t1)
+        else:
+            title, text = "Relative orientation", orientation_report(self.view, sids, t0, t1, sid)
+        dlg = ReportDialog(title, text, self)
+        dlg.setAttribute(Qt.WA_DeleteOnClose)
+        dlg.show()
+        return dlg
 
     def show_selection_menu(self, t0, t1, sid, pos):
         m = self.build_selection_menu(t0, t1, sid)

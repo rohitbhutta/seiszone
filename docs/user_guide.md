@@ -205,8 +205,8 @@ before SeisZone was started:
   Filters change only the display, never recorded data.
 * **Units**: Counts, Physical units (m/s, m/s² from StationXML or your calibration), or Physical
   with acceleration in **g**.
-* **Scale**: Auto (each trace fills its row), Common (all traces the same range, to compare
-  amplitudes), Fixed ± a value you type.
+* **Scale**: Common (all traces the same amplitude scale, so a quiet channel looks quiet - the
+  choice of a new viewer), Auto (each trace fills its row), Fixed ± a value you type.
 * **Remove mean**: centres each trace on zero. **Null** (key **N**): fixes each trace's offset
   at its mean now.
 * **Time cursors**: two vertical lines to drag; the button shows the time between them and the
@@ -220,8 +220,16 @@ before SeisZone was started:
 * **Wheel**: larger / smaller traces (stays live). **Shift+wheel**: shorter / longer window.
   **Ctrl+wheel**: scroll back / forward in time (pauses).
 * **Drag**: move in time (pauses). **Double-click**: live again.
-* **Shift+drag**: select a time range. A menu offers: zoom to it, its spectrum, export it to
-  miniSEED, or use it as "noise" or "signal" in the filter design.
+* **Shift+drag**: select a time range (also while live). The number of samples selected is
+  shown on every channel, and a menu offers:
+  * **Save... (miniSEED)** - export the selection; **Zoom In** - show only the selection;
+  * **Spectrum...**, **PSD in Acceleration Units**, **PSD in Velocity Units** - the power
+    spectral density of every channel (needs StationXML or a Calibration; else counts);
+  * **Peak values** - peak, peak-to-peak, RMS, and for acceleration channels the peak in g and
+    the peak velocity;
+  * **Relative Orientation** - the angle between the horizontal sensors of two stations in the
+    viewer (both need N and E channels);
+  * use it as "noise" or "signal" in the filter design.
 * **Right-click** a channel: the menu below. The status bar shows the time and value under the
   mouse.
 

@@ -5,5 +5,5 @@ miniSEED, FDSN StationXML). See plan.md and memory.md at the project root.
 """
 
 APP_NAME = "SeisZone"
-VERSION = "1.2.1"
+VERSION = "1.3.0"
 ORGANIZATION = "SeisZone"
