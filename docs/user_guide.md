@@ -77,8 +77,12 @@ What you type decides how SeisZone reads the instrument:
 | `10.8.0.182:1567` | **GCF** only (Scream protocol) |
 
 * **SeedLink is the best choice:** after a break (VPN down, PC off) the instrument sends the
-  missed data again, so recordings have no gaps. The first time SeisZone reads a station it
-  also asks for the instrument's **last day** of data, so a new viewer shows that day at once.
+  missed data again, so recordings have no gaps. SeisZone shows **live data first** and fetches
+  the missed time in the background over a second connection; the Sources list then says
+  "live - fetching missed data, 5 h 10 min to go". The first time SeisZone reads a station it
+  fetches the instrument's **last day** the same way. **Latency** is always that of the live
+  data (a few seconds; if it stays near 20 s, the PC clock is wrong: Windows Settings > Time >
+  Sync now).
 * **GCF (1567)**: use it if SeedLink is switched off on the instrument.
 * You can also add any other SeedLink server on the Internet or your network, for example a
   public data centre server on port 18000.

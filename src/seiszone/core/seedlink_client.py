@@ -7,10 +7,17 @@ Negotiation (multi-station mode, one block per configured station):
     STATION sta net             -> OK | ERROR (station not on this server: skipped, noted)
     SELECT x                    -> OK | ERROR, one per selector of the station
     DATA <last seq + 1> <time>  -> OK | ERROR (some servers refuse it: DATA <seq>, then DATA)
-    TIME <a day ago>            -> instead of DATA the first time a station is read (no resume
-                                   number yet): the server sends what it holds of the last day
-                                   (BACKFILL_SECONDS), so a new instrument's viewer shows its day
-                                   at once; a server that refuses TIME gets plain DATA
+
+Live first (version 1.2.1, multi-station mode). A SeedLink server sends what a client missed
+oldest first, so after SeisZone had been closed for hours the newest sample it showed stayed
+hours old until the whole gap had come through a slow VPN ("latency 7 h 28 min" while the
+instrument was fine). Now, when the resume position is older than LIVE_FIRST seconds (or there
+is none yet: a new station gets its last day, BACKFILL_SECONDS), the connection asks for plain
+DATA - live data at once - and the gap is noted in the State ("seedlink_gaps": begin time per
+station). A second connection (_backfill) then asks for the same stations with TIME <begin>,
+feeds what was missed into the hub (recordings and the viewers' history get it; the hub drops
+what it already has) and closes when it reaches the time the live data began. The begin time
+moves forward as it goes, so a restart continues the fetch where it stopped.
     END                         -> the server streams "SL" + 6 hex digits + 512-byte record
 
 With no stations configured the uni-station form is used (SELECTs, then DATA starts the
@@ -34,6 +41,11 @@ log = logging.getLogger("seiszone")
 
 PACKET = 520                 # "SL" + 6 hex digits + 512-byte record
 BACKFILL_SECONDS = 24 * 3600  # history asked for the first time a station is read (TIME)
+LIVE_FIRST = 120             # a resume position older than this: live data first, the gap behind it
+GAPS = "seedlink_gaps"       # State key: {"<source id>|<station>": begin time of data still to fetch}
+BACKFILL_MARGIN = 300        # s the saved begin time stays behind the fetch (long low-rate records)
+BACKFILL_IDLE = 90           # s without a packet before a fetch counts as finished
+BACKFILL_RETRY = 30          # s before a failed fetch is tried again
 MASK = 0xFFFFFF
 CONNECT_TIMEOUT = 15
 REPLY_TIMEOUT = 30           # one answer during negotiation
@@ -58,6 +70,13 @@ def _ok(reply, command):
     raise SeedLinkError(f"unexpected answer {reply!r} to {command}")
 
 
+def _span(seconds):
+    s = max(0, int(seconds))
+    if s >= 3600:
+        return f"{s // 3600} h {s % 3600 // 60:02d} min"
+    return f"{s // 60} min" if s >= 60 else f"{s} s"
+
+
 class SeedLinkClient(Link):
     kind = "seedlink"
 
@@ -73,6 +92,8 @@ class SeedLinkClient(Link):
         self._patterns = []       # [(net, sta, key)] of the stations accepted by the server
         self._uni_retry = []      # uni-station: DATA commands to send after an ERROR
         self._last_data = self._last_byte = self._last_keepalive = 0.0
+        self._live_start = {}     # State key -> start time of the first live record of this connection
+        self.backfilled = 0       # records fetched by the background fetch
 
     def set_state(self, state, detail=""):
         """Keep the note about stations missing on the server visible while receiving."""
@@ -149,8 +170,12 @@ class SeedLinkClient(Link):
         self.since = time.time()
         log.info("SeedLink %s: connected to %s", self.name, self.address)
         reason = "closed"
+        fetch = None
         try:
+            self._live_start = {}
             await self._negotiate(reader, writer)
+            if self.pending_gaps():
+                fetch = asyncio.ensure_future(self._backfill())
             await self._receive(reader, writer)
         except asyncio.CancelledError:
             reason = "stopped" if not self.kick.is_set() else "reconnect requested"
@@ -159,6 +184,12 @@ class SeedLinkClient(Link):
             reason = str(e) or type(e).__name__
             raise
         finally:
+            if fetch is not None and not fetch.done():
+                fetch.cancel()
+                try:
+                    await fetch
+                except BaseException:
+                    pass
             try:
                 writer.write(b"BYE\r\n")
                 writer.close()
@@ -183,10 +214,25 @@ class SeedLinkClient(Link):
         last record, with the number only, plain DATA (servers that refuse the arguments)."""
         store = self.state_store
         seq = store.get_seq(self.id, key) if store is not None else None
+        now = time.time()
+        if key != UNI and store is not None and BACKFILL_SECONDS > 0:
+            # live first: plain DATA now, the missed time is fetched by _backfill
+            t = store.get_seq_time(self.id, key)
+            begin = None
+            if seq is None:
+                begin = now - BACKFILL_SECONDS            # a new station: its last day
+            elif t is not None and now - t > LIVE_FIRST:
+                begin = float(t)
+            pending = self._gap(key)
+            if pending is not None:
+                begin = pending if begin is None else min(begin, pending)
+            if begin is not None:
+                self._set_gap(key, begin)
+                return ["DATA"]
         if seq is None:
             if BACKFILL_SECONDS <= 0:
                 return ["DATA"]
-            begin = time.strftime("%Y,%m,%d,%H,%M,%S", time.gmtime(time.time() - BACKFILL_SECONDS))
+            begin = time.strftime("%Y,%m,%d,%H,%M,%S", time.gmtime(now - BACKFILL_SECONDS))
             return [f"TIME {begin}", "DATA"]
         cmd = f"DATA {(int(seq) + 1) & MASK:06X}"
         t = store.get_seq_time(self.id, key)
@@ -194,6 +240,139 @@ class SeedLinkClient(Link):
             return [cmd, "DATA"]
         stamp = time.strftime("%Y,%m,%d,%H,%M,%S", time.gmtime(int(t)))
         return [f"{cmd} {stamp}", cmd, "DATA"]
+
+    # ------------------------------------------------------------------ gaps (live first)
+    def _gap(self, key):
+        gaps = self.state_store.get(GAPS) if self.state_store is not None else None
+        v = (gaps or {}).get(f"{self.id}|{key}")
+        return float(v) if isinstance(v, (int, float)) else None
+
+    def _set_gap(self, key, begin):
+        """Note (begin: a time) or clear (None) the data still to fetch for a station."""
+        if self.state_store is None:
+            return
+        gaps = dict(self.state_store.get(GAPS) or {})
+        k = f"{self.id}|{key}"
+        if begin is None:
+            if k not in gaps:
+                return
+            del gaps[k]
+        else:
+            gaps[k] = float(begin)
+        self.state_store.set(GAPS, gaps)
+
+    def pending_gaps(self):
+        """{State key: begin time} of this connection's stations with missed data to fetch."""
+        out = {}
+        for _net, _sta, key in self._patterns:
+            g = self._gap(key)
+            if g is not None:
+                out[key] = g
+        return out
+
+    async def _backfill(self):
+        """Fetch the missed data of the stations with a gap over a second connection, while the
+        main one receives live. Tried again after a failure for as long as the session lives."""
+        while self.pending_gaps():
+            try:
+                await self._backfill_once()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                log.info("SeedLink %s: fetching missed data from %s failed (%s); again in %d s",
+                         self.name, self.address, str(e) or type(e).__name__, BACKFILL_RETRY)
+            if self.pending_gaps():
+                await asyncio.sleep(BACKFILL_RETRY)
+        if self.detail.startswith("live"):
+            self.detail = ""
+
+    async def _backfill_once(self):
+        gaps = self.pending_gaps()
+        host, port = self.src["host"], int(self.src["port"])
+        reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), CONNECT_TIMEOUT)
+        try:
+            await self._command(reader, writer, "HELLO", lines=2)
+            asked = {}
+            for st in self.src.get("stations") or []:
+                key = f"{st['net']}.{st['sta']}"
+                if key not in gaps:
+                    continue
+                cmd = f"STATION {st['sta']} {st['net']}"
+                if not _ok(await self._command(reader, writer, cmd), cmd):
+                    continue
+                for sel in st.get("selectors") or []:
+                    await self._command(reader, writer, f"SELECT {sel}")
+                stamp = time.strftime("%Y,%m,%d,%H,%M,%S", time.gmtime(int(gaps[key])))
+                cmd = f"TIME {stamp}"
+                if _ok(await self._command(reader, writer, cmd), cmd):
+                    asked[key] = gaps[key]
+                else:   # a server without TIME: nothing to fetch this way
+                    log.warning("SeedLink %s: %s refused %s - the data missed for %s is not fetched",
+                                self.name, self.address, cmd, key)
+                    self._set_gap(key, None)
+            if not asked:
+                return
+            writer.write(b"END\r\n")
+            await writer.drain()
+            first = min(asked.values())
+            log.info("SeedLink %s: live; fetching the data missed since %s in the background", self.name,
+                     mseed.fmt_time(first))
+            done, buf, n, saved_at = set(), bytearray(), 0, time.time()
+            newest = dict(asked)
+            while len(done) < len(asked):
+                try:
+                    chunk = await asyncio.wait_for(reader.read(65536), BACKFILL_IDLE)
+                except TimeoutError:
+                    break                       # nothing more: caught up
+                if not chunk:
+                    break
+                self.bytes += len(chunk)
+                buf += chunk
+                while len(buf) >= PACKET:
+                    if not (buf.startswith(b"SL") and HEX6.fullmatch(bytes(buf[2:8]))):
+                        nxt = buf.find(b"SL", 1)
+                        del buf[:nxt if nxt > 0 else len(buf)]
+                        continue
+                    body = bytes(buf[8:PACKET])
+                    del buf[:PACKET]
+                    res = mseed.parse_record(body, 0, check=True)
+                    if not isinstance(res, tuple):
+                        continue
+                    rec = res[0]
+                    if rec.nsamp == 0 or rec.rate <= 0:
+                        continue
+                    key = self._key(rec.station, rec.net, rec.sta)
+                    if key not in asked or key in done:
+                        continue
+                    live = self._live_start.get(key)
+                    if live is not None and rec.start >= live:
+                        done.add(key)           # reached what the live connection has
+                        continue
+                    if self.hub.add_record(rec, self.id):
+                        self.packets += 1
+                        self.backfilled += 1
+                        n += 1
+                    newest[key] = max(newest[key], rec.start)
+                now = time.time()
+                if now - saved_at >= 5:
+                    saved_at = now
+                    for key in asked:
+                        if key not in done:
+                            self._set_gap(key, max(asked[key], newest[key] - BACKFILL_MARGIN))
+                    left = max((self._live_start.get(k, now) - newest[k]) for k in asked if k not in done) \
+                        if len(done) < len(asked) else 0
+                    self.detail = f"live - fetching missed data, {_span(left)} to go"
+            for key in asked:
+                self._set_gap(key, None)
+            log.info("SeedLink %s: the missed data is fetched (%d records since %s)", self.name, n,
+                     mseed.fmt_time(first))
+        finally:
+            try:
+                writer.write(b"BYE\r\n")
+                writer.close()
+            except Exception:
+                pass
+            self._flush_state()
 
     async def _negotiate(self, reader, writer):
         banner = await self._command(reader, writer, "HELLO", lines=2)
@@ -332,8 +511,11 @@ class SeedLinkClient(Link):
         self.feed(rec)
         if self.failures:
             self.failures = 0
+        key = self._key(rec.station, rec.net, rec.sta)
+        if key not in self._live_start:
+            self._live_start[key] = rec.start
         if self.state_store is not None:
-            self.state_store.set_seq(self.id, self._key(rec.station, rec.net, rec.sta), seq, rec.end)
+            self.state_store.set_seq(self.id, key, seq, rec.end)
 
     def _key(self, station, net, sta):
         """State key of a record: the configured station it belongs to (wildcards allowed)."""

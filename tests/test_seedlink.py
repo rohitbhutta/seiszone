@@ -859,31 +859,63 @@ def test_idle_client_closed_and_keepalive(monkeypatch):
     asyncio.run(main())
 
 
-def test_first_connection_asks_for_the_last_day(tmp_path, monkeypatch):
-    """No resume position yet (a new instrument): TIME <a day ago> - the server's history of the
-    last day comes first (older records are not asked for), then live data."""
-    monkeypatch.setattr(seedlink_client, "BACKFILL_SECONDS", 3600)
+def test_live_first_then_the_missed_data_in_the_background(tmp_path, monkeypatch):
+    """SeisZone was closed for two hours: the connection asks for live data at once (plain
+    DATA) and a second connection fetches the gap (TIME <resume time>) - so the newest sample
+    is live within moments, not hours old until the whole gap has come through."""
+    monkeypatch.setattr(seedlink_client, "BACKFILL_SECONDS", 24 * 3600)
+    monkeypatch.setattr(seedlink_client, "BACKFILL_IDLE", 1.5)
     now = time.time()
+    old = make_records(now - 3 * 3600, 20)                  # received before SeisZone was closed
+    missed = make_records(now - 3600, 60)                   # while it was closed
+    state = new_state(tmp_path)
+    state.set_seq("src1", "WB.KUM", 5, now - 2 * 3600)      # the resume position: two hours ago
 
     async def main():
         hub1 = DataHub()
-        for rec in make_records(now - 7200, 20) + make_records(now - 600, 20):   # 2 h ago and 10 min ago
+        for rec in old + missed:
             hub1.add_record(rec, "test")
         srv, aserver, port = await start_server(hub1)
         hub2 = DataHub()
         try:
-            link = client(port, hub2, new_state(tmp_path))
-            assert link._data_commands("WB.KUM")[0].startswith("TIME ")
+            link = client(port, hub2, state)
+            assert link._data_commands("WB.KUM") == ["DATA"]                 # live first
+            assert state.get(seedlink_client.GAPS)["src1|WB.KUM"] == pytest.approx(now - 7200, abs=1)
             async with Running(link):
-                await wait_until(lambda: len(hub2.packets) >= len(make_records(now - 600, 20)))
-                await asyncio.sleep(0.3)
-                starts = [r.start for _seq, r in hub2.packets]
-                assert min(starts) >= now - 3600 - 1          # the last hour only: not the 2-hour-old data
-                live = make_records(now - 30, 10)
+                await wait_until(lambda: srv.peers and srv.peers[0]["stations"])
+                live = make_records(now - 5, 5)
                 for rec in live:
                     hub1.add_record(rec, "test")
-                await wait_until(lambda: len(hub2.packets) >= len(make_records(now - 600, 20)) + len(live))
+                await wait_until(lambda: any(r.start >= now - 6 for _s, r in hub2.packets))
+                await wait_until(lambda: len(hub2.packets) >= len(missed) + len(live), timeout=20)
+                await wait_until(lambda: not (state.get(seedlink_client.GAPS) or {}), timeout=20)
+                starts = sorted(r.start for _s, r in hub2.packets)
+                assert starts[0] >= now - 3600 - 1                           # nothing from before the gap
+                assert link.backfilled == len(missed) and link.detail == ""
+                assert hub2.stats_snapshot()["WB.KUM.0J.HNZ"]["last_end"] >= now - 6
         finally:
             await stop_server(aserver)
 
     asyncio.run(main())
+    # a new station (no resume position): its last day is fetched the same way
+    monkeypatch.setattr(seedlink_client, "BACKFILL_SECONDS", 3600)
+    fresh = new_state(tmp_path / "fresh")
+    link = client(1, DataHub(), fresh)
+    assert link._data_commands("WB.KUM") == ["DATA"]
+    assert fresh.get(seedlink_client.GAPS)["src1|WB.KUM"] == pytest.approx(time.time() - 3600, abs=2)
+    # a short gap (a reconnect): the plain resume by sequence number, no second connection
+    quick = new_state(tmp_path / "quick")
+    quick.set_seq("src1", "WB.KUM", 5, time.time() - 20)
+    link = client(1, DataHub(), quick)
+    assert link._data_commands("WB.KUM")[0].startswith("DATA 000006") and not quick.get(seedlink_client.GAPS)
+
+
+def test_an_interrupted_fetch_continues_from_where_it_stopped(tmp_path, monkeypatch):
+    monkeypatch.setattr(seedlink_client, "BACKFILL_SECONDS", 24 * 3600)
+    now = time.time()
+    state = new_state(tmp_path)
+    state.set_seq("src1", "WB.KUM", 5, now - 30)             # the live position is recent ...
+    state.set(seedlink_client.GAPS, {"src1|WB.KUM": now - 5000})   # ... but a fetch was not finished
+    link = client(1, DataHub(), state)
+    assert link._data_commands("WB.KUM") == ["DATA"]
+    assert state.get(seedlink_client.GAPS)["src1|WB.KUM"] == pytest.approx(now - 5000)

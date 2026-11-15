@@ -46,7 +46,7 @@ port 80 (status, data streams, StationXML ~0.9 MB — about a minute over the sl
 Tests must never contact these or listen on 58772, 18000 or 18010 (the real Gecko connects to
 58772; the old service holds 18010; SeisZone's own server runs on 18000).
 
-## Status (2026-11-12, version 1.2.0)
+## Status (2026-11-16, version 1.2.1)
 
 * Project at `C:\D Drive\Only Coding\seiszone` (git repository, local only - not pushed).
 * **Version 1.2.0** (see "Version 1.2.0" below): closing any window no longer quits SeisZone;
@@ -84,6 +84,22 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   new resume command `DATA n <time>` is accepted by all three Fortimus servers; each backfilled
   ~22-24 h of history (~5,850 packets per source) with 0 gaps and no errors.
 * Not yet done: Gecko field test; user installs and accepts 1.0.2.
+
+### Version 1.2.1 (2026-11-16)
+
+Why: with 1.2.0 the user saw KA.KAND "latency 7 h 28 min" (Gecko fine, VPN up). SeisZone had been
+closed for hours; the SeedLink resume (DATA seq time) makes the server send the gap oldest first,
+so the newest sample stayed hours old until the gap had come through the slow VPN.
+* `seedlink_client`: live first. A resume position older than `LIVE_FIRST` (120 s), or none (new
+  station: last day), -> plain DATA (live) and the gap begin noted in State `seedlink_gaps`
+  ("<id>|<NET.STA>": time). `_backfill()` opens a second connection with `TIME <begin>`, feeds the
+  hub, stops at the live connection's first record time, moves the begin forward every 5 s
+  (minus `BACKFILL_MARGIN` 300 s) so a restart continues, clears the gap when done. Link detail:
+  "live - fetching missed data, X to go". Short gaps keep the resume by sequence number.
+  Uni-station sources (no stations configured) keep the old resume.
+* Field check, read-only on 10.8.0.180 (scratch home): 200 sps channels live with ~20 s latency
+  within seconds while the day was fetched at about 50x real time. The ~19 s that remain are the
+  PC clock (18.8 s fast, still not synced).
 
 ### Version 1.2.0 (2026-11-12)
 
@@ -317,7 +333,7 @@ User files: `%APPDATA%\SeisZone` (config.json, state.json, stationxml\), `%LOCAL
 
 ## Open items / next steps
 
-1. (done) 1.0.1 = 5c60396, 1.0.2 = 4092142, 1.1.0 = 465a94a; 1.2.0 committed after its build.
+1. (done) 1.0.1 = 5c60396, 1.0.2 = 4092142, 1.1.0 = 465a94a, 1.2.0 = af71f90; 1.2.1 after its build.
 2. User installs build/dist/SeisZoneSetup.exe 1.2.0 (UAC); checks closing viewers / dialogs keeps
    SeisZone running, a 1-day window shows the history, the filter design drag, the label panel.
 3. Optional: a Calibration for SS.SMR03 channels so they can be shown in g.
