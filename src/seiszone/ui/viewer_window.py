@@ -349,6 +349,11 @@ class ViewerWindow(QMainWindow):
         m.addAction("PSD in Velocity Units", lambda: self.open_psd(t0, t1, "velocity"))
         m.addAction("Peak values (acceleration, velocity)", lambda: self.open_report("peaks", t0, t1, sid))
         m.addAction("Relative Orientation", lambda: self.open_report("orientation", t0, t1, sid))
+        m.addSeparator()
+        m.addAction("Strong-motion analysis...", lambda: self.open_analysis("strong", t0, t1, sid))
+        m.addAction("Sinewave Calibration...", lambda: self.open_analysis("sine", t0, t1, sid))
+        m.addAction("Step Calibration...", lambda: self.open_analysis("step", t0, t1, sid))
+        m.addAction("Broadband Noise Calibration...", lambda: self.open_analysis("noise", t0, t1, sid))
         if sid:
             m.addSeparator()
             m.addAction(f"Use as noise in the filter design ({sid})",
@@ -363,6 +368,24 @@ class ViewerWindow(QMainWindow):
         if not sids:
             return None
         dlg = PsdDialog(self.view, sids, t0, t1, want, self)
+        dlg.setAttribute(Qt.WA_DeleteOnClose)
+        dlg.show()
+        return dlg
+
+    def open_analysis(self, kind, t0, t1, sid=None):
+        """Strong-motion analysis, or one of the calibration checks, of a selection."""
+        from .analysis_dialogs import CalibrationCheckDialog, StrongMotionDialog
+        sids = self._sids_or_message()
+        if not sids:
+            return None
+        if kind == "strong":
+            dlg = StrongMotionDialog(self.view, sids, t0, t1, sid, self)
+        else:
+            if len(sids) < 2:
+                self.statusBar().showMessage("A calibration needs two channels in this viewer: the sensor's "
+                                             "output and the calibration signal", 8000)
+                return None
+            dlg = CalibrationCheckDialog(self.view, sids, t0, t1, kind, sid, self)
         dlg.setAttribute(Qt.WA_DeleteOnClose)
         dlg.show()
         return dlg

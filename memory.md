@@ -46,7 +46,7 @@ port 80 (status, data streams, StationXML ~0.9 MB — about a minute over the sl
 Tests must never contact these or listen on 58772, 18000 or 18010 (the real Gecko connects to
 58772; the old service holds 18010; SeisZone's own server runs on 18000).
 
-## Status (2026-11-16, version 1.3.0)
+## Status (2026-11-16, version 1.4.0)
 
 * Project at `C:\D Drive\Only Coding\seiszone` (git repository, local only - not pushed).
 * **Version 1.2.0** (see "Version 1.2.0" below): closing any window no longer quits SeisZone;
@@ -85,6 +85,25 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   ~22-24 h of history (~5,850 packets per source) with 0 gaps and no errors.
 * Not yet done: Gecko field test; user installs and accepts 1.0.2.
 
+### Version 1.4.0 (2026-11-16)
+
+Why: the user asked for the four selection-menu entries of their earlier viewer that 1.3.0 left
+out ("Do this also"). That viewer ships them as separate compiled programs with no description
+of their maths; nothing was decompiled - they are the standard calculations, written new:
+* `core/analysis.py`: `measures` (PGA, PGV, PGD, RMS, Arias, CAV, 5-95 % duration, predominant
+  period), `integrate`, `response_spectrum` (frequency-domain oscillator; SD / PSV / PSA),
+  `sine_fit`, `sine_calibration`, `transfer_function` (Welch cross spectra, coherence),
+  `find_steps` / `step_response` / `step_gain` / `fit_velocity_step`, `equivalent_acceleration`
+  (counts x V/count / (resistor x coil constant)). tests/test_analysis.py checks each against a
+  case with a known answer.
+* `ui/analysis_dialogs.py`: `StrongMotionDialog`, `CalibrationCheckDialog` (output channel,
+  calibration channel, sensor type, µV/count, resistor, coil constant - kept per station in
+  config "caltool"); viewer selection menu: Strong-motion analysis..., Sinewave Calibration...,
+  Step Calibration..., Broadband Noise Calibration... (`ViewerWindow.open_analysis`).
+* Limits to tell the user: the calibration checks need the instrument to SEND its calibration
+  channel and the calibration signal to be switched on at the instrument (SeisZone does not
+  command it); not tried on the real instruments.
+
 ### Version 1.3.0 (2026-11-16)
 
 Why: the user compared a SeisZone viewer with their earlier viewer and found SeisZone "less
@@ -97,8 +116,8 @@ They also asked for that viewer's selection menu:
   Spectrum..., PSD in Acceleration Units, PSD in Velocity Units (`ui/analysis_dialogs.py`
   PsdDialog, `dsp.psd`), Peak values (`peak_report`), Relative Orientation
   (`orientation_report`: rotation of a second station's N/E pair that best fits the reference N).
-* NOT built: that viewer's "ART 3" and the Sinewave / Step / Broadband Noise Calibration entries
-  (external add-ons that need a calibration signal fed into the sensor) - told the user.
+* Left out of 1.3.0, built in 1.4.0 (see above): strong-motion analysis and the Sinewave / Step /
+  Broadband Noise calibration checks.
 * A read-only data fetch from 10.8.0.180/.181 for a comparison was DENIED by the user: ask before
   contacting the instruments again.
 
@@ -350,7 +369,7 @@ User files: `%APPDATA%\SeisZone` (config.json, state.json, stationxml\), `%LOCAL
 
 ## Open items / next steps
 
-1. (done) 1.0.1 = 5c60396, 1.0.2 = 4092142, 1.1.0 = 465a94a, 1.2.0 = af71f90, 1.2.1 = af4da1b; 1.3.0 after its build.
+1. (done) 1.0.1 = 5c60396, 1.0.2 = 4092142, 1.1.0 = 465a94a, 1.2.0 = af71f90, 1.2.1 = af4da1b, 1.3.0 = 7a7cfe8; 1.4.0 after its build.
 2. User installs build/dist/SeisZoneSetup.exe 1.2.0 (UAC); checks closing viewers / dialogs keeps
    SeisZone running, a 1-day window shows the history, the filter design drag, the label panel.
 3. Optional: a Calibration for SS.SMR03 channels so they can be shown in g.

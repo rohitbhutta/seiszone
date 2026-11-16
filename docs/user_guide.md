@@ -229,6 +229,11 @@ before SeisZone was started:
     the peak velocity;
   * **Relative Orientation** - the angle between the horizontal sensors of two stations in the
     viewer (both need N and E channels);
+  * **Strong-motion analysis...** - for every acceleration channel: PGA (m/s² and g), PGV, PGD,
+    RMS, Arias intensity, CAV, the 5-95 % duration and the predominant period; and for the
+    channel you choose a graph of its response spectrum (PSA, PSV or SD at 2, 5 or 10 %
+    damping), its acceleration, velocity or displacement, or its Fourier spectrum;
+  * **Sinewave / Step / Broadband Noise Calibration...** - see "Calibration checks" below;
   * use it as "noise" or "signal" in the filter design.
 * **Right-click** a channel: the menu below. The status bar shows the time and value under the
   mouse.
@@ -273,6 +278,26 @@ ranges (Shift+drag in the viewer, "Use as noise / signal in the filter design") 
 it, to put the corners where the event is stronger than the noise. **Apply** / **OK** use the
 design; **Auto-apply** uses every change at once; **Save...** keeps it under a name for every
 viewer. Opened from a channel's menu, the design is for that channel only.
+
+### Calibration checks
+
+These compare the **calibration signal** fed into a sensor with the sensor's **output**. You
+need both in the viewer: the sensor's channel and the channel that carries the calibration
+signal (the instrument must be sending that channel, and the calibration signal must be switched
+on at the instrument - SeisZone does not switch it on). Select the time of the calibration with
+Shift+drag, choose the check, then pick the two channels and press **Calculate**.
+
+| Check | Calibration signal | What you get |
+|-------|--------------------|--------------|
+| Sinewave | a sine | its frequency, the sensor's sensitivity at that frequency, and the phase between input and output |
+| Step | a square wave | the output after each step, stacked. Accelerometer: the settled gain. Seismometer (velocity): the natural period and the damping |
+| Broadband noise | noise | gain, phase and coherence over frequency; the gain of the flat part of the response |
+
+For results in physical units enter the three values of the calibration sheets: the calibration
+channel's **microvolts per count**, the **calibration resistor** (ohm) and the **coil
+constant**. SeisZone keeps them for the station. With all three left at 1 the results are
+relative (output counts per calibration count). When the channel has a sensitivity (StationXML
+or Calibration), the result also says how many percent the measured one differs.
 
 Each trace shows its channel name, the minimum and maximum of what is visible, and its filter,
 scale factor and offset when they are set. Breaks in a trace are gaps in the data.

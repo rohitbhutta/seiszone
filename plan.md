@@ -254,6 +254,21 @@ x Nyquist; 10-30 s period at 1-2 sps), `resolve(spec, rate)`, `describe(spec)`,
 spec, demean)`, `pre_roll(spec, rate)`, `response(spec, rate, freqs)` (dB as applied: |H|² of
 the forwards-backwards filter), `spectrogram(y, rate, bins, max_columns)` (Hann STFT power).
 
+### 5.13a Analysis — `core/analysis.py` (1.4.0)
+Pure numpy/scipy, no Qt. Inputs are arrays in physical units unless said.
+`integrate(y, rate)`; `measures(acc, rate) -> dict` (pga, pgv, pgd, rms, arias, cav, duration
+5-95 %, predominant period); `default_periods()`; `response_spectrum(acc, rate, periods, damping)
+-> (sd, psv, psa)` (frequency-domain single-degree-of-freedom oscillator);
+`equivalent_acceleration(counts, volts_per_count, resistor, coil)` (calibration counts -> m/s² on
+the mass); `sine_fit(y, rate)`, `sine_calibration(out, cal, rate)` (frequency, amplitude ratio,
+phase); `transfer_function(out, cal, rate) -> (f, h, coherence)` (Welch / cross spectra);
+`find_steps`, `step_response`, `step_gain` (accelerometer: settled gain), `fit_velocity_step`
+(seismometer: natural period and damping, free start time).
+Windows in `ui/analysis_dialogs.py`: `StrongMotionDialog(view, sids, t0, t1, sid, parent)` and
+`CalibrationCheckDialog(view, sids, t0, t1, kind, ref_sid, parent)` with kind sine / step / noise;
+opened by `ViewerWindow.open_analysis(kind, t0, t1, sid)` from the selection menu. The calibration
+values (µV per count, resistor, coil constant) are kept per station in config `caltool`.
+
 ### 5.14 Engine — `core/engine.py`
 `Engine(config, state=None, hub=None)`; `start()` (thread "seiszone-engine" with its own asyncio
 loop; opens SeedLink server and Gecko listeners — a port that is busy is reported, not fatal;
