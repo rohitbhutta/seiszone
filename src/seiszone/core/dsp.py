@@ -172,6 +172,32 @@ def design(hp, hp_order, lp, lp_order, rate):
     return np.vstack(parts) if parts else None
 
 
+SETTLE_LEVEL = 1e-10   # what is left of an edge's influence after settle_samples() samples
+
+
+@functools.lru_cache(maxsize=256)
+def _settle(hp, hp_order, lp, lp_order, rate):
+    sos = design(hp, hp_order, lp, lp_order, rate)
+    if sos is None:
+        return 0
+    radius = max(float(np.max(np.abs(np.roots(s[3:])))) for s in sos)
+    if not 0.0 < radius < 1.0:
+        return None
+    return int(math.ceil(math.log(SETTLE_LEVEL) / math.log(radius)))
+
+
+def settle_samples(spec, rate):
+    """Samples after which an edge of the data (where filtering starts or stops) no longer
+    changes the filtered value by more than SETTLE_LEVEL of the edge's size: the slowest pole of
+    the filter, |p|^k <= SETTLE_LEVEL. 0 when the spec filters nothing at this rate (a gain is
+    sample by sample); None when it cannot be worked out. The live view refilters only this far
+    back when new data arrive (ui/trace_cache.py)."""
+    r = resolve(spec, float(rate)) if spec else None
+    if not r or rate <= 0:
+        return 0
+    return _settle(*r, float(rate))
+
+
 def _design(name, rate):
     """Sections of a named filter at a sample rate (None: nothing to filter)."""
     r = resolve(spec_of(name), float(rate))

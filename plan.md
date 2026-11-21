@@ -84,6 +84,7 @@ seiszone/
       sources_panel.py SourcesPanel
       channels_panel.py ChannelsPanel
       waveform_view.py WaveformView (the plots of a viewer window)
+      trace_cache.py   TraceCache: incremental filtering / decimation of live traces
       viewer_window.py ViewerWindow (a viewer: menus, right-click menu, keys, status bar)
       viewer_dialogs.py ScaleDialog, DetailsWindow, CalibrationDialog, ChannelPickerDialog
       filter_dialog.py filter list, saved filters, FilterDesignDialog
@@ -253,6 +254,20 @@ x Nyquist; 10-30 s period at 1-2 sps), `resolve(spec, rate)`, `describe(spec)`,
 `design(hp, hpo, lp, lpo, rate)` (cascaded Butterworth sections, cached), `apply_spec(y, rate,
 spec, demean)`, `pre_roll(spec, rate)`, `response(spec, rate, freqs)` (dB as applied: |H|² of
 the forwards-backwards filter), `spectrogram(y, rate, bins, max_columns)` (Hann STFT power).
+`settle_samples(spec, rate)` (after 1.4.0): samples until the slowest pole has decayed to
+`SETTLE_LEVEL` (1e-10) - how far an edge of the data still changes the filtered output; 0 for
+no filter / gain only, None if unknown.
+
+### 5.13b Incremental live traces — `ui/trace_cache.py` (after 1.4.0)
+`TraceCache` per plotted channel (`_Trace.cache`, cleared by `reset`): `begin(spec)` (another
+spec clears it), `piece(start, rate, y, spec) -> (filtered, handle)` per hub segment (same
+values as `apply_spec(y, rate, spec, demean=False)`; only `[end - settle, new end)` is
+refiltered, from `end - 2 settle`; full computation on another grid / earlier start / earlier
+end / changed samples / NaN / slow filter), `envelope(handle, i_clip, y, size) -> (x, y)` (min/
+max bins of `size` samples on the run's fixed grid, unchanged bins reused), `end()`.
+`aligned_envelope`, `bin_size(rate, span, width)` (one bin per pixel). History segments from the
+recordings are not cached. A live view moves only by whole pixels (`LIVE_STEP_PX`).
+Proven in tests/test_trace_cache.py (< 1e-7 against one filter over all the data).
 
 ### 5.13a Analysis — `core/analysis.py` (1.4.0)
 Pure numpy/scipy, no Qt. Inputs are arrays in physical units unless said.

@@ -90,6 +90,33 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   ~22-24 h of history (~5,850 packets per source) with 0 gaps and no errors.
 * Not yet done: Gecko field test; user installs and accepts 1.0.2.
 
+### Speed work after 1.4.0 (2026-11-21, not yet built or released)
+
+* Profiled with `tools/profile_seiszone.py` (synthetic data only). The report, with before and
+  after numbers, is `docs/profiling-2026-11-21.md`.
+* Done:
+  - (1) a live view moves only by whole pixels (`WaveformView._moves_a_pixel`, `LIVE_STEP_PX`);
+  - (2) `ui/trace_cache.py` provides incremental filtering and min/max decimation, and
+    `dsp.settle_samples` gives the refilter length (slowest pole down to 1e-10).
+  - Result: a 60-minute or 24-hour view uses about 9 % of the UI thread instead of about 32 %.
+* Precision is proven in `tests/test_trace_cache.py`: < 1e-7 against one sosfiltfilt over all
+  the data, and the viewer curve matches the from-scratch curve to 1e-6.
+* `python -m pytest tests -q`: 303 passed, 1 skipped.
+* Open, from the report (the user picked fixes 1 + 2 first):
+  - (3) batch Steim decode in the SeedLink backfill: `mseed.decode_many` is 7–10x faster
+    than the per-record Python decoder, and a day of 9 channels costs about 350 s of engine CPU;
+  - (4) one set of time-axis ticks for all rows;
+  - (5) the SeedLink test `test_live_first_then_the_missed_data_in_the_background` is
+    timing-dependent. The backfill can count live records before the live connection notes
+    its first record time. Data stays correct (the hub drops duplicates).
+  - Also: 1-minute windows are bound by Qt work per trace (label setText, setData); the old
+    window filtering has a start transient of up to 0.66 % at the left edge for very slow
+    filters (pre-roll capped at 60 s).
+* The user asked to check the viewer against the earlier third-party viewer "using REA".
+  The REA/Ghidra work files are in `C:\D Drive\Rohit Claude App\rea-work`. Decompiling that
+  viewer was declined: it breaks the standing rule above and probably its licence. A
+  side-by-side comparison of the same data in both programs (behaviour only) was offered instead.
+
 ### Version 1.4.0 (2026-11-16)
 
 Why: the user asked for the four selection-menu entries of their earlier viewer that 1.3.0 left

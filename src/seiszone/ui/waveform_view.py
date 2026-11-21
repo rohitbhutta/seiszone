@@ -64,6 +64,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QGraphicsGridLayout
 
 from ..core import dsp
 from . import theme
+from .trace_cache import TraceCache, bin_size
 from .filter_dialog import (SAVED_PREFIX, FilterDesignDialog, delete_filter, filter_catalogue, filter_label,
                             filter_spec, saved_filters)
 
@@ -257,7 +258,8 @@ class _Trace:
     __slots__ = ("sid", "vb", "left", "bottom", "curve", "label", "panel", "host", "svb", "saxis", "image", "t0",
                  "t1",
                  "version", "computed", "lo", "hi", "yrange", "text", "units", "has_sens", "stats", "mean_pre",
-                 "filter_text", "rate", "nyq", "lines", "tcur", "ykey", "pending", "hist_gen", "unfiltered")
+                 "filter_text", "rate", "nyq", "lines", "tcur", "ykey", "pending", "hist_gen", "unfiltered",
+                 "cache")
 
     def __init__(self, vb, left, bottom, curve, label, panel):
         self.vb, self.left, self.bottom, self.curve, self.label = vb, left, bottom, curve, label
@@ -292,6 +294,7 @@ class _Trace:
         self.unfiltered = False  # older data shown without its filter (only the day summary had it)
         self.rate = 0.0
         self.nyq = None
+        self.cache = TraceCache()   # filtered samples / decimation kept between refreshes
         self.curve.setData([], [])
         self.label.setText("")
         if self.image is not None:
@@ -1946,9 +1949,11 @@ class WaveformView(QWidget):
         else:
             full_t0 = t0
         segs = hub.window(sid, full_t0 - pre, t1) if full_t0 < t1 else []
+        n_older = 0                            # segments from the recordings (not cached)
         if not summary and history is not None and (hub_first is None or t0 < hub_first):
             older, pending = history.segments(sid, t0 - pre, min(t1, hub_first) if hub_first else t1)
             tr.pending = pending
+            n_older = len(older)
             segs = older + list(segs)          # the recordings before the live buffer
         bins = None
         if summary and full_t0 > t0:
@@ -1959,8 +1964,14 @@ class WaveformView(QWidget):
         if bins is not None:
             total, count = bins[4], bins[5]
         want_rms = sid in self._details          # one more pass over the data: only for Details
-        for start, rate, y in segs:
-            if spec is not None:   # the mean is taken out below (a low-pass keeps it here)
+        cache = tr.cache
+        cache.begin(spec)
+        handles = []                             # per part: (run handle, clipped start index) or None
+        for k, (start, rate, y) in enumerate(segs):
+            handle = None
+            if k >= n_older:   # the live buffer: filtered only where new data change it
+                y, handle = cache.piece(start, rate, y, spec)
+            elif spec is not None:   # the mean is taken out below (a low-pass keeps it here)
                 y = dsp.apply_spec(y, rate, spec, demean=False)
             else:
                 y = np.asarray(y, dtype=np.float64)
@@ -1970,6 +1981,7 @@ class WaveformView(QWidget):
             if i0:
                 start += i0 / rate
                 y = y[i0:]
+            handles.append(None if handle is None else (handle, handle[1] + i0))
             total_y = float(np.sum(y))
             if math.isfinite(total_y):           # no NaN in it (the usual case): one pass
                 good = y
@@ -1981,6 +1993,7 @@ class WaveformView(QWidget):
             if want_rms:
                 sumsq += float(np.dot(good, good))
             parts.append((start, rate, y))
+        cache.end()
         tr.mean_pre = total / count if count else None   # what Null makes the offset
         shift = 0.0
         if fixed:
@@ -2005,8 +2018,12 @@ class WaveformView(QWidget):
         if bins is not None and len(bins[0]):
             xs.append(bins[0])
             ys.append(bins[1].copy())
-        for start, rate, y in parts:
-            x, e = dsp.envelope(start, rate, y, max(4, int(points * len(y) / rate / span)))
+        for (start, rate, y), h in zip(parts, handles):
+            max_points = max(4, int(points * len(y) / rate / span))
+            if h is None or len(y) <= max_points:
+                x, e = dsp.envelope(start, rate, y, max_points)
+            else:   # bins on the run's own grid: those still holding the same samples are reused
+                x, e = cache.envelope(h[0], h[1], y, bin_size(rate, span, width))
             if xs:   # a gap between hub segments: break the line
                 xs.append(np.array([xs[-1][-1]]))
                 ys.append(np.array([np.nan]))
