@@ -48,7 +48,10 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
 
 ## Status (2026-11-16, version 1.4.0)
 
-* Project at `C:\D Drive\Only Coding\seiszone` (git repository, local only - not pushed).
+* Project at `C:\D Drive\Only Coding\seiszone` (git repository). Since 2026-11-21 it is pushed to
+  the PRIVATE GitHub repository https://github.com/rohitbhutta/seiszone (remote `origin`, branch
+  `main`; gh CLI logged in as rohitbhutta and set as git's GitHub credential helper). Commits are
+  authored with rohitsantra8@... which GitHub links to the account DevlpRohit, not rohitbhutta.
 * **Version 1.2.0** (see "Version 1.2.0" below): closing any window no longer quits SeisZone;
   history of the last day in the viewers; Scream-like time scale, label panel, colours, filter
   design by mouse; protocol by port; log colours in light mode.
