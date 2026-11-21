@@ -161,7 +161,8 @@ time.google.com, time.windows.com and pool.ntp.org (all three agreed). Real dela
   and the toolbar / Window menu Open viewer (Ctrl+Shift+N) still opens the ticked channels.
 * Git: branch `feature/utc-clock` on top of `perf/backfill-axes-race` (321 passed, 1 skipped).
   On 2026-11-22 the user said push everything: `perf/live-viewer`, `perf/backfill-axes-race`
-  and `feature/utc-clock` are on GitHub (no PR opened yet, main unchanged).
+  and `feature/utc-clock` are on GitHub. Then "push everything to main": main was fast-forwarded
+  to a6f3812 (no merge commit, no PR) and pushed. Not yet built as an installer or released.
 
 ### Version 1.4.0 (2026-11-16)
 
