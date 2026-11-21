@@ -46,7 +46,7 @@ port 80 (status, data streams, StationXML ~0.9 MB — about a minute over the sl
 Tests must never contact these or listen on 58772, 18000 or 18010 (the real Gecko connects to
 58772; the old service holds 18010; SeisZone's own server runs on 18000).
 
-## Status (2026-11-16, version 1.4.0)
+## Status (2026-11-22, version 1.5.0)
 
 * Project at `C:\D Drive\Only Coding\seiszone` (git repository). Since 2026-11-21 it is pushed to
   the PRIVATE GitHub repository https://github.com/rohitbhutta/seiszone (remote `origin`, branch
@@ -90,7 +90,7 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   ~22-24 h of history (~5,850 packets per source) with 0 gaps and no errors.
 * Not yet done: Gecko field test; user installs and accepts 1.0.2.
 
-### Speed work after 1.4.0 (2026-11-21, not yet built or released)
+### Speed work after 1.4.0 (2026-11-21, released in 1.5.0)
 
 * Profiled with `tools/profile_seiszone.py` (synthetic data only). The report, with before and
   after numbers, is `docs/profiling-2026-11-21.md`.
@@ -135,7 +135,15 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   viewer was declined: it breaks the standing rule above and probably its licence. A
   side-by-side comparison of the same data in both programs (behaviour only) was offered instead.
 
-### True UTC for latency, Channels panel without Open viewer (2026-11-21, not yet built)
+### Version 1.5.0 (2026-11-22)
+
+* Speed fixes 1-5 (above) + true UTC for latency + no Open viewer button in Channels (below).
+* Built 2026-11-22: `build/dist/SeisZoneSetup.exe` (68.8 MB), exe reports 1.5.0 and contains
+  `core/utc_clock` and `ui/trace_cache`. A headless run of the built exe was not possible:
+  the user's SeisZone 1.4.0 was running (single instance). The user runs the installer.
+* The version bump is the commit "SeisZone 1.5.0" on main, pushed 2026-11-22 at the user's OK.
+
+### True UTC for latency, Channels panel without Open viewer (2026-11-21, in 1.5.0)
 
 Why: the user asked what the ~21 s Latency was and to take the clock "from UTC time, which is
 already working on the record data option". Recording is right because file names and periods
@@ -162,7 +170,7 @@ time.google.com, time.windows.com and pool.ntp.org (all three agreed). Real dela
 * Git: branch `feature/utc-clock` on top of `perf/backfill-axes-race` (321 passed, 1 skipped).
   On 2026-11-22 the user said push everything: `perf/live-viewer`, `perf/backfill-axes-race`
   and `feature/utc-clock` are on GitHub. Then "push everything to main": main was fast-forwarded
-  to a6f3812 (no merge commit, no PR) and pushed. Not yet built as an installer or released.
+  to a6f3812 (no merge commit, no PR) and pushed. Then built as 1.5.0 (see Version 1.5.0).
 
 ### Version 1.4.0 (2026-11-16)
 
@@ -448,7 +456,7 @@ User files: `%APPDATA%\SeisZone` (config.json, state.json, stationxml\), `%LOCAL
 
 ## Open items / next steps
 
-1. (done) 1.0.1 = 5c60396, 1.0.2 = 4092142, 1.1.0 = 465a94a, 1.2.0 = af71f90, 1.2.1 = af4da1b, 1.3.0 = 7a7cfe8, 1.4.0 = 6cce137.
+1. (done) 1.0.1 = 5c60396, 1.0.2 = 4092142, 1.1.0 = 465a94a, 1.2.0 = af71f90, 1.2.1 = af4da1b, 1.3.0 = 7a7cfe8, 1.4.0 = 6cce137, 1.5.0 = commit "SeisZone 1.5.0" on main.
 2. User installs build/dist/SeisZoneSetup.exe 1.2.0 (UAC); checks closing viewers / dialogs keeps
    SeisZone running, a 1-day window shows the history, the filter design drag, the label panel.
 3. Optional: a Calibration for SS.SMR03 channels so they can be shown in g.

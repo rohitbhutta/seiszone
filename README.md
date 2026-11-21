@@ -8,7 +8,7 @@ SeedLink so other programs can read it.
 It is built only on open standards: SeedLink 3, Guralp GCF / Scream protocol, Kelunji Gecko
 telemetry framing, miniSEED 2 and FDSN StationXML.
 
-Version 1.4.0. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
+Version 1.5.0. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
 
 ## Features
 
