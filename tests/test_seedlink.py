@@ -910,6 +910,49 @@ def test_live_first_then_the_missed_data_in_the_background(tmp_path, monkeypatch
     assert link._data_commands("WB.KUM")[0].startswith("DATA 000006") and not quick.get(seedlink_client.GAPS)
 
 
+def test_the_fetch_waits_for_the_first_live_record(tmp_path, monkeypatch):
+    """The fetch of missed data stops where the live data begin, so it must know that first: it
+    starts only once the live connection has its first record (then no live record is counted
+    as missed data) - or after LIVE_WAIT s for a station that sends nothing live."""
+    monkeypatch.setattr(seedlink_client, "BACKFILL_SECONDS", 24 * 3600)
+    monkeypatch.setattr(seedlink_client, "BACKFILL_IDLE", 1.0)
+    now = time.time()
+    missed = make_records(now - 3600, 60)
+
+    async def run(state, live_after, wait):
+        monkeypatch.setattr(seedlink_client, "LIVE_WAIT", wait)
+        hub1 = DataHub()
+        for rec in missed:
+            hub1.add_record(rec, "test")
+        srv, aserver, port = await start_server(hub1)
+        hub2 = DataHub()
+        try:
+            link = client(port, hub2, state)
+            async with Running(link):
+                await wait_until(lambda: srv.peers and srv.peers[0]["stations"])
+                await asyncio.sleep(0.6)
+                peers_before_live = len(srv.peers)
+                if live_after is not None:
+                    for rec in make_records(now - live_after, 5):
+                        hub1.add_record(rec, "test")
+                await wait_until(lambda: not (state.get(seedlink_client.GAPS) or {}), timeout=20)
+                return peers_before_live, link.backfilled, len(hub2.packets)
+        finally:
+            await stop_server(aserver)
+
+    state = new_state(tmp_path / "a")
+    state.set_seq("src1", "WB.KUM", 5, now - 2 * 3600)
+    peers, backfilled, held = asyncio.run(run(state, 5, 20.0))
+    assert peers == 1                             # no fetch before the live data
+    assert backfilled == len(missed)              # exactly the missed records, never a live one
+    assert held >= len(missed) + 5
+    # a station that sends nothing live: the fetch starts after LIVE_WAIT anyway
+    quiet = new_state(tmp_path / "b")
+    quiet.set_seq("src1", "WB.KUM", 5, now - 2 * 3600)
+    peers, backfilled, held = asyncio.run(run(quiet, None, 0.3))
+    assert backfilled == len(missed) and held == len(missed)
+
+
 def test_an_interrupted_fetch_continues_from_where_it_stopped(tmp_path, monkeypatch):
     monkeypatch.setattr(seedlink_client, "BACKFILL_SECONDS", 24 * 3600)
     now = time.time()

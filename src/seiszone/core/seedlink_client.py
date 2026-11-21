@@ -17,7 +17,9 @@ DATA - live data at once - and the gap is noted in the State ("seedlink_gaps": b
 station). A second connection (_backfill) then asks for the same stations with TIME <begin>,
 feeds what was missed into the hub (recordings and the viewers' history get it; the hub drops
 what it already has) and closes when it reaches the time the live data began. The begin time
-moves forward as it goes, so a restart continues the fetch where it stopped.
+moves forward as it goes, so a restart continues the fetch where it stopped. The fetch waits
+(at most LIVE_WAIT s) for the live connection's first record of its stations, so it knows where
+to stop, and decodes the records of each network read together (mseed.decode_many).
     END                         -> the server streams "SL" + 6 hex digits + 512-byte record
 
 With no stations configured the uni-station form is used (SELECTs, then DATA starts the
@@ -46,6 +48,7 @@ GAPS = "seedlink_gaps"       # State key: {"<source id>|<station>": begin time o
 BACKFILL_MARGIN = 300        # s the saved begin time stays behind the fetch (long low-rate records)
 BACKFILL_IDLE = 90           # s without a packet before a fetch counts as finished
 BACKFILL_RETRY = 30          # s before a failed fetch is tried again
+LIVE_WAIT = 20               # s a fetch waits for the live connection's first record of its stations
 MASK = 0xFFFFFF
 CONNECT_TIMEOUT = 15
 REPLY_TIMEOUT = 30           # one answer during negotiation
@@ -288,6 +291,13 @@ class SeedLinkClient(Link):
 
     async def _backfill_once(self):
         gaps = self.pending_gaps()
+        # The fetch stops where the live data begin (the first record of the live connection).
+        # Started before that record has come, it could not know where that is: it took the
+        # first live records itself (counted as missed data; the hub kept them once) and read on
+        # past the live start. So it waits for it first - a quiet station at most LIVE_WAIT s.
+        deadline = time.monotonic() + LIVE_WAIT
+        while any(k not in self._live_start for k in gaps) and time.monotonic() < deadline:
+            await asyncio.sleep(0.1)
         host, port = self.src["host"], int(self.src["port"])
         reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), CONNECT_TIMEOUT)
         try:
