@@ -88,6 +88,7 @@ ACCEL_UNITS = {"M/S**2", "M/S2", "M/SEC**2", "M/S/S"}
 BUDGET = 0.030          # seconds of recomputing per refresh; the rest waits for the next refresh
 FORCED_BUDGET = 0.25    # the same right after a setting / channel change (the user waits for it)
 PAUSED_RELOAD = 2.0     # re-read a trace at least this often (backfilled data, paused views)
+LIVE_STEP_PX = 1.0      # a live view moves when its range is at least this many pixels behind
 SENS_TTL = 30.0         # seconds a looked-up sensitivity is trusted (StationXML files may be added)
 AXIS_WIDTH = 66         # left axis width: the same on every plot so the traces line up
 PANEL_WIDTH = 86        # the label panel left of the axis (station, channel, units)
@@ -872,8 +873,21 @@ class WaveformView(QWidget):
         if not self._live and time.monotonic() - self._touched >= AUTO_LIVE:
             self.set_live(True)
         if self._live:
-            self._set_range(*self._live_range())
+            t0, t1 = self._live_range()
+            if self._moves_a_pixel(t0, t1):
+                self._set_range(t0, t1)
         self._update_traces(urgent=False)
+
+    def _moves_a_pixel(self, t0, t1):
+        """True when (t0, t1) is at least LIVE_STEP_PX pixels away from the range on screen. A
+        live view follows the data every refresh (250 ms), but in a long window that is a small
+        part of a pixel (60 min: ~2.5 s per pixel): moving it then only re-ranges every linked
+        plot and redraws every curve and axis to the same pixels."""
+        if not self._traces:
+            return True
+        c0, c1 = self.visible_range()
+        px = (t1 - t0) / self._plot_width()
+        return abs(t1 - c1) >= LIVE_STEP_PX * px or abs(t0 - c0) >= LIVE_STEP_PX * px
 
     def redraw(self):
         """Recompute everything now (F5)."""
