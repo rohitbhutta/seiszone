@@ -159,6 +159,9 @@ servers that answer `ERROR`: retry that station without the sequence number). If
 empty use uni-station mode (`SELECT`s then `DATA`). Keep-alive: send `INFO ID` after 60 s
 without data; reconnect after 180 s without any byte. Save the last seq per station with
 `State.set_seq` (throttled by State). Every record goes through `Link.feed`. Never raises.
+Missed-data fetch (1.2.1, after 1.4.0): waits up to `LIVE_WAIT` (20 s) for the live
+connection's first record of its stations (it stops there), parses each read without decoding
+and decodes the records together (`mseed.decode_many`; a damaged record gets None, dropped).
 
 ### 5.6 SeedLink server — `core/seedlink_server.py`
 `SeedLinkServer(hub, organization="SeisZone")`, `async handle(reader, writer)`, `.clients`

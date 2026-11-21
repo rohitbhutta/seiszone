@@ -116,6 +116,26 @@ pre-roll based on `settle_samples` would remove it everywhere.
 Full suite after the change: 303 passed, 1 skipped. The SeedLink race test passed in this
 run; it is timing-dependent.
 
+## Fixes 3, 4 and 5 (same day)
+
+| | before | after |
+|---|---|---|
+| `DataHub.add_record` per record | ~330 us | 86 us |
+| backfill, 6 h of one 200 sps channel | 6.1–9.7 s (record by record) | 2.05 s (batched per read) |
+| backfill, a day of 9 channels (engine CPU) | ~221–348 s | **~74 s** |
+| time ticks per scroll (12 rows) | worked out 12 times | once (gain ~1 %, within noise) |
+| fetch of missed data vs live data | could take the first live records | waits for the live start (max 20 s) |
+
+* Fix 3: `seedlink_client._backfill_once` parses each read with `check=False` and decodes its
+  records with `mseed.decode_many`. A damaged record gets None and is dropped, as before.
+  `history.bin_reduce` has a quick path (`_bin_firsts`) for short records that finds the bin
+  changes from the bin edges, using the same float arithmetic as the full path, so it is
+  bit-identical (tested over 8 rates x 305 starts). `Summary._merge` has a one-block path.
+* Fix 4: `_TimeAxis.tickValues` keeps the tick times in a dict shared by the view's rows.
+* Fix 5: `LIVE_WAIT`. The new test fails 3/3 with the wait disabled and passes with it.
+
+Full suite: 307 passed, 1 skipped.
+
 Precision safeguard for all of the above: tests compare the new incremental and batched
 results sample by sample with the current whole-window ones (`steim_decode_py` stays the
 reference decoder).

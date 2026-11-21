@@ -102,16 +102,34 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
 * Precision is proven in `tests/test_trace_cache.py`: < 1e-7 against one sosfiltfilt over all
   the data, and the viewer curve matches the from-scratch curve to 1e-6.
 * `python -m pytest tests -q`: 303 passed, 1 skipped.
-* Open, from the report (the user picked fixes 1 + 2 first):
-  - (3) batch Steim decode in the SeedLink backfill: `mseed.decode_many` is 7–10x faster
-    than the per-record Python decoder, and a day of 9 channels costs about 350 s of engine CPU;
-  - (4) one set of time-axis ticks for all rows;
-  - (5) the SeedLink test `test_live_first_then_the_missed_data_in_the_background` is
-    timing-dependent. The backfill can count live records before the live connection notes
-    its first record time. Data stays correct (the hub drops duplicates).
-  - Also: 1-minute windows are bound by Qt work per trace (label setText, setData); the old
-    window filtering has a start transient of up to 0.66 % at the left edge for very slow
-    filters (pre-roll capped at 60 s).
+* Git:
+  - Fixes 1 + 2 are the 2 commits on the local branch `perf/live-viewer` (3ed0437, 775f776),
+    NOT pushed: the user asked for a PR but "don't push it now".
+  - PR text is in `C:\D Drive\Rohit Claude App\seiszone-PR-perf-live-viewer.md`.
+  - Fixes 3–5 are on the stacked local branch `perf/backfill-axes-race` as 3 commits (fix 3
+    4abcc7c, fix 5 b99aaa4, then fix 4 + these notes), also NOT pushed (2026-11-21).
+* Fix 3: the SeedLink fetch of missed data parses each network read without decoding and
+  decodes its records together (`mseed.decode_many`). `history.bin_reduce` has a quick path for
+  records spanning at most 8 bins (`_bin_firsts`, bit-identical to the full path), and
+  `Summary._merge` has a one-block path.
+  - `add_record`: ~330 -> 86 us.
+  - A day of 9 channels of backfill: ~221–348 s -> ~74 s of engine CPU.
+  - Tests: `test_quick_bin_reduce_is_identical` and `test_quick_summary_merge_is_identical`.
+* Fix 4: `_TimeAxis` in waveform_view works out the tick times once per range and shares them
+  across all rows. It is correct and tested, but the measured gain is only ~1 % (within noise):
+  the remaining cost of short windows is Qt curve painting, per-row axis geometry and the label
+  setText.
+* Fix 5: the fetch waits for the live connection's first record of its stations (`LIVE_WAIT`,
+  20 s; a silent station: it starts anyway), so it knows where to stop and never takes live
+  records.
+  - Test: `test_the_fetch_waits_for_the_first_live_record`. It fails 3/3 with the wait
+    disabled.
+* `python -m pytest tests -q`: 307 passed, 1 skipped.
+* Still open:
+  - 1-minute windows are bound by Qt work per trace;
+  - the old full-window filtering has a start transient of up to 0.66 % at the left edge for
+    very slow filters (pre-roll capped at 60 s; `settle_samples` could set it);
+  - no version bump or build yet.
 * The user asked to check the viewer against the earlier third-party viewer "using REA".
   The REA/Ghidra work files are in `C:\D Drive\Rohit Claude App\rea-work`. Decompiling that
   viewer was declined: it breaks the standing rule above and probably its licence. A

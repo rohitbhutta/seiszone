@@ -250,6 +250,38 @@ def test_viewer_draws_the_same_curve_incrementally(qapp, tmp_path, filt):
     v.deleteLater()
 
 
+def test_time_ticks_are_worked_out_once_for_all_rows(qapp, tmp_path):
+    from seiszone.ui import waveform_view as wv
+    sids = [f"WB.S{i}.0J.HNZ" for i in range(6)]
+    eng, _data = _engine(tmp_path, sids, 700.0, time.time())
+    v = wv.WaveformView(eng, eng.config)
+    v.resize(1500, 900)
+    v.show()
+    qapp.processEvents()
+    v.set_channels(sids)
+    v.set_window(600)
+    import unittest.mock as um
+    from pyqtgraph.graphicsItems.DateAxisItem import ZoomLevel
+    calls = []
+    orig = ZoomLevel.tickValues
+
+    def counting(self, *a, **kw):
+        calls.append(1)
+        return orig(self, *a, **kw)
+    with um.patch.object(ZoomLevel, "tickValues", counting):
+        v._time_ticks.clear()
+        for tr in v._traces:
+            tr.bottom.picture = None
+            tr.bottom.update()
+        v.grab()                                            # paint every row
+    assert v._time_ticks and len(calls) <= 2                # one range (+ the last axis's label pass)
+    ticks = [tr.bottom.tickValues(*tr.bottom.range, tr.bottom.geometry().width()) for tr in v._traces]
+    assert all(t is ticks[0] for t in ticks)                # the very same list for every row
+    assert v._traces[-1].bottom.style["showValues"]          # values still under the last row
+    v.close()
+    v.deleteLater()
+
+
 def test_live_view_moves_by_whole_pixels(qapp, tmp_path, monkeypatch):
     from seiszone.ui import waveform_view as wv
 

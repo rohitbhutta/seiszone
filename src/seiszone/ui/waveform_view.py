@@ -231,6 +231,29 @@ class _LanePanel(QGraphicsWidget):
             y += box_h + 3
 
 
+class _TimeAxis(pg.DateAxisItem):
+    """The time axis of a row. Every row shows the same time range (linked X) at the same width,
+    so the tick times are worked out once per range and shared by all rows (`shared`, a dict of
+    the view): with 12 rows that was 12 times the same calendar arithmetic at each scroll."""
+
+    SHARED_MAX = 64
+
+    def __init__(self, shared, *args, **kw):
+        super().__init__(*args, **kw)
+        self._shared = shared
+
+    def tickValues(self, minVal, maxVal, size):
+        self.setZoomLevelForDensity((maxVal - minVal) / size)   # (tickStrings uses the level)
+        key = (minVal, maxVal, size, id(self.zoomLevel), self.minSpacing)
+        hit = self._shared.get(key)
+        if hit is None:
+            hit = self.zoomLevel.tickValues(minVal, maxVal, minSpc=self.minSpacing)
+            if len(self._shared) >= self.SHARED_MAX:
+                self._shared.clear()
+            self._shared[key] = hit
+        return hit
+
+
 class _PlotBox(pg.ViewBox):
     """ViewBox that offers its mouse wheel and drags to the view first (the wheel zooms the
     amplitude, Shift+drag selects). The view is held weakly: no reference cycle through Qt."""
@@ -351,6 +374,7 @@ class WaveformView(QWidget):
         self._wheel = 0            # wheel delta not yet turned into a step
         self._sids = []
         self._traces = []
+        self._time_ticks = {}      # tick times per (range, width), shared by the rows' time axes
         self._version = 0          # bumped by every setting change: every trace recomputes
         self._rr = 0               # round-robin start when the budget runs out
         self._setting_range = False
@@ -606,7 +630,7 @@ class WaveformView(QWidget):
         left = pg.AxisItem("left")
         left.setWidth(AXIS_WIDTH)
         left.setStyle(tickFont=self._font, tickTextOffset=4)
-        bottom = pg.DateAxisItem("bottom", utcOffset=0)
+        bottom = _TimeAxis(self._time_ticks, "bottom", utcOffset=0)
         bottom.setStyle(tickFont=self._font, tickTextOffset=3)
         for axis in (left, bottom):
             axis.enableAutoSIPrefix(False)   # else every range change re-renders an unused HTML label
