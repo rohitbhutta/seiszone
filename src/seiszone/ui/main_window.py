@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QDockWidget, QGridLayo
                                QMessageBox, QPushButton, QToolBar, QVBoxLayout)
 
 from .. import APP_NAME, VERSION, paths
+from ..core import utc_clock
 from . import theme
 from .channels_panel import ChannelsPanel
 from .export_dialog import ExportDialog
@@ -112,6 +113,30 @@ class AboutDialog(QDialog):
         box.button(QDialogButtonBox.Close).setDefault(True)
         box.rejected.connect(self.reject)
         lay.addWidget(box)
+
+
+
+SYNC_HINT = "To set the PC clock right: Windows Settings > Time & language > Date & time > Sync now."
+
+
+def clock_status(clk):
+    """(text, colour, tooltip) of the status-bar clock field from Engine.status()["clock"]."""
+    c = theme.COLORS
+    state, offset = clk.get("state"), clk.get("offset")
+    if state == "ok" and offset is not None:
+        when = time.strftime("%H:%M:%S", time.gmtime((clk.get("checked") or time.time()) + offset))
+        tip = (f"Checked against {clk.get('server', '')} at {when} UTC "
+               f"(round trip {1000 * (clk.get('delay') or 0):.0f} ms).\n"
+               "Latency uses UTC from the time server, not the PC clock.")
+        if abs(offset) < utc_clock.TOLERANCE:
+            return "Clock: UTC ok", None, tip
+        return utc_clock.describe(offset) + " - corrected", c["warn"], tip + "\n" + SYNC_HINT
+    if state == "failed":
+        return "PC clock not checked", c["muted"], (f"No time server answered ({clk.get('error', '')}).\n"
+                                                    "Latency uses the PC clock.")
+    if state == "off":
+        return "PC clock (time check off)", c["muted"], "Latency uses the PC clock (settings: time check off)."
+    return "Checking PC clock ...", c["muted"], "Asking internet time servers for UTC"
 
 
 class MainWindow(QMainWindow):
@@ -257,7 +282,7 @@ class MainWindow(QMainWindow):
     def _build_status_bar(self):
         sb = self.statusBar()
         self.st = {}
-        for key in ("sources", "gecko", "server", "recording", "disk"):
+        for key in ("sources", "gecko", "server", "recording", "disk", "clock"):
             lab = QLabel()
             sb.addPermanentWidget(lab)
             self.st[key] = lab
@@ -375,6 +400,7 @@ class MainWindow(QMainWindow):
         free, warning = self.engine.recorder.disk_status(folder)
         self._set(self.st["disk"], f"Free {human_bytes(free)}" + (" - low!" if warning else ""),
                   c["danger"] if warning else None, warning or f"Free space on the drive of {folder}")
+        self._set(self.st["clock"], *clock_status(status.get("clock") or {}))
 
     def _update_record_button(self, sessions):
         n = sum(1 for x in sessions if x.get("state") == "recording")

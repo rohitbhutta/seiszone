@@ -73,6 +73,7 @@ seiszone/
       stationxml.py    ResponseStore
       recorder.py      RecordingManager
       export.py        export_window()
+      utc_clock.py     UtcClock / now(): UTC from internet time servers (SNTP), for latency
       dsp.py           filters, demean, envelope (min/max decimation), spectrum
       engine.py        Engine (owns loop thread, links, server, gecko, recorder)
       ports.py         who holds a listener port; stop the old Gecko SeedLink service (Windows)
@@ -124,7 +125,9 @@ Any thread: `stream_ids()`, `stats_snapshot() -> {sid: {sid, net, sta, loc, cha,
 packets, first, last_end, last_arrival, latency, gaps, gap_seconds, last_gap, backfilled,
 last_value, future_rejected}}`, `window(sid, t0, t1) -> [(start, rate, ndarray)]`, `latest_time()`,
 `descriptions` dict "NET.STA" -> text, `forget_stream(sid)`, `set_buffer_seconds(s)`.
-A record starting more than 600 s ahead of the PC clock and more than the buffer length past
+Data times are compared with `utc_clock.now()` (latency, the future check); arrival times
+(`last_arrival`) are PC clock.
+A record starting more than 600 s ahead of UTC now and more than the buffer length past
 the channel's newest data goes to the ring and the listeners only (not to the live buffer and
 the statistics). The ring keeps raw bytes only (decoded samples are dropped after use).
 `seq` (newest packet number) is set by the Engine at start, see 5.14.
@@ -323,7 +326,7 @@ exists, so a source or build-folder run never takes over the installed SeisZone'
 `MainWindow(engine, config)` (1.1.0): toolbar (Add source +, Remove, Reconnect, Open viewer,
 Record, Export, Settings, About), left dock `SourcesPanel`, centre `ChannelsPanel`, bottom dock
 `LogPanel`, Window menu (new viewer, the open viewers, close all), status bar (sources
-receiving, Gecko links, SeedLink server clients, recording state, free disk). Timers: viewers
+receiving, Gecko links, SeedLink server clients, recording state, free disk, PC clock vs UTC). Timers: viewers
 250 ms, tables 1 s. Window geometry and dock state (`saveState(LAYOUT_VERSION = 2)`) saved in
 `config["ui"]`. The waveforms are only in viewer windows: `open_viewer(sids=None, state=None)`
 (default: the ticked channels in table order, else the selected rows) makes a parentless
@@ -332,7 +335,8 @@ receiving, Gecko links, SeedLink server clients, recording state, free disk). Ti
 at `prepare_quit()` (which closes them with `quitting=True`, so they stay saved); a viewer the
 user closes is dropped; `restore_viewers()` once, at the first show (a start in the tray opens
 them when the window is first shown). The Channels table's "View" ticks are kept in
-`config["view"]["channels"]`; Open viewer / double-click / "Open in a new viewer" emit
+`config["view"]["channels"]`; the panel has no Open viewer button (2026-11-21: the toolbar's
+opens the ticked channels); its `open_viewer()` / double-click / "Open in a new viewer" emit
 `viewRequested`, "Add to viewer" `addRequested(sids, n)`; rows drag as `CHANNEL_MIME`. The
 Sources panel's "Open in a viewer" opens one. `open_record_dialog(sids, only=False)`: the
 Recordings window is parentless with minimize / maximize buttons (shown non-modal) and a
@@ -402,6 +406,16 @@ service, not SeisZone. ..." [Stop old service] [Not now]). After a successful la
 show "Waiting for the port…" until the engine listens on them, also while the port is still busy
 a moment after the old service let go (at most `FREE_WAIT` = 60 s, then the
 error and the button come back).
+
+### 5.17 UTC clock — `core/utc_clock.py` (after 1.4.0)
+`request(t1)`, `parse_reply(data, sent, t4) -> (offset, delay)` (raises ValueError: wrong mode,
+kiss-o'-death, unsynchronised, not our request), `query(host, port, samples, timeout)` (the
+shortest round trip of `samples`, <= MAX_DELAY 2 s). `UtcClock(servers, port, every=900,
+retry=120, timeout=2)`: `now()`, `status() -> {state: unchecked|ok|failed|off, offset, server,
+delay, checked, error}`, `check()`, `start(servers)` (background thread, idempotent; a PC clock
+step > 2 s re-checks at once), `turn_off()`, `stop()`. Module: `clock`, `now()`, `describe(offset)`.
+Engine.start() starts it unless config "time".check is false or SEISZONE_TIME_CHECK=off;
+Engine.status()["clock"] = clock.status(); the main window status bar shows it (`clock_status`).
 
 ### 5.16 Ports — `core/ports.py`
 Windows only (ctypes, no extra package); elsewhere every call is a no-op (None / [] / False).

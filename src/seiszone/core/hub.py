@@ -6,7 +6,7 @@ hands its miniSEED records to DataHub.add_record(); from there they go to
   * a per-channel buffer   -> the live waveform views (the last `buffer_minutes` per channel)
   * per-channel statistics -> the channel table (rate, latest sample, latency, gaps, packets)
 
-A record that starts more than FUTURE_LIMIT s ahead of the PC clock and far past the channel's
+A record that starts more than FUTURE_LIMIT s ahead of UTC now (utc_clock) and far past the channel's
 newest data (GPS glitch, firmware time jump) still goes to the packet ring and the listeners
 (so it is recorded), but not into the live buffer and the statistics: one bad time stamp
 cannot wipe a channel's live data or pin its latest time in the future.
@@ -29,12 +29,12 @@ import time
 
 import numpy as np
 
-from . import history
+from . import history, utc_clock
 
 log = logging.getLogger("seiszone")
 
 GAP_TOLERANCE = 0.5     # in samples: a jump bigger than this between records is a gap / overlap
-FUTURE_LIMIT = 600      # s ahead of the PC clock before a record's time may be an outlier
+FUTURE_LIMIT = 600      # s ahead of UTC now before a record's time may be an outlier
 FUTURE_LOG_EVERY = 60   # s between warnings about such records
 
 
@@ -153,7 +153,7 @@ class StreamBuffer:
         if not self.segments:
             return
         # a segment far in the future (bad time stamp) must never evict the real data
-        cutoff = min(self.segments[-1].end, time.time() + FUTURE_LIMIT) - self.seconds
+        cutoff = min(self.segments[-1].end, utc_clock.now() + FUTURE_LIMIT) - self.seconds
         while self.segments and self.segments[0].end <= cutoff:
             self.segments.pop(0)
         if self.segments:
@@ -217,15 +217,16 @@ class DataHub:
         self._recent[key] = True
         if len(self._recent) > self._dedupe:
             self._recent.popitem(last=False)
-        now = time.time()
+        now = time.time()        # PC clock: arrival times (compared with the PC clock)
+        utc = utc_clock.now()    # true UTC: compared with the data's own time stamps
         with self.lock:
             self.seq = (self.seq + 1) & 0xFFFFFF
             self.packets.append((self.seq, rec))
             sid = rec.sid
             st = self.stats.get(sid)
-            if (st is not None and rec.start > now + FUTURE_LIMIT
+            if (st is not None and rec.start > utc + FUTURE_LIMIT
                     and rec.start > st["last_end"] + self.buffer_seconds):
-                self._future(st, rec, now)   # recorded and served, but kept out of the live data
+                self._future(st, rec, utc)   # recorded and served, but kept out of the live data
             else:
                 if st is None or abs(st["rate"] - rec.rate) > 1e-6:
                     st = self.stats[sid] = self._new_stats(rec, source_id)
@@ -247,7 +248,7 @@ class DataHub:
                 st["first"] = min(st["first"], rec.start)
                 st["last_end"] = max(st["last_end"], rec.end)
                 st["last_arrival"] = now
-                st["latency"] = now - st["last_end"]
+                st["latency"] = utc - st["last_end"]
                 st["last_value"] = float(samples[-1])
                 self.buffers[sid].add(rec.start, samples)
                 self.summaries[sid].add(rec.start, rec.rate, samples)
@@ -266,7 +267,7 @@ class DataHub:
         self.future_rejected += 1
         if now - self._future_logged >= FUTURE_LOG_EVERY:
             self._future_logged = now
-            log.warning("%s: record time %s is %.0f s ahead of the PC clock - recorded, but not "
+            log.warning("%s: record time %s is %.0f s ahead of UTC now - recorded, but not "
                         "shown live (bad time stamp?)", rec.sid,
                         time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(rec.start)), rec.start - now)
 

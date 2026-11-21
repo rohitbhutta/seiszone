@@ -1,13 +1,14 @@
 """ChannelsPanel: one row per channel the hub holds - rate, newest sample, latency, packets,
 gaps, source - with a "View" tick: the ticked channels open together in a new viewer window
-(Open viewer). A double-click opens a viewer with that channel, the right-click menu opens the
+(Open viewer in the toolbar, Ctrl+Shift+N). A double-click opens a viewer with that channel, the right-click menu opens the
 selected channels or adds them to an open viewer, and rows can be dragged into a viewer.
 
 The table is a model (ChannelModel) behind a sort/filter proxy, so sorting and the filter box
 cost nothing extra. refresh() (every second) only updates the values in place; the model is
 reset only when channels appear or disappear, and the selection is kept across that.
 
-Status colour of a channel, from its latency (now - end of the newest sample):
+Status colour of a channel, from its latency (UTC now - end of the newest sample; UTC now is the
+PC clock corrected by the internet time check, core/utc_clock.py):
   green  < 2x the expected packet interval, or < 30 s
   amber  < 5 minutes
   red    older
@@ -21,6 +22,7 @@ from PySide6.QtGui import QColor, QGuiApplication, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMenu, QPushButton,
                                QTableView, QVBoxLayout, QWidget)
 
+from ..core import utc_clock
 from . import theme
 
 log = logging.getLogger("seiszone")
@@ -223,11 +225,6 @@ class ChannelsPanel(QWidget):
         hide_all = QPushButton("Untick all")
         hide_all.setToolTip("Untick every channel listed (only those matching the filter)")
         hide_all.clicked.connect(self.hide_listed)
-        self.view_button = QPushButton(theme.icon("channel"), "Open viewer")
-        self.view_button.setToolTip("Open a viewer window with the ticked channels (or the selected rows). "
-                                    "Double-click a channel to open it alone; drag channels into an open viewer "
-                                    "to add them")
-        self.view_button.clicked.connect(self.open_viewer)
 
         self.table = QTableView()
         self.table.setModel(self.proxy)
@@ -255,8 +252,7 @@ class ChannelsPanel(QWidget):
         top.addWidget(self.filter, 1)
         top.addWidget(self.count)
         top.addWidget(show_all)
-        top.addWidget(hide_all)
-        top.addWidget(self.view_button)
+        top.addWidget(hide_all)   # no Open viewer button here: the toolbar / Window menu has it
         lay = QVBoxLayout(self)
         lay.setContentsMargins(4, 4, 4, 4)
         lay.setSpacing(4)
@@ -269,7 +265,7 @@ class ChannelsPanel(QWidget):
     # ------------------------------------------------------------------------------------
     def refresh(self):
         """Read the hub statistics and update the table (MainWindow calls this every second)."""
-        now = time.time()
+        now = utc_clock.now()
         stats = self.engine.hub.stats_snapshot()
         names = self._source_names()
         rows = [self._row(stats[sid], names, now) for sid in sorted(stats)]

@@ -81,8 +81,8 @@ What you type decides how SeisZone reads the instrument:
   the missed time in the background over a second connection; the Sources list then says
   "live - fetching missed data, 5 h 10 min to go". The first time SeisZone reads a station it
   fetches the instrument's **last day** the same way. **Latency** is always that of the live
-  data (a few seconds; if it stays near 20 s, the PC clock is wrong: Windows Settings > Time >
-  Sync now).
+  data (a few seconds; SeisZone measures it against UTC from internet time servers, so a
+  wrong PC clock does not change it).
 * **GCF (1567)**: use it if SeedLink is switched off on the instrument.
 * You can also add any other SeedLink server on the Internet or your network, for example a
   public data centre server on port 18000.
@@ -127,11 +127,13 @@ connects to it instead; see **Gecko recorder does not appear / port in use** in 
   green = receiving data, amber = connecting or waiting for data, red = error,
   grey = stopped or switched off. Also listed: the **Gecko receiver** (Geckos connected to this
   PC) and the **SeedLink server** (programs reading data from SeisZone).
-* **Channels** (centre): one row per channel (section 6). Tick channels and click **Open viewer**
-  to see them live in a viewer window of their own (section 7).
+* **Channels** (centre): one row per channel (section 6). Tick channels and click **Open viewer** in
+  the toolbar to see them live in a viewer window of their own (section 7).
 * **Log** (bottom): what SeisZone is doing, also errors and warnings.
-* **Status bar**: sources receiving, Gecko links, SeedLink server clients, recording state and
-  free disk space.
+* **Status bar**: sources receiving, Gecko links, SeedLink server clients, recording state,
+  free disk space and the PC clock: "PC clock 19.0 s fast - corrected" means the PC clock is
+  wrong, but SeisZone uses the correct UTC anyway (to set the PC clock right: Windows Settings >
+  Time & language > Date & time > Sync now).
 * **Window** menu: open a new viewer, bring an open viewer to the front, close all viewers.
 
 The panels can be moved, closed and opened again from the **View** menu. The window size and
@@ -142,7 +144,9 @@ layout are remembered.
 Columns: **View** (tick the channels you want to see together), Channel (NET.STA.LOC.CHA),
 Description, Rate (samples per second), Latest sample (UTC), Latency, Packets, Gaps, Source.
 
-**Latency** is how old the newest sample is. The colour of the row tells you at a glance:
+**Latency** is how old the newest sample is: UTC now minus the time stamp of the newest sample.
+UTC now comes from internet time servers (checked every 15 minutes), so it is right even when the
+PC clock is not; without internet SeisZone uses the PC clock. The colour of the row tells you at a glance:
 
 | Colour | Meaning |
 |--------|---------|
@@ -156,7 +160,7 @@ its latency is naturally larger; SeisZone allows for that.
 Use the filter box to find channels, **Tick all** / **Untick all** for the listed channels, and
 click a column title to sort. To see channels:
 
-* tick them and click **Open viewer** (or Ctrl+Shift+N): a new viewer window with those
+* tick them and click **Open viewer** in the toolbar (or Ctrl+Shift+N): a new viewer window with those
   channels;
 * **double-click** a channel: a viewer with that channel alone;
 * right-click selected channels: **Open in a new viewer**, or **Add to viewer** (an open one);

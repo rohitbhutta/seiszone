@@ -31,7 +31,7 @@ import time
 
 from .. import APP_NAME, VERSION, logsetup, paths, single_instance
 from .. import config as cfg_mod
-from . import mseed
+from . import mseed, utc_clock
 
 log = logging.getLogger("seiszone")
 
@@ -238,7 +238,7 @@ def run_engine(config, seconds, interval, state):
 
 def status_text(engine, now=None):
     """Sources with state and packets, listeners, and every channel with its latest sample."""
-    now = time.time() if now is None else now
+    now = utc_clock.now() if now is None else now
     st = engine.status()
     lines = [f"--- {mseed.fmt_time(now)} ---"]
     names = {s["id"]: s for s in engine.config.sources()}

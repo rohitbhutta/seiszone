@@ -20,6 +20,7 @@ user interface warns). state.json is handled the same way (State.load_error / re
   "seedlink_server": {"enabled": true, "bind": "0.0.0.0", "port": 18000, "organization": "SeisZone"},
   "recording": {"folder": "<Documents>\\SeisZone\\Recordings", "file_minutes": 60, "layout": "channel"},
   "buffer_minutes": 60,                          # live data kept in memory per channel
+  "time": {"check": true, "servers": []},        # check the PC clock (SNTP); [] = the built-in servers
   "view": {"window_seconds": 300, "filter": "none", "units": "counts", "scale": "auto",
            "channels": [], "demean": true},       # defaults of new viewers; channels: the ticked ones
   "viewers": [{"sids": [...], "title": "", "window": 300, "filter_on": false, "filter": "default",

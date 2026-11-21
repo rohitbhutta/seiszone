@@ -12,6 +12,8 @@ DATA = os.path.join(ROOT, "tests", "data")
 # never touch the real %APPDATA% / Documents while testing
 os.environ.setdefault("SEISZONE_HOME", tempfile.mkdtemp(prefix="seiszone_test_"))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# never ask internet time servers while testing (core/utc_clock.py; its tests use a local fake)
+os.environ["SEISZONE_TIME_CHECK"] = "off"
 
 
 _STATUS = []

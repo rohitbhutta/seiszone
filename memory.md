@@ -135,6 +135,34 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   viewer was declined: it breaks the standing rule above and probably its licence. A
   side-by-side comparison of the same data in both programs (behaviour only) was offered instead.
 
+### True UTC for latency, Channels panel without Open viewer (2026-11-21, not yet built)
+
+Why: the user asked what the ~21 s Latency was and to take the clock "from UTC time, which is
+already working on the record data option". Recording is right because file names and periods
+come from the data's own GNSS time stamps (`recorder.period_start(rec.start)`); Latency is
+"now - newest sample", and "now" was the PC clock, measured 19.0 s fast on 2026-11-21 against
+time.google.com, time.windows.com and pool.ntp.org (all three agreed). Real delay: ~2.5 s.
+
+* `core/utc_clock.py`: an SNTP client (RFC 4330, UDP 123, 48-byte request, no user data). The
+  process-wide `clock` asks the servers when the engine starts and every 15 min (2 min after a
+  failure), keeps the shortest of 4 round trips (answers > 2 s are not trusted), and checks
+  again within a second when the PC clock is stepped (Windows "Sync now"). `utc_clock.now()` is
+  the PC clock + that offset; with no answer it is the PC clock, as before.
+* Uses UTC now: Latency column, `hub` stats latency and the 600 s future-record check,
+  `cli.status_text`. Arrival times (`last_arrival`, Sources "x s ago", recorder silence) stay
+  on the PC clock because they are compared with the PC clock. The live viewer's right edge
+  already followed the data (1.2.0), unchanged.
+* Status bar field: "PC clock 19.0 s fast - corrected" (amber, tooltip: server, round trip, how
+  to sync), "Clock: UTC ok" within 1 s, "PC clock not checked" with no internet.
+* Settings: `"time": {"check": true, "servers": []}` in config.json (no dialog field yet).
+  Tests set `SEISZONE_TIME_CHECK=off` (conftest) and use a fake SNTP server on 127.0.0.1.
+* The user asked to remove the viewer option from the Channels panel and chose "only the Open
+  viewer button": the panel's button is gone; ticks, Tick all / Untick all and the count stay,
+  and the toolbar / Window menu Open viewer (Ctrl+Shift+N) still opens the ticked channels.
+* Git: branch `feature/utc-clock` on top of `perf/backfill-axes-race` (321 passed, 1 skipped).
+  On 2026-11-22 the user said push everything: `perf/live-viewer`, `perf/backfill-axes-race`
+  and `feature/utc-clock` are on GitHub (no PR opened yet, main unchanged).
+
 ### Version 1.4.0 (2026-11-16)
 
 Why: the user asked for the four selection-menu entries of their earlier viewer that 1.3.0 left
@@ -426,6 +454,6 @@ User files: `%APPDATA%\SeisZone` (config.json, state.json, stationxml\), `%LOCAL
 3. The user chooses to stop the old GeckoSeedLink service: installer task "stopoldservice" or
    the Sources panel's "Free the port" / "Stop old service". Then check that "Gecko receiver"
    shows the SMR03 link (W610 redial time unknown, usually within a minute) - the SMR03 field test.
-4. User syncs the PC clock (Windows Settings > Time > Sync now; it was 18.8 s fast), so the
-   Latency column shows the real ~3 s.
+4. User syncs the PC clock (Windows Settings > Time > Sync now; 19.0 s fast on 2026-11-21).
+   Since the UTC clock work the Latency column is right anyway; the status bar shows the error.
 5. User acceptance; then decide whether the old Gecko add-on folder is retired.

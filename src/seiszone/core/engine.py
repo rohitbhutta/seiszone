@@ -29,7 +29,7 @@ import time
 
 from .. import config as cfg_mod
 from .. import paths
-from . import ports
+from . import ports, utc_clock
 from .history import RecordedData
 from .gcf_link import GcfLink
 from .gecko import GeckoReceiver
@@ -162,10 +162,20 @@ class Engine:
             self._quit = asyncio.Event()
             self._ready.clear()
             self.started = time.time()
+            self._start_clock()
             self._thread = threading.Thread(target=self._run, name="seiszone-engine", daemon=True)
             self._thread.start()
         if not self._ready.wait(START_TIMEOUT):
             log.error("engine: listeners not ready after %d s", START_TIMEOUT)
+
+    def _start_clock(self):
+        """Check the PC clock against internet time servers (utc_clock), unless the settings
+        say "time": {"check": false}. It is process-wide and keeps running after stop()."""
+        t = self.config.get("time") or {}
+        if t.get("check", True) is False:
+            utc_clock.clock.turn_off()
+        else:
+            utc_clock.clock.start(t.get("servers") or None)
 
     def stop(self, timeout=5):
         """Stop links (GCFSTOP / BYE are sent), close listeners, close the recorder, save the
@@ -398,6 +408,7 @@ class Engine:
                        "clients": srv.clients if srv else 0,
                        "peers": [dict(p) for p in list(srv.peers)] if srv else []},
             "started": self.started if self.running else None,
+            "clock": utc_clock.clock.status(),
         }
 
     # ================================================================== links (engine thread)

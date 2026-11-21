@@ -557,7 +557,8 @@ def test_viewers_open_from_the_ticked_channels_and_come_back(qapp, tmp_path):
             assert proxy.setData(proxy.index(rows.index(sid), C_SHOW), Qt.Checked.value, Qt.CheckStateRole)
         assert Config(config.path).get("view", "channels") == ["KA.KAND.0J.HNZ", "KA.KAND.0J.HNE"]
         assert "2 ticked" in w.channels.count.text()
-        w.channels.view_button.click()                          # Open viewer: the ticked channels
+        assert not hasattr(w.channels, "view_button")           # the panel has no Open viewer button
+        w.act_view.trigger()                                    # toolbar Open viewer: the ticked channels
         assert len(w.viewers) == 1
         v1 = w.viewers[0]
         assert isinstance(v1, ViewerWindow) and v1.parent() is None and v1.isVisible()
