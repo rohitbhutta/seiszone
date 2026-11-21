@@ -90,8 +90,20 @@ def bench_ingest():
     for b in raw:
         hub.add_record(mseed.parse_record(b)[0], "src")
     took = time.perf_counter() - t
-    print(f"  backfill: 6 h of one 200 sps channel ({len(raw)} records) in {took:.2f} s "
+    print(f"  backfill, record by record: 6 h of one 200 sps channel ({len(raw)} records) in {took:.2f} s "
           f"-> a day of 9 channels about {took * 4 * 9:.0f} s of engine-thread time")
+    # as the SeedLink fetch does it since the batch decode: one network read (64 KB, ~126
+    # records) parsed without decoding, decoded together, then added
+    hub = DataHub(buffer_seconds=3600)
+    t = time.perf_counter()
+    for k in range(0, len(raw), 126):
+        batch = [mseed.parse_record(b, 0, check=False)[0] for b in raw[k:k + 126]]
+        for rec, s in zip(batch, mseed.decode_many(batch)):
+            rec._samples = s
+            hub.add_record(rec, "src")
+    took_b = time.perf_counter() - t
+    print(f"  backfill, batched per read:  {took_b:.2f} s ({took / took_b:.1f}x faster) "
+          f"-> a day of 9 channels about {took_b * 4 * 9:.0f} s")
     return {"parse_us": t_parse / n * 1e6, "add_us": t_add / n * 1e6}
 
 

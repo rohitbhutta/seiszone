@@ -54,6 +54,12 @@ def bin_reduce(start, rate, y, t_lo=-math.inf, t_hi=math.inf):
     n = len(y)
     if not n or rate <= 0:
         return None
+    if t_lo == -math.inf and t_hi == math.inf:
+        quick = _bin_firsts(start, rate, n)
+        if quick is not None and np.isfinite(y).all():
+            bins, first = quick
+            return (bins, np.minimum.reduceat(y, first), np.maximum.reduceat(y, first), np.add.reduceat(y, first),
+                    np.diff(np.append(first, n)))
     t = start + np.arange(n) / rate
     keep = (t >= t_lo) & (t < t_hi) & np.isfinite(y)
     if not keep.all():
@@ -64,6 +70,36 @@ def bin_reduce(start, rate, y, t_lo=-math.inf, t_hi=math.inf):
     first = np.concatenate(([0], np.flatnonzero(np.diff(b)) + 1))
     return (b[first], np.minimum.reduceat(y, first), np.maximum.reduceat(y, first), np.add.reduceat(y, first),
             np.diff(np.append(first, len(y))))
+
+
+QUICK_BINS = 8   # records spanning at most this many bins take the quick path of bin_reduce
+
+
+def _bin_of(start, rate, k):
+    """The bin of sample k - the same float sum as bin_reduce's `start + np.arange(n) / rate`."""
+    return math.floor((start + k / rate) / BIN + 1e-9)
+
+
+def _bin_firsts(start, rate, n):
+    """(bins, first sample of each) for a short record without a time array: the samples where
+    the bin changes are found from the bin edges and checked with the very same arithmetic as
+    the full path (so the result is identical). A record is a few seconds (200 sps: 1-4 bins),
+    and making and flooring a time array for every sample was most of DataHub.add_record. None
+    when the record spans more than QUICK_BINS bins or a bin would be empty (low rates)."""
+    b0, b1 = _bin_of(start, rate, 0), _bin_of(start, rate, n - 1)
+    if b1 - b0 > QUICK_BINS:
+        return None
+    first = [0]
+    for b in range(b0 + 1, b1 + 1):
+        k = min(n - 1, max(first[-1] + 1, math.ceil((b * BIN - start) * rate)))
+        while k > first[-1] + 1 and _bin_of(start, rate, k - 1) >= b:
+            k -= 1
+        while k < n and _bin_of(start, rate, k) < b:
+            k += 1
+        if k >= n or _bin_of(start, rate, k) != b:
+            return None                   # no sample in bin b: the full path handles it
+        first.append(k)
+    return np.arange(b0, b1 + 1, dtype=np.int64), np.asarray(first, dtype=np.intp)
 
 
 class Summary:
@@ -102,6 +138,22 @@ class Summary:
         if not len(bins):
             return
         self.newest = newest
+        k0 = int(bins[0]) // self.BLOCK
+        if int(bins[-1]) // self.BLOCK == k0 and (len(bins) == 1 or bool(np.all(np.diff(bins) > 0))):
+            # one block, each bin once (a live record): no grouping needed
+            b = self._block(k0)
+            i = bins - k0 * self.BLOCK
+            b[0][i] = np.fmin(b[0][i], lo)
+            b[1][i] = np.fmax(b[1][i], hi)
+            b[2][i] += sm
+            b[3][i] += ct.astype(np.int32)
+        else:
+            self._merge_blocks(bins, lo, hi, sm, ct)
+        oldest = (newest - self.slots) // self.BLOCK
+        for k in [k for k in self.blocks if k < oldest]:
+            del self.blocks[k]
+
+    def _merge_blocks(self, bins, lo, hi, sm, ct):
         blk = bins // self.BLOCK
         for k in np.unique(blk):
             m = blk == k
@@ -111,9 +163,6 @@ class Summary:
             b[1][i] = np.fmax(b[1][i], hi[m])
             b[2][i] += sm[m]
             b[3][i] += ct[m].astype(np.int32)
-        oldest = (newest - self.slots) // self.BLOCK
-        for k in [k for k in self.blocks if k < oldest]:
-            del self.blocks[k]
 
     def query(self, t0, t1):
         """(first bin, lo, hi, sum, count) for the bins of [t0, t1); empty bins: NaN / 0."""

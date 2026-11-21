@@ -48,6 +48,63 @@ def wait_for(cond, timeout=20.0):
 # ------------------------------------------------------------------------------------------
 # decoding
 # ------------------------------------------------------------------------------------------
+def _bin_reduce_full(start, rate, y):
+    """bin_reduce as it was before its quick path (the reference)."""
+    y = np.asarray(y, dtype=np.float64)
+    t = start + np.arange(len(y)) / rate
+    keep = np.isfinite(y)
+    t, y = t[keep], y[keep]
+    if not len(y):
+        return None
+    b = np.floor(t / history.BIN + 1e-9).astype(np.int64)
+    first = np.concatenate(([0], np.flatnonzero(np.diff(b)) + 1))
+    return (b[first], np.minimum.reduceat(y, first), np.maximum.reduceat(y, first), np.add.reduceat(y, first),
+            np.diff(np.append(first, len(y))))
+
+
+def test_quick_bin_reduce_is_identical():
+    """Records as instruments send them (any rate, start anywhere in a second, also exactly on a
+    second and a hair before one): the quick path gives exactly the bins of the full one."""
+    rng = np.random.default_rng(4)
+    starts = [1.8e9, 1.8e9 + 0.999999999, 1.8e9 + 1e-10, 1.8e9 - 0.0025, 1763700000.005]
+    starts += list(1.8e9 + rng.uniform(0, 1, 300))
+    quick = 0
+    for rate in (200.0, 100.0, 40.5, 50.0, 20.0, 5.0, 1.0, 0.1):
+        for start in starts:
+            n = int(rng.integers(1, 900))
+            y = rng.normal(0, 1000, n).round()
+            got, ref = history.bin_reduce(start, rate, y), _bin_reduce_full(start, rate, y)
+            assert len(got) == len(ref)
+            for a, b in zip(got, ref):
+                assert np.array_equal(a, b), (rate, start, n)
+            quick += history._bin_firsts(start, rate, n) is not None
+    assert quick > 500
+    y = np.array([1.0, np.nan, 3.0])                      # NaN: the full path, as before
+    got, ref = history.bin_reduce(1.8e9, 2.0, y), _bin_reduce_full(1.8e9, 2.0, y)
+    assert all(np.array_equal(a, b) for a, b in zip(got, ref))
+
+
+def test_quick_summary_merge_is_identical():
+    """Records fed through the quick paths (bin_reduce, one-block merge) and through the full
+    ones (the code before them): exactly the same summary, also across an hour block."""
+    rng = np.random.default_rng(8)
+    y = rng.normal(0, 500, 200 * 7300).round()
+    start = 1.8e9 + 3590.37                             # crosses an hour block
+    s1, s2 = history.Summary(), history.Summary()
+    k = 0
+    while k < len(y):
+        m = int(rng.integers(200, 800))
+        t = start + k / 200.0
+        s1.add(t, 200.0, y[k:k + m])
+        r = _bin_reduce_full(t, 200.0, y[k:k + m])
+        s2.newest = max(s2.newest, int(r[0][-1]))
+        s2._merge_blocks(*r)
+        k += m
+    a, b = s1.arrays(-1), s2.arrays(-1)
+    for key in ("idx", "lo", "hi", "sum", "cnt"):
+        assert np.array_equal(a[key], b[key]), key
+
+
 def test_decode_many_matches_record_by_record():
     rng = np.random.default_rng(3)
     y = np.cumsum(rng.integers(-40000, 40000, 5000)).astype(np.int64)
