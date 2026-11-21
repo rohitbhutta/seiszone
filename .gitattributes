@@ -1,0 +1,12 @@
+# Keep captured instrument data and images byte-exact (tests compare them sample by sample).
+# Text files are left as they are (no line-ending conversion), so nothing is rewritten.
+*.bin    binary
+*.mseed  binary
+*.msd    binary
+*.gcf    binary
+*.npz    binary
+*.ico    binary
+*.png    binary
+*.jpg    binary
+*.pdf    binary
+*.exe    binary

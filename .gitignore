@@ -1,6 +1,24 @@
+# Build output (PyInstaller work folder, dist/SeisZone, SeisZoneSetup.exe)
 build/
 dist/
+*.spec
+
+# Python
 __pycache__/
 *.pyc
 .pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Logs and files SeisZone writes beside a damaged config/state (<name>.<stamp>.bad)
 *.log
+*.bad
+
+# Editors, Claude Code local settings, Windows
+.vscode/
+.idea/
+.claude/settings.local.json
+Thumbs.db
+desktop.ini
