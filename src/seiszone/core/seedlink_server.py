@@ -54,6 +54,7 @@ DRAIN_TIMEOUT = 120          # seconds a client may refuse data before it is dro
 WAIT_TIMEOUT = 30            # re-check interval while waiting for new packets
 IDLE_TIMEOUT = 300           # seconds a negotiating client may stay silent
 CACHE_SIZE = 4000            # re-encoded (non-512-byte) records kept for other clients
+CONTROL_LINES = 200          # lines kept for the Control box of the Data server window
 CODE_RE = re.compile(r"^[A-Z0-9?*]{1,5}$")
 SELECTOR_RE = re.compile(r"^!?[A-Z0-9?*\-]{0,5}(\.[A-Z?*])?$")
 
@@ -236,6 +237,7 @@ class SeedLinkServer:
         self.organization = organization
         self.clients = 0
         self.peers = []       # one dict per connection: peer, since, stations, packets
+        self.control = []     # [text]: connects, requests, disconnects (the Data server window)
         self._cache = collections.OrderedDict()   # seq -> (Record, [packets]) for re-encoded records
         self._encode_failed = False
 
@@ -287,6 +289,10 @@ class SeedLinkServer:
         lines = "".join(f"{n:<2} {s:<5} {self.hub.descriptions.get(f'{n}.{s}') or s}\r\n" for n, s in seen)
         return lines + "END"
 
+    def _note(self, text):
+        self.control.append(f"{time.strftime('%d-%m-%Y %H:%M:%S')}  {text}")
+        del self.control[:-CONTROL_LINES]
+
     # ------------------------------------------------------------------ connection
     async def handle(self, reader, writer):
         """asyncio.start_server callback: one SeedLink client, from HELLO to disconnect."""
@@ -294,6 +300,7 @@ class SeedLinkServer:
         self.clients += 1
         self.peers.append(info)
         log.info("SeedLink server: client %s connected", info["peer"])
+        self._note(f"Client {info['peer']} connected")
         c = _Conn(reader, writer, info)
         _keepalive(writer)
         reason = "closed"
@@ -323,6 +330,7 @@ class SeedLinkServer:
                 self.peers.remove(info)
             log.info("SeedLink server: client %s disconnected (%s, %d packets sent)",
                      info["peer"], reason, info["packets"])
+            self._note(f"Client {info['peer']} disconnected ({reason}, {info['packets']} packets sent)")
             try:
                 writer.close()
             except Exception:
@@ -490,6 +498,7 @@ class SeedLinkServer:
         c.info["stations"] = "*" if reqs == [c.uni] else ", ".join(r.label for r in reqs)
         log.info("SeedLink server: client %s %s %s from packet %06X", c.info["peer"],
                  "fetching" if fetch else "streaming", c.info["stations"], base)
+        self._note(f"Client {c.info['peer']} {'fetching' if fetch else 'streaming'} {c.info['stations']}")
         closed = asyncio.Event()
         wake = hub.new_waiter()
         watcher = asyncio.get_running_loop().create_task(self._watch(c, closed, wake))

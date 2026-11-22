@@ -691,5 +691,31 @@ def test_data_server_window(qapp, window, tmp_path):
         assert ":1567" in dlg.how.text() and "Add UDP Server" in dlg.how.text()
         window._update_status(window.engine.status(), [])
         assert "Data server :1567 - 1 client" in window.st["gcf_server"].text()
+        # the SeedLink tab: on by default (port 18000), its clients and what they asked for
+        assert dlg.tabs.count() == 2 and "SeedLink" in dlg.tabs.tabText(1)
+        assert dlg.sl_enabled.isChecked() and dlg.sl_port.text() == "18000"
+        assert "Server active on TCP port 18000 - 1 client" in dlg.sl_state.text()
+        assert dlg.sl_clients.item(0, 0).text() == "127.0.0.1:50555" and dlg.sl_clients.item(0, 3).text() == "99"
+        assert "streaming *" in dlg.sl_control.toPlainText()
+        assert ":18000" in dlg.sl_how.text()
+        # a wrong SeedLink port shows its tab and says why; nothing is saved
+        dlg.tabs.setCurrentIndex(0)
+        dlg.sl_port.setText("58772")                      # the Gecko receiver's port
+        assert not dlg.apply() and dlg.tabs.currentIndex() == 1 and "Gecko" in dlg.error.text()
+        dlg.sl_port.setText("abc")
+        assert not dlg.apply() and "not a number" in dlg.error.text()
+        assert window.config.get("seedlink_server")["port"] == 18000
+        # switched off and on another port: saved (Listen on / Organization kept) and applied
+        org = window.config.get("seedlink_server").get("organization")
+        dlg.sl_port.setText("18001")
+        dlg.sl_enabled.setChecked(False)
+        assert dlg.apply()
+        s = window.config.get("seedlink_server")
+        assert s["enabled"] is False and s["port"] == 18001 and s["organization"] == org and s["bind"]
+        dlg.refresh()
+        assert "SeedLink server is off" in dlg.sl_state.text() and dlg.sl_clients.rowCount() == 0
+        dlg.sl_enabled.setChecked(True)
+        dlg.sl_port.setText("18000")
+        assert dlg.apply() and window.config.get("seedlink_server")["enabled"] is True
     finally:
         dlg.close()

@@ -13,7 +13,7 @@
 ; by setup or uninstall.
 
 #ifndef AppVer
-  #define AppVer "1.8.0"
+  #define AppVer "1.8.1"
 #endif
 #define AppName "SeisZone"
 #define Exe "SeisZone.exe"

@@ -169,6 +169,9 @@ def test_end_to_end_byte_identical_and_live(tmp_path):
                 assert raws(hub2) == raws(hub1)
                 assert state.get_seq("src1", "WB.KUM") == hub1.seq
             await wait_until(lambda: srv.clients == 0)
+            # the Data server window's Control box: connect, request, disconnect
+            text = "\n".join(srv.control)
+            assert "connected" in text and "streaming WB.KUM" in text and "disconnected" in text
         finally:
             await stop_server(aserver)
 

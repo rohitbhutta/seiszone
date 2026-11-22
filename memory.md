@@ -48,6 +48,10 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
 
 ## Status (2026-11-22, version 1.7.0 installed 19:48)
 
+* **2026-11-23 night - 1.8.1 in a pull request (branch feature/backfill-seedlink-server):** Data
+  server window with a SeedLink tab; live viewers already backfill (test added). GCF gap recovery
+  over TCP is waiting for the protocol document SWA-RFC-SCRM.pdf (not on this PC). Do not guess
+  the command format. See docs/history.md.
 * **2026-11-23 00:26 - 1.8.0 installed and running** (38/38 sources, missed data fetched; the
   first installer run closed SeisZone and ended without installing - check the version after an
   install). Data server off; not yet tried from a second computer.

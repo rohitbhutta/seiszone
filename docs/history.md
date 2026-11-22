@@ -4,6 +4,31 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 night - 1.8.1 on branch feature/backfill-seedlink-server (pull request)
+
+* Asked (2 screenshots): "live data viewing backfill" like the recording backfill, with the
+  earlier viewer's manual and its protocol document as reference; and the SeedLink server
+  (port 18000) in the Data server window next to the GCF server.
+* Reference read: the user's manual (Downloads, MAN-SWA-0001 (1).pdf; sections 4.3.2 and 7.4) and
+  BdsImportStreamGcf.pdf (a third party's notes). GCF gap recovery: each block carries the
+  server's block number; a client that sees a jump opens TCP on the same port and asks for the
+  missing blocks one by one, newest first. The command format is only in SWA-RFC-SCRM.pdf, which is
+  NOT on this PC (searched Downloads, Desktop, Documents, the user folder, D Drive and the earlier
+  viewer's own help files; not found on the web either). Not guessed: waiting for the document.
+* Found: SeisZone's live viewers already backfill. The hub inserts late records into the live
+  buffer (StreamBuffer._insert) and an open viewer re-reads the hub every PAUSED_RELOAD (2 s).
+  Shown with a 20 s gap that closed within one refresh. New test
+  test_open_viewer_fills_a_gap_when_the_missed_data_arrive. User guide: "Live backfill".
+  Limits: data older than the live buffer come from the recordings; GCF UDP sources (2) cannot
+  backfill until the gap recovery above is built.
+* Data server window (ui/server_window.py) now has two tabs: "GCF over UDP (earlier viewer)" and
+  "SeedLink over TCP" (enable, TCP port, state, this PC's addresses, Clients: Client / Stations /
+  Connected since / Packets sent, Control). Apply saves both sections. The SeedLink port is
+  checked like Settings (number, not a Gecko port). Bind and organization are kept, still edited in
+  Settings. SeedLinkServer.control (connect / streaming / disconnect lines) goes into
+  status()["server"]["control"]. Picture: docs/reports/2026-11-23-data-server-seedlink-tab.png.
+* Version 1.8.1.
+
 ## 2026-11-23 00:26 - 1.8.0 installed and running
 
 * First run of the installer (00:15): SeisZone was closed ("SeisZone stopping" 00:15:38), then
