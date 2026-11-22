@@ -1,0 +1,172 @@
+10.8.0.181   KANGSABATI DOWN          ok
+    5F69/ACCE0               200 sps = KA.KAND.0J.HNE         6200/6200   identical
+    5F69/ACCN0               200 sps = KA.KAND.0J.HNN         6000/6000   identical
+    5F69/ACCZ0               200 sps = KA.KAND.0J.HNZ         6000/6000   identical
+10.8.0.210   PATSIO                   ok
+    1C6E/VELE0               250 sps = DG.PATSI.0J.CHE        7500/7500   identical
+    1C6E/VELN0               250 sps = DG.PATSI.0J.CHN        7500/7500   identical
+    1C6E/VELZ0               250 sps = DG.PATSI.0J.CHZ        8000/8000   identical
+10.8.0.78    Tuljapur                 ok
+    7465/INSTE0              100 sps = MU.TLJP.1.HHE          3000/3000   identical
+    7465/INSTN0              100 sps = MU.TLJP.1.HHN          3000/3000   identical
+    7465/INSTZ0              100 sps = MU.TLJP.1.HHZ          3000/3000   identical
+10.8.0.15    Panchavada               ok
+    1C62/1ACCE0              200 sps = IS.PAN.1J.AHE          6000/6000   identical
+    1C62/1ACCN0              200 sps = IS.PAN.1J.AHN          6000/6000   identical
+    1C62/1ACCZ0              200 sps = IS.PAN.1J.AHZ          6000/6000   identical
+    1C62/VELE0                50 sps = IS.PAN.0J.BHE          2000/2000   identical
+    1C62/VELN0                50 sps = IS.PAN.0J.BHN          2000/2000   identical
+    1C62/VELZ0                50 sps = IS.PAN.0J.BHZ          2000/2000   identical
+10.8.0.11    Nagdhaniba               ok
+    1F62/1ACCE0              200 sps = IS.NDH.1J.AHE          6400/6400   identical
+    1F62/1ACCN0              200 sps = IS.NDH.1J.AHN          6000/6000   identical
+    1F62/1ACCZ0              200 sps = IS.NDH.1J.AHZ          6000/6000   identical
+    1F62/VELE0                50 sps = IS.NDH.0J.BHE          1000/1000   identical
+    1F62/VELN0                50 sps = IS.NDH.0J.BHN          2000/2000   identical
+    1F62/VELZ0                50 sps = IS.NDH.0J.BHZ          2000/2000   identical
+10.8.0.2     TG HALI                  ok
+    2162/1ACCE0              100 sps = KS.TGH.1.BNE           3000/3000   identical
+    2162/1ACCN0              100 sps = KS.TGH.1.BNN           3000/3000   identical
+    2162/1ACCZ0              100 sps = KS.TGH.1.BNZ           3000/3000   identical
+    2162/VELE0               100 sps = KS.TGH.1.BHE           3500/3500   identical
+    2162/VELN0               100 sps = KS.TGH.1.BHN           3300/3300   identical
+    2162/VELZ0               100 sps = KS.TGH.1.BHZ           3000/3000   identical
+10.8.0.3     HEM                      ok
+    7461/1VELE0              100 sps = KS.HEM.1.HNE           3000/3000   identical
+    7461/1VELN0              100 sps = KS.HEM.1.BNN           3000/3000   identical
+    7461/1VELZ0              100 sps = KS.HEM.1.BNZ           3000/3000   identical
+    7461/VELE0               100 sps = KS.HEM.1.BHE           3000/3000   identical
+    7461/VELN0               100 sps = KS.HEM.1.BHN           3000/3000   identical
+    7461/VELZ0               100 sps = KS.HEM.1.BHZ           3000/3000   identical
+10.8.0.4     HID                      ok
+    8161/VELE0               100 sps = KS.HID.1.BHE           3000/3000   identical
+    8161/VELN0               100 sps = KS.HID.1.BHN           3000/3000   identical
+    8161/VELZ0               100 sps = KS.HID.1.BHZ           3600/3600   identical
+10.8.0.5     ALM                      ok
+    2062/VELE0               100 sps = KS.ALM.0J.HHE          3000/3000   identical
+    2062/VELN0               100 sps = KS.ALM.0J.HHN          3000/3000   identical
+    2062/VELZ0               100 sps = KS.ALM.0J.HHZ          3000/3000   identical
+10.8.0.6     RAI                      ok
+    2462/VELE0               100 sps = KS.RAI.0J.HHE          3000/3000   identical
+    2462/VELN0               100 sps = KS.RAI.0J.HHN          2000/2000   identical
+    2462/VELZ0               100 sps = KS.RAI.0J.HHZ          3000/3000   identical
+10.8.0.19    KALAK                    ok
+    2362/1ACCE0              200 sps = IS.KLK.1J.HNE          6000/6000   identical
+    2362/1ACCN0              200 sps = IS.KLK.1J.AHN          6000/6000   identical
+    2362/1ACCZ0              200 sps = IS.KLK.1J.ANZ          6000/6000   identical
+    2362/VELE0                50 sps = IS.KLK.0J.BNE          1500/1500   identical
+    2362/VELN0                50 sps = IS.KLK.0J.BNN          1500/1500   identical
+    2362/VELZ0                50 sps = IS.KLK.0J.BHZ          1500/1500   identical
+10.8.0.10    KDR                      ok
+    1D62/1ACCE0              200 sps = IS.KDR.1J.AHE          6000/6000   identical
+    1D62/1ACCN0              200 sps = IS.KDR.1J.AHN          6000/6000   identical
+    1D62/1ACCZ0              200 sps = IS.KDR.1J.AHZ          7000/7000   identical
+    1D62/VELE0                50 sps = IS.KDR.0J.BHE          1437/1437   identical
+    1D62/VELN0                50 sps = IS.KDR.0J.BHN          1351/1351   identical
+    1D62/VELZ0                50 sps = IS.KDR.0J.BHZ          1500/1500   identical
+10.8.0.9     Ralej                    ok
+    2662/1ACCE0              200 sps = IS.RLJ.1J.AHE          6000/6000   identical
+    2662/1ACCN0              200 sps = IS.RLJ.1J.AHN          6000/6000   identical
+    2662/1ACCZ0              200 sps = IS.RLJ.1J.AHZ          6000/6000   identical
+    2662/VELE0                50 sps = IS.RLJ.0J.BHE          1500/1500   identical
+    2662/VELN0                50 sps = IS.RLJ.0J.BHN          1791/1791   identical
+    2662/VELZ0                50 sps = IS.RLJ.0J.BHZ          1377/1377   identical
+10.8.0.42    JAMBUDA                  ok
+    7761/1ACCE0              200 sps = IS.JAB.1J.AHE          6000/6000   identical
+    7761/1ACCN0              200 sps = IS.JAB.1J.AHN          6000/6000   identical
+    7761/1ACCZ0              200 sps = IS.JAB.1J.AHZ          6000/6000   identical
+    7761/VELE0                50 sps = IS.JAB.0J.BHE          1500/1500   identical
+    7761/VELN0                50 sps = IS.JAB.0J.BHN          1500/1500   identical
+    7761/VELZ0                50 sps = IS.JAB.0J.BHZ          1000/1000   identical
+10.8.0.58    KAKRAVA                  ok
+    7965/INSTE0               50 sps = IS.KAK.1.BHE           1500/1500   identical
+    7965/INSTN0               50 sps = IS.KAK.1.BHN           1500/1500   identical
+    7965/INSTZ0               50 sps = IS.KAK.1.BHZ           1500/1500   identical
+10.8.0.62    BHACHAU                  ok
+    FE64/INSTE0               50 sps = IS.BHA.1.BHE           1335/1335   identical
+    FE64/INSTN0               50 sps = IS.BHA.1.BHN           1500/1500   identical
+    FE64/INSTZ0               50 sps = IS.BHA.1.BHZ           1500/1500   identical
+10.8.0.63    SUVAI                    ok
+    F564/INSTE0               50 sps = IS.SUV.1.BHE           1500/1500   identical
+    F564/INSTN0               50 sps = IS.SUV.1.BHN           1500/1500   identical
+    F564/INSTZ0               50 sps = IS.SUV.1.BHZ           1500/1500   identical
+10.8.0.65    VIGHAKOT                 ok
+    9165/INSTE0               50 sps = IS.VGO.1.BHE           1500/1500   identical
+    9165/INSTN0               50 sps = IS.VGO.1.BHN           1500/1500   identical
+    9165/INSTZ0               50 sps = IS.VGO.1.BHZ           1500/1500   identical
+10.8.0.66    GADHDA                   ok
+    2B64/INSTE0               50 sps = IS.GDD.1.BHE           2000/2000   identical
+    2B64/INSTN0               50 sps = IS.GDD.1.BHN           1000/1000   identical
+    2B64/INSTZ0               50 sps = IS.GDD.1.BHZ           2000/2000   identical
+10.8.0.71    SHIVLAKHA                ok
+    4765/INSTE0               50 sps = IS.SIV.1.BHE           2000/2000   identical
+    4765/INSTN0               50 sps = IS.SIV.1.BHN           1500/1500   identical
+    4765/INSTZ0               50 sps = IS.SIV.1.BHZ           2000/2000   identical
+10.8.0.79    Renapur                  ok
+    5B65/INSTE0              100 sps = MU.RENP.1.HHE          3000/3000   identical
+    5B65/INSTN0              100 sps = MU.RENP.1.HHN          3000/3000   identical
+    5B65/INSTZ0              100 sps = MU.RENP.1.HHZ          3000/3000   identical
+10.8.0.76    Deoni                    ok
+    7765/INSTE0              100 sps = MU.DEON.1.HHE          3200/3200   identical
+    7765/INSTN0              100 sps = MU.DEON.1.HHN          3000/3000   identical
+    7765/INSTZ0              100 sps = MU.DEON.1.HHZ          3000/3000   identical
+10.8.0.86    RADHANPUR                ok
+    845A/VELE0                50 sps = IS.RAD.1.BHE           1000/1000   identical
+    845A/VELN0                50 sps = IS.RAD.1.BHN           1000/1000   identical
+    845A/VELZ0                50 sps = IS.RAD.1.BHZ           1000/1000   identical
+10.8.0.92    PARDI ZANKHARI           ok
+    2762/1ACCE0              200 sps = IS.PAZ.1J.AHE          6600/6600   identical
+    2762/1ACCN0              200 sps = IS.PAZ.1J.AHN          5800/5800   identical
+    2762/1ACCZ0              200 sps = IS.PAZ.1J.AHZ          6000/6000   identical
+    2762/VELE0                50 sps = IS.PAZ.0J.BHE          1500/1500   identical
+    2762/VELN0                50 sps = IS.PAZ.0J.BHN          1500/1500   identical
+    2762/VELZ0                50 sps = IS.PAZ.0J.BHZ          1000/1000   identical
+10.8.0.97    GODHVANI                 ok
+    2C65/INSTE0               50 sps = IS.GOD.1.BHE           2000/2000   identical
+    2C65/INSTN0               50 sps = IS.GOD.1.BHN           2000/2000   identical
+    2C65/INSTZ0               50 sps = IS.GOD.1.BHZ           1500/1500   identical
+10.8.0.98    KAVDEJ                   ok
+    2F65/INSTE0               50 sps = IS.KVJ.1.BHE           1458/1458   identical
+    2F65/INSTN0               50 sps = IS.KVJ.1.BHN           1000/1000   identical
+    2F65/INSTZ0               50 sps = IS.KVJ.1.BHZ           1500/1500   identical
+10.8.0.100   UMRVAVDUR                ok
+    7165/INSTE0               50 sps = IS.UVD.1.BHE           1500/1500   identical
+    7165/INSTN0               50 sps = IS.UVD.1.BHN           1500/1500   identical
+    7165/INSTZ0               50 sps = IS.UVD.1.BHZ           2000/2000   identical
+10.8.0.101   SAPUTARA                 ok
+    6365/INSTE0               50 sps = IS.SPT.1.BHE           2000/2000   identical
+    6365/INSTN0               50 sps = IS.SPT.1.BHN           1000/1000   identical
+    6365/INSTZ0               50 sps = IS.SPT.1.BHZ           1200/1200   identical
+10.8.0.110   Bhadar Dam               ok
+10.8.0.112   SRJ                      ok
+    6B5A/VELE0                50 sps = SR.SRJ.1.BNE           1500/1500   identical
+    6B5A/VELN0                50 sps = SR.SRJ.1.BNN           1500/1500   identical
+    6B5A/VELZ0                50 sps = SR.SRJ.1.BNZ           1500/1500   identical
+10.8.0.118   DHOLAVIRA                ok
+    4A65/INSTE0               50 sps = IS.DOL.1.BHE           1500/1500   identical
+    4A65/INSTN0               50 sps = IS.DOL.1.BHN           1414/1414   identical
+    4A65/INSTZ0               50 sps = IS.DOL.1.BHZ           2000/2000   identical
+10.8.0.102   SIPU                     ok
+    6B65/INSTE0               50 sps = IS.SIP.1.BHE           1488/1488   identical
+    6B65/INSTN0               50 sps = IS.SIP.1.BHN           1500/1500   identical
+    6B65/INSTZ0               50 sps = IS.SIP.1.BHZ           1500/1500   identical
+10.8.0.121   IIT Roorkee 3            ok
+    PRAT/PRATE4              100 sps = no SeedLink channel with the same rate/component in SeisZone
+    PRAT/PRATN4              100 sps = no SeedLink channel with the same rate/component in SeisZone
+    PRAT/PRATZ4              100 sps = no SeedLink channel with the same rate/component in SeisZone
+10.8.0.144   Sarangpur                ok
+    2562/1ACCE0              200 sps = IS.SRG.1J.AHE          6000/6000   identical
+    2562/1ACCN0              200 sps = IS.SRG.1J.AHN          6000/6000   identical
+    2562/1ACCZ0              200 sps = IS.SRG.1J.AHZ          6000/6000   identical
+    2562/VELE0                50 sps = IS.SRG.0J.BHE          1408/1408   identical
+    2562/VELN0                50 sps = IS.SRG.0J.BHN          1500/1500   identical
+    2562/VELZ0                50 sps = IS.SRG.0J.BHZ          1000/1000   identical
+10.8.0.163   IIT R                    ok
+    SIRA/SIRAE4              100 sps = no SeedLink channel with the same rate/component in SeisZone
+    SIRA/SIRAN4              100 sps = no SeedLink channel with the same rate/component in SeisZone
+    SIRA/SIRAZ4              100 sps = no SeedLink channel with the same rate/component in SeisZone
+10.8.0.203   Tetar Dam Top CH1050     ok
+    A46D/ACCE0               200 sps = CI.TEDT.0J.HNE         6000/6000   identical
+    A46D/ACCN0               200 sps = CI.TEDT.0J.HNN         6000/6000   identical
+    A46D/ACCZ0               200 sps = CI.TEDT.0J.HNZ         7000/7000   identical
+TOTAL identical 396859/396859

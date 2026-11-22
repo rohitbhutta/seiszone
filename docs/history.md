@@ -4,6 +4,16 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-22 19:10 - all instruments added to the third-party viewer; data identical
+
+* At the user's request (user closed it first): 32 UDP pull servers added to C:\scream\scream.ini
+  (36 in all; backup scream.ini.backup-2026-11-22-before-adding), restarted from the desktop
+  shortcut, 57 streams after 20 s. Not added: THA .7, Centaur .119, Gecko.
+* GCF (what it receives) vs SeisZone SeedLink, every instrument: 135 channels, 415 059 of 415 059
+  samples identical. Report section 9; list 2026-11-22-gcf-vs-seedlink-all.txt.
+* Waiting: its WaveViews refill only from its start (~20 min); then compare the pictures of the
+  multi-instrument window and plan the viewer changes the user asked for ("like that viewer").
+
 ## 2026-11-22 18:55 - same instrument, same minutes: SeisZone vs the third-party viewer
 
 * Tuljapur (7465) over 12:57-13:21 UTC: same band (0.1-0.9 x Nyquist), same events at the same

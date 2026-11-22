@@ -167,3 +167,25 @@ Verdict: for the same instrument and minutes SeisZone shows the same waveform, t
 the same time and the same amplitudes (within what a picture can measure). The only intended
 difference is the default amplitude scale; to look exactly like it, choose Scale "Fixed +-",
 Units "Counts", 2048.
+
+## 9. All instruments in the third-party viewer; data compared channel by channel (2026-11-22 19:10)
+
+At the user's request the instruments SeisZone receives were added to the third-party viewer's
+pull list. It was closed by the user; its own settings file C:\scream\scream.ini got 32 more
+[PullServers] lines in the form its "Add UDP Server..." writes (UDP;IP:1567=GCFSEND:B), 36 in
+all; backup C:\scream\scream.ini.backup-2026-11-22-before-adding. Not added: THA 10.8.0.7 (no
+GCF answer), the Centaur 10.8.0.119 (no GCF), the Gecko (it pushes to SeisZone). Restarted from
+the desktop shortcut: 57 streams after 20 s. It does not record (no C:\scream\data).
+
+Data check: for every instrument, 30 s of GCF over UDP 1567 (what that viewer receives; GCFPING,
+GCFSEND:B, GCFSTOP, as SeisZone's probe) against SeisZone's SeedLink data for the same seconds,
+matched on sample time. Result: 36 instruments, 135 channels, **415 059 of 415 059 samples
+identical** (2026-11-22-gcf-vs-seedlink-all.txt; the two IIT Roorkee GCF units checked separately,
+18 200 of 18 200). SeisZone and that viewer hold exactly the same numbers for every channel.
+
+What its settings file shows about its viewer (saved per WaveView window when it exits):
+MagScale = vertical zoom, 1 pixel per N counts for the whole window (16, 128, 256, 8192 seen);
+TimeScale = pixels per second (1, 2, 5); Filter_LP / Filter_HP = the window's custom design
+(on, corner, order 4); per stream: colour, a vertical offset, a scale "auto" or a factor
+(e.g. 3067, 848.6 - shown in the label as "*3067" instead of the units), a gain 1.0.
+Its WaveView shows only data received since it started (no history after a restart).
