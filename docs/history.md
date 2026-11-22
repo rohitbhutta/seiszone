@@ -27,7 +27,12 @@ what was found and what is waiting. Reports with the details are in docs/reports
   checked like Settings (number, not a Gecko port). Bind and organization are kept, still edited in
   Settings. SeedLinkServer.control (connect / streaming / disconnect lines) goes into
   status()["server"]["control"]. Picture: docs/reports/2026-11-23-data-server-seedlink-tab.png.
-* Version 1.8.1.
+* Version 1.8.1. Full suite 343 passed, 1 skipped. Pull request rohitbhutta/seiszone#2.
+* The user then put SWA-RFC-GCFR.pdf (GCF block format, Issue F 2021) in Downloads and pointed
+  at the manual again. Neither has the network wire format: the manual's chapters 4.3 and 7 only
+  describe GCFPING / GCFSEND:B / GCFSTOP and that backfill goes over TCP on the same port, and
+  GCFR says the network protocol is in "SWA-RFC-SCRM". GCF gap recovery is still waiting for that
+  document.
 
 ## 2026-11-23 00:26 - 1.8.0 installed and running
 
