@@ -113,4 +113,13 @@ class FakeEngine:
                                      "sitename": "SMR03", "records": 4567, "bytes": 2338304, "since": now - 7200}]},
                 "server": {"port": 18000, "listening": True, "error": "", "clients": 1,
                            "peers": [{"peer": "127.0.0.1:50555", "since": now - 60, "stations": "*", "packets": 99}]},
+                "gcf_server": self.gcf_server_status(now),
                 "started": self.started}
+
+    def gcf_server_status(self, now):
+        on = bool((self.config.get("gcf_server") or {}).get("enabled"))
+        return {"enabled": on, "port": 1567, "max_rate": 1000, "listening": on, "error": "",
+                "clients": 1 if on else 0, "blocks": 4321 if on else 0,
+                "peers": [{"address": "192.168.1.100:1567", "params": "B", "since": now - 120, "idle": 3.0,
+                           "blocks": 4321}] if on else [],
+                "control": ["22-11-2026 21:16:23  Added client 192.168.1.100:1567"] if on else []}

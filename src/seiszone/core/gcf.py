@@ -12,6 +12,7 @@ Network transport ("Scream protocol", UDP, default port 1567):
     client -> server  GCFPING            server -> client  GCFACKN
     client -> server  GCFSEND:B          server streams one block per datagram (big-endian)
     client -> server  GCFSTOP            server -> client  GCFACKN
+(SeisZone speaks the server side too: core/gcf_server.py, with encode_block / encode_status.)
 TCP / serial links may wrap each block in the Block Transfer Protocol (BTP):
     'G', block number, body size (2 bytes), body, checksum (2 bytes, sum of all bytes mod 65536)
 """
@@ -190,6 +191,78 @@ def ack(stream_value):
     """6-byte BTP/BRP acknowledgement for the last received block of a stream."""
     s = stream_value.to_bytes(4, "big")
     return bytes([1, s[3], 0, s[2], s[1], s[0]])
+
+
+# --------------------------------------------------------------------------
+# encoding (SeisZone's own GCF server, core/gcf_server.py)
+# --------------------------------------------------------------------------
+RATE_CODES = {rate: (code, den) for code, (rate, den) in SPECIAL_RATES.items()}
+_PACK = {1: ">%di", 2: ">%dh", 4: ">%db"}
+
+
+def encode_id(text, system=False):
+    """32-bit value of a base-36 id ('KAND', 'HN0JZ0'). A system id that does not fit the
+    6-character form is written in the extended (5-character) form."""
+    v = int(text, 36)
+    if system and v >= 0x80000000:
+        v = int(text[:5], 36) | 0x80000000
+    if v > 0xFFFFFFFF:
+        raise ValueError(f"GCF id too long: {text!r}")
+    return v
+
+
+def rate_code(rate):
+    """(byte code, start-time fraction denominator) of a sample rate, or None when GCF has no
+    code for it (non-integer rates other than the special ones)."""
+    if rate in RATE_CODES:
+        return RATE_CODES[rate]
+    r = round(rate)
+    if abs(rate - r) < 1e-9 and 1 <= r <= 250:
+        return int(r), 1
+    return None
+
+
+def _date(t):
+    """GCF date code and the fraction of a second left over."""
+    rel = t - GCF_EPOCH
+    days = int(rel // 86400)
+    secs = rel - days * 86400
+    whole = int(secs + 1e-6)
+    return (days << 17) | min(whole, 86400), secs - whole
+
+
+def encode_block(system_id, stream_id, start, rate, samples):
+    """One GCF data block (bytes). `start` must lie on the block-start grid: a whole second, or
+    a multiple of 1/den second for the rates above 250 sps; at most 250 samples (any number with
+    32-bit differences, a multiple of 2 / 4 lets 16- / 8-bit differences be used)."""
+    code, den = rate_code(rate)
+    s = [int(v) for v in samples]
+    n = len(s)
+    if not 1 <= n <= 255:
+        raise ValueError("a GCF block holds 1 to 255 samples here")
+    date, frac = _date(start)
+    num = int(round(frac * den)) if den > 1 else 0
+    diffs = [0] + [s[i] - s[i - 1] for i in range(1, n)]
+    big = max(abs(d) for d in diffs)
+    if big <= 127 and n % 4 == 0:
+        cc = 4
+    elif big <= 32767 and n % 2 == 0:
+        cc = 2
+    else:
+        cc = 1
+    comp = cc | ((num & 0xF) << 4) | (((num >> 4) & 1) << 3)
+    head = struct.pack(">III", encode_id(system_id, system=True), encode_id(stream_id), date)
+    head += bytes([0, code, comp, n // cc])
+    return head + struct.pack(">i", s[0]) + struct.pack(_PACK[cc] % n, *diffs) + struct.pack(">i", s[-1])
+
+
+def encode_status(system_id, stream_id, start, text):
+    """A GCF status block: text (padded to whole 4-byte records, at most 1020 bytes)."""
+    body = text.encode("latin-1", "replace")[:1020]
+    body += b" " * (-len(body) % 4)
+    date, _frac = _date(start)
+    head = struct.pack(">III", encode_id(system_id, system=True), encode_id(stream_id), date)
+    return head + bytes([0, 0, 4, len(body) // 4]) + body
 
 
 # --------------------------------------------------------------------------

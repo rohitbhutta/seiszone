@@ -27,6 +27,7 @@ are carried over and cleaned up.
 | G10 | Own SeedLink server (default port 18000; 18010 until 1.0.1) so other programs can read all data | `core/seedlink_server.py` |
 | G11 | StationXML per station; show counts or physical units | `core/stationxml.py` |
 | G12 | Logs, tray icon, start with Windows, one installer | `ui/app.py`, `installer/` |
+| G13 | Own GCF data server over UDP (port 1567, off by default) so another PC (the earlier viewer or SeisZone) pulls all data | `core/gcf_server.py`, `ui/server_window.py` |
 
 Standing rules: never use the name of the user's separate business or of the third-party viewer; recording is user-controlled and data is never
 deleted (low disk space only warns); the program runs as the normal user (no admin) — only the

@@ -48,6 +48,10 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
 
 ## Status (2026-11-22, version 1.7.0 installed 19:48)
 
+* **2026-11-22 night - 1.8.0 in a pull request (branch feature/viewer-recording-server), not
+  merged, built or installed yet:** site name in the label box, eye button (I), plain drag
+  selects, recording names with start/end time, Data server (GCF UDP 1567, off by default) - see
+  "Version 1.8.0" and docs/history.md.
 * **2026-11-22 evening - 1.7.0:** viewer mode like the earlier viewer's WaveView (Per pixel 1:N,
   factors in the label, Scale others to match, Clean display, overlap) - see "Version 1.7.0" and
   docs/history.md. Its pull list now has all 36 GCF units (C:\scream\scream.ini, backup kept).
@@ -151,6 +155,20 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   The REA/Ghidra work files are in `C:\D Drive\Rohit Claude App\rea-work`. Decompiling that
   viewer was declined: it breaks the standing rule above and probably its licence. A
   side-by-side comparison of the same data in both programs (behaviour only) was offered instead.
+
+### Version 1.8.0 (2026-11-22, pull request; not built or installed)
+
+* Viewer: `panel_lines(sid, units, label, scale, site)` -> 4 lines (site from
+  hub.descriptions; the caption no longer has it); `set_captions` / eye button (`eye_button`,
+  theme icons "eye" / "eye-off", key I, state "captions"); `set_drag_selects` (state
+  "drag_selects", default True: a plain drag selects, Shift+drag pans).
+* Recorder: `file_name` / `legacy_name` / `file_path(..., legacy=)`, `FILE_RE` matches both,
+  `name_time(m)`; `_Session.path_for` keeps a period in its old-name file.
+* `core/gcf_server.py` GcfServer (DatagramProtocol, hub listener), `gcf.encode_block` /
+  `encode_status` / `encode_id` / `rate_code`; engine `_open_gcf_server` etc., status
+  "gcf_server"; config "gcf_server" {enabled False, bind, port 1567, max_rate 1000};
+  `probe.seiszone_status` (another SeisZone typed as IP:1567 -> its SeedLink server);
+  `ui/server_window.py` DataServerWindow (main tool bar "Data server").
 
 ### Version 1.7.0 (2026-11-22, installed 19:48; 38/38 sources)
 

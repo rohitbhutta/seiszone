@@ -4,6 +4,37 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-22 night - 1.8.0 on branch feature/viewer-recording-server (pull request)
+
+* Asked (with 5 screenshots): site name into the label box, an eye button to hide the details
+  above the traces (between Remove mean and Time cursors), the selection menu of the earlier
+  viewer, recording file names with start and end time like the earlier viewer's, backfill of
+  recordings after a PC restart, and the earlier viewer's "My Server" (UDP 1567) in SeisZone; a
+  pull request the user reviews and merges.
+* Viewer: label box = station / location.channel / **site** / units (site no longer repeated
+  in the caption); **eye** button + key I (state "captions"); a **plain drag selects** a time
+  range and opens its menu, as in the earlier viewer (Shift+drag pans; View > "Drag selects a
+  time range" switches back, state "drag_selects"). The selection menu already had Save, Zoom
+  In, Save on selection, PSD acc/vel, the three calibrations, Relative Orientation and external
+  tools (where the earlier viewer has its add-on); before this a Shift+drag was needed.
+* Recording names: `<code>_<YYYYMMDD>_<HHMM>_<HHMM>.mseed` (UTC, last of a day ends 2400), e.g.
+  KA.KAND.9J.MNE_20261110_1600_1700.mseed. Old `__<stamp>Z` names are still read (viewers,
+  export) and never renamed; a period begun under the old name goes on in that file.
+* Backfill after a restart: already there for SeedLink sources (resume + TIME fetch from the
+  last record); now covered by test_computer_off_while_recording_is_backfilled_into_the_same_files
+  (power cut 12:02-12:40: every record once, in its hour file). GCF-UDP sources (2: IIT Roorkee)
+  cannot backfill - written in the user guide.
+* **Data server** (core/gcf_server.py, ui/server_window.py): GCF over UDP, port 1567, **off by
+  default** (the earlier viewer on this PC uses 1567: a busy port is reported, retried every 3 s,
+  never fatal). GCFPING/GCFSEND:B/GCFSTOP, clients removed after 180 s without a request, max
+  32, "Channels up to" 1000 sps. Records re-cut into GCF blocks on whole seconds (<= 2 s, 8/16/32
+  bit, checked with ObsPy's GCF reader); live and backfilled pieces kept apart. Names kept in
+  State "gcf_server_ids" (KA.KAND.0J.HNZ -> KAND HN0JZ0; GCF sources keep their own). Status
+  block per station names SeisZone + its SeedLink port + the channel table: Add source
+  "<IP>:1567" on another SeisZone then uses that SeedLink server (exact names, backfill), else
+  GCF with the exact names. Status bar "Data server :1567 - n clients".
+* Version 1.8.0. Not built, not installed: the pull request first.
+
 ## 2026-11-22 19:55 - 1.7.0 pushed to GitHub
 
 * At the user's OK: main pushed to origin (90f0834..f02bd41): the checks against the earlier

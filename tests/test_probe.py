@@ -599,3 +599,88 @@ def test_the_typed_port_decides_the_protocol(fake, fast):
     assert sum("Trying SeedLink" in x for x in lines) == ip.SEEDLINK_TRIES
     assert not none.found and "no data port did" in none.notes[-1]          # (the fake has a web page)
     assert none.method is None
+
+
+# --------------------------------------------------------------------------
+# another SeisZone typed as IP:1567 (its GCF server, core/gcf_server.py)
+# --------------------------------------------------------------------------
+
+@contextlib.contextmanager
+def seiszone_pc(with_seedlink):
+    """Another SeisZone: its GCF server (and SeedLink server) on 127.0.0.1, data flowing."""
+    import numpy as np
+    from seiszone.core.gcf_server import GcfServer
+    from seiszone.core import mseed
+    hub = DataHub()
+    hub.descriptions["KA.KAND"] = "KANGSABATI DOWN"
+    loop = asyncio.new_event_loop()
+    ready = threading.Event()
+    box = {}
+
+    async def feed():
+        t = time.time() // 1 - 30
+        while True:
+            for cha in ("HNZ", "HNN"):
+                y = np.arange(100, dtype=np.int32) * (3 if cha == "HNZ" else 5)
+                for r in mseed.encode_records("KA", "KAND", "0J", cha, 100.0, t, y):
+                    hub.add_record(r, "t")
+            t += 1.0
+            await asyncio.sleep(0.05)
+
+    async def start():
+        sl_port = None
+        if with_seedlink:
+            box["sl"] = await asyncio.start_server(SeedLinkServer(hub, "test").handle, "127.0.0.1", 0)
+            sl_port = box["sl"].sockets[0].getsockname()[1]
+        box["gcf"] = GcfServer(hub, seedlink_port=sl_port)
+        box["port"] = await box["gcf"].open("127.0.0.1", 0)
+        box["feed"] = asyncio.ensure_future(feed())
+        box["sl_port"] = sl_port
+        ready.set()
+
+    def run():
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(start())
+        loop.run_forever()
+
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    assert ready.wait(10)
+    try:
+        yield box
+    finally:
+        async def stop():
+            box["feed"].cancel()
+            box["gcf"].close()
+            if "sl" in box:
+                box["sl"].close()
+                await box["sl"].wait_closed()
+        asyncio.run_coroutine_threadsafe(stop(), loop).result(5)
+        loop.call_soon_threadsafe(loop.stop)
+        t.join(5)
+        loop.close()
+
+
+def test_probe_another_seiszone_uses_its_seedlink_server(fast):
+    with seiszone_pc(with_seedlink=True) as pc:
+        inst = ip.probe(f"127.0.0.1:{pc['port']}", log=lambda m: None)
+    assert inst.method == "seedlink" and inst.port == pc["sl_port"]
+    assert [(s["net"], s["sta"], s["desc"]) for s in inst.stations] == [("KA", "KAND", "KANGSABATI DOWN")]
+    assert inst.details["typed"] == f"127.0.0.1:{pc['port']}"
+    assert "this is SeisZone on another computer" in inst.notes[0]
+
+
+def test_probe_another_seiszone_without_seedlink_reads_gcf_with_its_names(fast):
+    with seiszone_pc(with_seedlink=False) as pc:
+        inst = ip.probe(f"127.0.0.1:{pc['port']}", log=lambda m: None)
+    assert inst.method == "gcf-udp" and inst.details["system_id"] == "KAND"
+    st = inst.stations[0]
+    assert (st["net"], st["sta"], st["desc"]) == ("KA", "KAND", "KANGSABATI DOWN")
+    assert sorted((c["loc"], c["cha"], c["gcf"]) for c in st["channels"]) == [
+        ("0J", "HNN", "HN0JN0"), ("0J", "HNZ", "HN0JZ0")]
+    src = validate_source(inst.to_source())
+    assert src["gcf"]["map"] == {"HN0JN0": ["0J", "HNN"], "HN0JZ0": ["0J", "HNZ"]}
+    status = ip.seiszone_status(["SeisZone 1.8.0 KA.KAND KANGSABATI DOWN seedlink=18000\r\nKAND HN0JZ0 = KA.KAND.0J.HNZ"])
+    assert status == {"seedlink": 18000, "sites": {"KA.KAND": "KANGSABATI DOWN"},
+                      "names": {"KAND": {"HN0JZ0": "KA.KAND.0J.HNZ"}}}
+    assert ip.seiszone_status(["Fortimus status: GPS locked"]) is None
