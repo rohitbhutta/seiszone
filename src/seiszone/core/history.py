@@ -334,7 +334,7 @@ class RecordedData:
     def _files_for(self, sid, t0, t1):
         """Recording files that may hold `sid` in [t0, t1) (a cached listing of the day folders)."""
         from .export import MAX_FILE_SPAN, _station
-        from .recorder import FILE_RE, stamp_time
+        from .recorder import FILE_RE, name_time
         import datetime as dt
         station = _station(sid)
         out = []
@@ -351,7 +351,7 @@ class RecordedData:
                         for e in os.scandir(os.path.join(folder, station, day.isoformat())):
                             m = FILE_RE.match(e.name)
                             if m:
-                                entries.append((stamp_time(m.group("stamp")), m.group("code"), e.path))
+                                entries.append((name_time(m), m.group("code"), e.path))
                     except OSError:
                         pass
                     hit = self._listing[key] = (now, entries)

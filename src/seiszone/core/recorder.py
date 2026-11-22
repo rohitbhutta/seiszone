@@ -1,8 +1,13 @@
 """Continuous recordings: every record a recording wants is appended, byte for byte, to a
 miniSEED file of a fixed, clock-aligned period (15, 30 or 60 minutes, UTC):
 
-    <folder>/<NET.STA>/<YYYY-MM-DD>/<NET.STA.LOC.CHA>__<YYYYMMDDTHHMMSSZ>.mseed   layout "channel"
-    <folder>/<NET.STA>/<YYYY-MM-DD>/<NET.STA>__<YYYYMMDDTHHMMSSZ>.mseed          layout "station"
+    <folder>/<NET.STA>/<YYYY-MM-DD>/<NET.STA.LOC.CHA>_<YYYYMMDD>_<HHMM>_<HHMM>.mseed   layout "channel"
+    <folder>/<NET.STA>/<YYYY-MM-DD>/<NET.STA>_<YYYYMMDD>_<HHMM>_<HHMM>.mseed          layout "station"
+
+e.g. KA.KAND.9J.MNE_20261110_1600_1700.mseed: the date, the start and the end time (UTC) of the
+file's period (the last period of a day ends at 2400). Files of SeisZone 1.7 and older are
+named <code>__<YYYYMMDDTHHMMSSZ>.mseed; they are still read, and a period that already has such
+a file goes on in it (an upgrade in the middle of an hour does not split the hour).
 
 The period is chosen by each record's start time, so records that arrive late (SeedLink
 backfill after a VPN outage) go into the older file they belong to. Nothing is decoded or
@@ -41,7 +46,7 @@ log = logging.getLogger("seiszone")
 FILE_MINUTES = (15, 30, 60)
 LAYOUTS = ("channel", "station")
 LOG_NAME = "recording_log.txt"
-FILE_RE = re.compile(r"^(?P<code>.+?)__(?P<stamp>\d{8}T\d{6})Z\.mseed$")
+FILE_RE = re.compile(r"^(?P<code>.+?)(?:_(?P<day>\d{8})_(?P<hm>\d{4})_\d{4}|__(?P<stamp>\d{8}T\d{6})Z)\.mseed$")
 GAP_SAMPLES = 1.5                  # a jump of more than this many samples is logged as a gap
 IDLE_CLOSE = 60.0                  # s: an append handle unused this long is closed
 MAX_OPEN = 64                      # open append handles at most (least recently used closed first)
@@ -63,18 +68,39 @@ def period_start(t, minutes):
     return int(t // step) * step
 
 
-def file_path(folder, sid, t, minutes, layout):
-    """Path of the recording file that holds a record of channel `sid` starting at t."""
-    p0 = period_start(t, minutes)
+def file_name(code, p0, minutes):
+    """'<code>_<YYYYMMDD>_<HHMM>_<HHMM>.mseed' for the period starting at p0 (UTC)."""
     d = dt.datetime.fromtimestamp(p0, UTC)
+    e = dt.datetime.fromtimestamp(p0 + minutes * 60, UTC)
+    end = "2400" if e.date() != d.date() else f"{e:%H%M}"
+    return f"{code}_{d:%Y%m%d}_{d:%H%M}_{end}.mseed"
+
+
+def legacy_name(code, p0):
+    """The name SeisZone 1.7 and older gave the file of the period starting at p0."""
+    return f"{code}__{dt.datetime.fromtimestamp(p0, UTC):%Y%m%dT%H%M%S}Z.mseed"
+
+
+def file_path(folder, sid, t, minutes, layout, legacy=False):
+    """Path of the recording file that holds a record of channel `sid` starting at t (legacy:
+    the name SeisZone 1.7 and older used)."""
+    p0 = period_start(t, minutes)
     station = ".".join(sid.split(".")[:2])
     code = sid if layout == "channel" else station
-    return os.path.join(folder, station, d.strftime("%Y-%m-%d"), f"{code}__{d:%Y%m%dT%H%M%S}Z.mseed")
+    name = legacy_name(code, p0) if legacy else file_name(code, p0, minutes)
+    return os.path.join(folder, station, dt.datetime.fromtimestamp(p0, UTC).strftime("%Y-%m-%d"), name)
 
 
 def stamp_time(stamp):
     """Epoch of a file name stamp 'YYYYMMDDTHHMMSS' (the Z is not part of the group)."""
     return dt.datetime.strptime(stamp, "%Y%m%dT%H%M%S").replace(tzinfo=UTC).timestamp()
+
+
+def name_time(m):
+    """Start (epoch) of the period of a file whose name matched FILE_RE (new or old name)."""
+    if m.group("stamp"):
+        return stamp_time(m.group("stamp"))
+    return dt.datetime.strptime(m.group("day") + m.group("hm"), "%Y%m%d%H%M").replace(tzinfo=UTC).timestamp()
 
 
 def _both_times(t):
@@ -133,7 +159,11 @@ class _Session:
         if path is None:
             if len(self.paths) > 2000:
                 self.paths.clear()
-            path = self.paths[key] = file_path(self.folder, rec.sid, rec.start, self.file_minutes, self.layout)
+            path = file_path(self.folder, rec.sid, rec.start, self.file_minutes, self.layout)
+            old = file_path(self.folder, rec.sid, rec.start, self.file_minutes, self.layout, legacy=True)
+            if not os.path.exists(path) and os.path.exists(old):
+                path = old   # this period was begun by SeisZone 1.7 or older: it goes on in that file
+            self.paths[key] = path
         return path
 
     def saved(self):

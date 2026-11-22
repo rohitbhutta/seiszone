@@ -362,8 +362,9 @@ class RecordDialog(QDialog):
 
     def _update_hint(self):
         name = "NET.STA.LOC.CHA" if self.layout_box.currentData() == "channel" else "NET.STA"
-        self.hint.setText(f"Files are named NET.STA\\YYYY-MM-DD\\{name}__<start>.mseed, a new file every "
-                          "file length, aligned to the clock (UTC). SeisZone never deletes recordings.")
+        self.hint.setText(f"Files are named NET.STA\\YYYY-MM-DD\\{name}_<YYYYMMDD>_<start HHMM>_<end HHMM>.mseed "
+                          "(UTC), a new file every file length, aligned to the clock. SeisZone never deletes "
+                          "recordings.")
 
     def _update_channel_list(self):
         chosen = self.chosen_radio.isChecked()
