@@ -4,6 +4,15 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-22 19:50 - 1.7.0 installed
+
+* The user quit SeisZone from the tray and chose "start the installer"; Claude started
+  build/dist/SeisZoneSetup.exe, the user clicked through. SeisZone did not start by itself after
+  the install; Claude started it from the desktop shortcut at 19:48. Log: "SeisZone 1.7.0
+  starting", "sources 38/38 receiving, 153 channels" (it grows to ~170 as slow channels arrive,
+  as before). One "THA packet is no valid miniSEED record; skipped" at connect - seen at every
+  THA connect since 16:15, not new. Off 19:46:15-19:48:41. Not pushed.
+
 ## 2026-11-22 20:20 - 1.7.0 built
 
 * Full suite 328 passed, 1 skipped. Commit ee9c838. build/dist/SeisZoneSetup.exe (68.8 MB, exe

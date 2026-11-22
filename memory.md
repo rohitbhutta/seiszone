@@ -46,7 +46,7 @@ port 80 (status, data streams, StationXML ~0.9 MB — about a minute over the sl
 Tests must never contact these or listen on 58772, 18000 or 18010 (the real Gecko connects to
 58772; the old service holds 18010; SeisZone's own server runs on 18000).
 
-## Status (2026-11-22, version 1.6.0 installed; 1.7.0 built, waiting for the user to install)
+## Status (2026-11-22, version 1.7.0 installed 19:48)
 
 * **2026-11-22 evening - 1.7.0:** viewer mode like the earlier viewer's WaveView (Per pixel 1:N,
   factors in the label, Scale others to match, Clean display, overlap) - see "Version 1.7.0" and
@@ -152,7 +152,7 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   viewer was declined: it breaks the standing rule above and probably its licence. A
   side-by-side comparison of the same data in both programs (behaviour only) was offered instead.
 
-### Version 1.7.0 (2026-11-22, built; not installed yet)
+### Version 1.7.0 (2026-11-22, installed 19:48; 38/38 sources)
 
 * **Per pixel (1:N) scale** like the earlier viewer's WaveView zoom: `WaveformView._cpp` (state
   "cpp"), range = cpp x row height (`_row_px`, from `_fit_rows`) / the trace's factor; Up/Down/wheel
@@ -520,7 +520,7 @@ User files: `%APPDATA%\SeisZone` (config.json, state.json, stationxml\), `%LOCAL
 
 ## Open items / next steps
 
-1. (done) 1.0.1 = 5c60396, 1.0.2 = 4092142, 1.1.0 = 465a94a, 1.2.0 = af71f90, 1.2.1 = af4da1b, 1.3.0 = 7a7cfe8, 1.4.0 = 6cce137, 1.5.0 = commit "SeisZone 1.5.0" on main. 1.6.0 = 3fc703d "SeisZone 1.6.0" on main, pushed 2026-11-22 at the user's OK. 1.7.0 = ee9c838 (built 2026-11-22, not pushed).
+1. (done) 1.0.1 = 5c60396, 1.0.2 = 4092142, 1.1.0 = 465a94a, 1.2.0 = af71f90, 1.2.1 = af4da1b, 1.3.0 = 7a7cfe8, 1.4.0 = 6cce137, 1.5.0 = commit "SeisZone 1.5.0" on main. 1.6.0 = 3fc703d "SeisZone 1.6.0" on main, pushed 2026-11-22 at the user's OK. 1.7.0 = ee9c838 (installed 2026-11-22, not pushed).
 2. User installs build/dist/SeisZoneSetup.exe 1.2.0 (UAC); checks closing viewers / dialogs keeps
    SeisZone running, a 1-day window shows the history, the filter design drag, the label panel.
 3. Optional: a Calibration for SS.SMR03 channels so they can be shown in g.
