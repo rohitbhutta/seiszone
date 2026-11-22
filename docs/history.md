@@ -33,7 +33,8 @@ what was found and what is waiting. Reports with the details are in docs/reports
   block per station names SeisZone + its SeedLink port + the channel table: Add source
   "<IP>:1567" on another SeisZone then uses that SeedLink server (exact names, backfill), else
   GCF with the exact names. Status bar "Data server :1567 - n clients".
-* Version 1.8.0. Not built, not installed: the pull request first.
+* Version 1.8.0. Full suite 342 passed, 1 skipped. Pull request rohitbhutta/seiszone#1 (branch
+  feature/viewer-recording-server), waiting for the user's review and merge. Not built, not installed.
 
 ## 2026-11-22 19:55 - 1.7.0 pushed to GitHub
 
