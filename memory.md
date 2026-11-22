@@ -46,7 +46,7 @@ port 80 (status, data streams, StationXML ~0.9 MB — about a minute over the sl
 Tests must never contact these or listen on 58772, 18000 or 18010 (the real Gecko connects to
 58772; the old service holds 18010; SeisZone's own server runs on 18000).
 
-## Status (2026-11-22, version 1.6.0 built; 1.5.0 installed)
+## Status (2026-11-22, version 1.6.0 installed)
 
 * **2026-11-22 afternoon - multi-instrument check (report only, nothing changed yet):** see
   docs/reports/2026-11-22-multi-instrument-check.md and docs/history.md (the running work log -
@@ -148,7 +148,7 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   viewer was declined: it breaks the standing rule above and probably its licence. A
   side-by-side comparison of the same data in both programs (behaviour only) was offered instead.
 
-### Version 1.6.0 (2026-11-22, built - not installed yet)
+### Version 1.6.0 (2026-11-22, installed 16:46; 38/38 sources, 153 channels)
 
 * **Common scale per instrument.** The field complaint "with 5-6 instruments the band-pass only
   works on the last instrument" was the Common amplitude scale (one range = the largest trace of

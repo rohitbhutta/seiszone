@@ -4,6 +4,13 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-22 16:46 - 1.6.0 installed
+
+* The user quit SeisZone from the tray and chose "start the installer"; Claude started
+  build/dist/SeisZoneSetup.exe, the user clicked through. Log: "SeisZone 1.6.0 starting",
+  "sources 38/38 receiving, 153 channels", no refused selector, no error. No viewer was open, so
+  the new scale / selection menu were not seen on screen yet (they are covered by the tests).
+
 ## 2026-11-22 (evening, 2) - selection menu implemented; version 1.6.0
 
 * Shift+drag over several rows / Ctrl+drag for two channels; tools on the selected channels;
