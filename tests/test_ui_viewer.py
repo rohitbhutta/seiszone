@@ -396,7 +396,7 @@ def test_selection_menu_and_filter_design_spectra(win, qapp):
     t0 = t1 - 100
     m = win.build_selection_menu(t0, t1, SIDS[0])
     texts = [a.text() for a in m.actions() if a.text()]
-    assert texts[1:8] == ["Save... (miniSEED)", "Zoom In", "Spectrum...", "PSD in Acceleration Units",
+    assert texts[1:9] == ["Save... (miniSEED)", "Zoom In", "Save on selection", "Spectrum...", "PSD in Acceleration Units",
                           "PSD in Velocity Units", "Peak values (acceleration, velocity)",
                           "Relative Orientation"]
     assert texts[-1] == f"Use as signal in the filter design ({SIDS[0]})"
@@ -446,13 +446,145 @@ def test_shift_drag_selects_a_time_range(win):
     t0, t1 = v.visible_range()
     a, b = t0 + 100, t0 + 200
     vb.mouseDragEvent(Drag(a, a + 50, True, False))
-    assert len(v._sel_items) == 8                         # a region and a sample count per row
+    assert len(v._sel_items) == 2                         # a region and a sample count on that row
     counts = [i.toPlainText() for _vb, i in v._sel_items if hasattr(i, "toPlainText")]
-    assert counts == ["10000", "10000", "10000", "5000"]   # 50 s at 200 and at 100 sps
+    assert counts == ["10000"]                            # 50 s at 200 sps
     ev = Drag(a, b, False, True)
     vb.mouseDragEvent(ev)
     assert ev.accepted and v.is_live()                     # a selection does not pause
     assert got and got[0][2] == SIDS[1] and got[0][0] == pytest.approx(a, abs=1) and got[0][1] == pytest.approx(b, abs=1)
+    assert v.selected_channels() == [SIDS[1]]
+    v.clear_selection()
+
+
+# ------------------------------------------------------------------------------------------
+# the selection over several channels (2026-11-22)
+# ------------------------------------------------------------------------------------------
+class RowDrag:
+    """A drag that starts on row `vb` at time x0 and is now over row `to` (a ViewBox) at x1."""
+
+    def __init__(self, vb, x0, x1, to, mods=Qt.ShiftModifier, start=False, finish=False):
+        self.vb, self.x0, self.x1, self.to, self.mods = vb, x0, x1, to, mods
+        self.start, self.finish, self.accepted = start, finish, False
+
+    def button(self):
+        return Qt.LeftButton
+
+    def modifiers(self):
+        return self.mods
+
+    def buttonDownPos(self):
+        return self.vb.mapFromView(QPointF(self.x0, 0))
+
+    def pos(self):
+        x = self.vb.mapFromView(QPointF(self.x1, 0)).x()
+        y = self.vb.mapFromScene(self.to.sceneBoundingRect().center()).y()
+        return QPointF(x, y)
+
+    def isStart(self):
+        return self.start
+
+    def isFinish(self):
+        return self.finish
+
+    def accept(self):
+        self.accepted = True
+
+
+def drag(view, i, j, a, b, mods=Qt.ShiftModifier):
+    vb, to = view._traces[i].vb, view._traces[j].vb
+    view._on_drag(RowDrag(vb, a, a + 10, vb, mods, start=True), vb)
+    view._on_drag(RowDrag(vb, a, b, to, mods), vb)
+    ev = RowDrag(vb, a, b, to, mods, finish=True)
+    view._on_drag(ev, vb)
+    return ev
+
+
+def test_shift_drag_over_rows_selects_those_channels_only(win):
+    v = win.view
+    got = []
+    v.selectionMade.disconnect(win.show_selection_menu)
+    v.selectionMade.connect(lambda a, b, sid, pos: got.append((a, b, sid)))
+    try:
+        t0, _t1 = v.visible_range()
+        a, b = t0 + 100, t0 + 200
+        ev = drag(v, 0, 2, a, b)                               # from the first row down to the third
+        assert ev.accepted and v.selected_channels() == SIDS[:3]
+        assert got[-1][2] == SIDS[0] and got[-1][0] == pytest.approx(a, abs=1)
+        counts = [i.toPlainText() for _vb, i in v._sel_items if hasattr(i, "toPlainText")]
+        assert counts == ["20000"] * 3                          # 100 s at 200 sps, on those rows only
+        assert v._sel_items                                     # still drawn (the menu would be open)
+        v.clear_selection()
+        assert not v._sel_items and v.selected_channels() == []
+        drag(v, 3, 1, a, b)                                     # upwards: still top to bottom
+        assert v.selected_channels() == SIDS[1:4]
+        drag(v, 2, 0, a, b, Qt.ControlModifier)                 # Ctrl: exactly two, in the order picked
+        assert v.selected_channels() == [SIDS[2], SIDS[0]]
+        assert len([1 for _vb, i in v._sel_items if hasattr(i, "toPlainText")]) == 2
+        drag(v, 1, 1, a, b, Qt.ControlModifier)
+        assert v.selected_channels() == [SIDS[1]]
+    finally:
+        v.clear_selection()
+        v.selectionMade.connect(win.show_selection_menu)
+        v.set_live(True)
+
+
+def test_selection_menu_works_on_the_selected_channels(win, engine, tmp_path, monkeypatch):
+    t1 = time.time() - 250
+    t0 = t1 - 100
+    sel = [SIDS[2], SIDS[0]]
+    m = win.build_selection_menu(t0, t1, sel[0], sel)
+    texts = [a.text() for a in m.actions() if a.text()]
+    assert "2 channels" in texts[0] and "Save on selection" in texts and "External tools" in texts
+    spec = win.open_spectrum(t0, t1, sel)
+    assert spec.sids == sel
+    spec.close()
+    psd = win.open_psd(t0, t1, "velocity", sel)
+    assert [c[0] for c in psd.curves] == sel
+    psd.close()
+    rep = win.open_report("peaks", t0, t1, sel[0], sel)
+    assert SIDS[1] not in rep.text.toPlainText() and SIDS[2] in rep.text.toPlainText()
+    rep.close()
+    # Save on selection: remembered per viewer, writes one file per selected channel
+    monkeypatch.setattr("seiszone.paths.exports_dir", lambda: str(tmp_path / "exports"))
+    win.set_save_on_selection(True)
+    assert win.state()["save_on_selection"] is True
+    files = win.save_selection(t0, t1, sel)
+    assert sorted(os.path.basename(f).split("__")[0] for f in files) == sorted(sel)
+    assert "Selection saved: 2 file(s)" in win.statusBar().currentMessage()
+    win.set_save_on_selection(False)
+
+
+def test_external_tools(win, engine, tmp_path, monkeypatch):
+    from seiszone.ui import external_tools as et
+    assert et.arguments("", ["a b.mseed", "c.mseed"], "F", 0, 1, ["X"]) == ["a b.mseed", "c.mseed"]
+    args = et.arguments('-o "{folder}" {files} --from {t0} --ids {sids}', ["f1", "f 2"], "C:/out x", 0, 60,
+                        ["A.B..HHZ", "A.B..HHN"])
+    assert args == ["-o", "C:/out x", "f1", "f 2", "--from", "1970-01-01T00:00:00.000", "--ids",
+                    "A.B..HHZ,A.B..HHN"]
+    monkeypatch.setattr("seiszone.paths.local_dir", lambda: str(tmp_path / "local"))
+    prog = tmp_path / "tool.exe"
+    prog.write_bytes(b"")
+    started = []
+    t1 = time.time() - 250
+    ok, text, args = et.run({"name": "Mine", "program": str(prog), "args": "{files}"}, engine, SIDS[:2], t1 - 60, t1,
+                            start=lambda p, a, d: started.append((p, a, d)) or (True, 1))
+    assert ok and "Mine started with 2 file(s)" in text
+    assert started[0][0] == str(prog) and len(started[0][1]) == 2 and all(os.path.isfile(f) for f in started[0][1])
+    ok, text, _a = et.run({"name": "Gone", "program": str(tmp_path / "nope.exe"), "args": ""}, engine, SIDS[:1],
+                          t1 - 60, t1, start=lambda *a: (True, 1))
+    assert not ok and "is not there" in text
+    engine.config.set_value("tools", [{"name": "Mine", "program": str(prog), "args": ""}, {"name": "", "program": "x"}])
+    assert et.tools(engine.config) == [{"name": "Mine", "program": str(prog), "args": ""}]
+    m = win.build_selection_menu(t1 - 60, t1, SIDS[0], SIDS[:1])
+    sub = [a.menu() for a in m.actions() if a.text() == "External tools"][0]
+    assert [a.text() for a in sub.actions() if a.text()] == ["Mine", "Set up external tools..."]
+    dlg = et.ExternalToolsDialog(engine.config)
+    assert dlg.entries() == [{"name": "Mine", "program": str(prog), "args": ""}]
+    dlg.add_tool(str(tmp_path / "other.exe"))
+    dlg.save()
+    assert [t["name"] for t in et.tools(engine.config)] == ["Mine", "other"]
+    engine.config.set_value("tools", [])
 
 
 def test_keys_are_on_the_window(win):

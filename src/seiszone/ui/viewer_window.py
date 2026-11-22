@@ -6,8 +6,11 @@ be open; MainWindow saves them (config "viewers") and opens them again at the ne
 The right-click menu has two parts, like the keyboard: the channel under the mouse (colour,
 scale, details, filter, offset, spectrogram, calibration, remove) and the whole window
 (background, lane lines, overlay, spectrogram size, sorting, channels, label, clear, no caption,
-duplicate). Shift+drag selects a time range and offers zoom, spectrum, export and the filter
-design. The status bar shows the time and value under the mouse.
+duplicate). Shift+drag selects a time range on the channels from the one where the drag starts
+to the one where it ends (Ctrl+drag: exactly those two, in the order picked) and offers save,
+zoom, save on selection, spectrum, PSD, peaks, orientation, strong motion, the calibrations,
+external tools and the filter design - each on the selected channels only. The status bar shows
+the time and value under the mouse.
 
 Keys: Up/Down amplitude, Left/Right window length, Ctrl+Left/Right scroll, Home amplitude x1,
 Pause/Space live, F filter, Ctrl+F filter design, N null offsets, Z zero offset, P spectrogram
@@ -51,6 +54,7 @@ class ViewerWindow(QMainWindow):
         self._caption = True
         self._was_maximized = False
         self.details = {}            # sid -> DetailsWindow
+        self.save_on_selection = bool(state.get("save_on_selection"))   # every selection saved at once
         self.setWindowIcon(theme.app_icon())
         self.view = WaveformView(engine, config, self, state)
         self.setCentralWidget(self.view)
@@ -83,6 +87,7 @@ class ViewerWindow(QMainWindow):
     def state(self):
         st = self.view.state()
         st["title"] = self._label
+        st["save_on_selection"] = self.save_on_selection
         if not self._caption and self.isFullScreen():
             st["geometry"] = ""     # full screen is not a size to come back to
         else:
@@ -335,25 +340,41 @@ class ViewerWindow(QMainWindow):
         m.exec(pos)
         m.deleteLater()
 
-    def build_selection_menu(self, t0, t1, sid):
-        """What to do with a Shift+drag selection."""
+    def build_selection_menu(self, t0, t1, sid, sids=None):
+        """What to do with a selection: sids are the selected channels (in their order; None:
+        every channel of the viewer), sid the first of them."""
+        sel = list(sids) if sids else None
         m = QMenu(self)
+        what = f"{len(sel)} channel{'s' if len(sel) != 1 else ''}" if sel else "all channels"
         head = m.addAction(f"{time.strftime('%H:%M:%S', time.gmtime(t0))} - "
-                           f"{time.strftime('%H:%M:%S', time.gmtime(t1))} UTC ({t1 - t0:.2f} s)")
+                           f"{time.strftime('%H:%M:%S', time.gmtime(t1))} UTC ({t1 - t0:.2f} s), {what}")
         head.setEnabled(False)
-        m.addAction("Save... (miniSEED)", lambda: self.open_export(t0, t1))
+        m.addAction("Save... (miniSEED)", lambda: self.open_export(t0, t1, sel))
         m.addAction("Zoom In", lambda: self.view.show_range(t0, t1))
+        a = m.addAction("Save on selection")
+        a.setCheckable(True)
+        a.setChecked(self.save_on_selection)
+        a.setToolTip("Every new selection is saved at once (miniSEED, to the Exports folder)")
+        a.toggled.connect(self.set_save_on_selection)
         m.addSeparator()
-        m.addAction("Spectrum...", lambda: self.open_spectrum(t0, t1))
-        m.addAction("PSD in Acceleration Units", lambda: self.open_psd(t0, t1, "acceleration"))
-        m.addAction("PSD in Velocity Units", lambda: self.open_psd(t0, t1, "velocity"))
-        m.addAction("Peak values (acceleration, velocity)", lambda: self.open_report("peaks", t0, t1, sid))
-        m.addAction("Relative Orientation", lambda: self.open_report("orientation", t0, t1, sid))
+        m.addAction("Spectrum...", lambda: self.open_spectrum(t0, t1, sel))
+        m.addAction("PSD in Acceleration Units", lambda: self.open_psd(t0, t1, "acceleration", sel))
+        m.addAction("PSD in Velocity Units", lambda: self.open_psd(t0, t1, "velocity", sel))
+        m.addAction("Peak values (acceleration, velocity)", lambda: self.open_report("peaks", t0, t1, sid, sel))
+        m.addAction("Relative Orientation", lambda: self.open_report("orientation", t0, t1, sid, sel))
         m.addSeparator()
-        m.addAction("Strong-motion analysis...", lambda: self.open_analysis("strong", t0, t1, sid))
-        m.addAction("Sinewave Calibration...", lambda: self.open_analysis("sine", t0, t1, sid))
-        m.addAction("Step Calibration...", lambda: self.open_analysis("step", t0, t1, sid))
-        m.addAction("Broadband Noise Calibration...", lambda: self.open_analysis("noise", t0, t1, sid))
+        m.addAction("Strong-motion analysis...", lambda: self.open_analysis("strong", t0, t1, sid, sel))
+        m.addAction("Sinewave Calibration...", lambda: self.open_analysis("sine", t0, t1, sid, sel))
+        m.addAction("Step Calibration...", lambda: self.open_analysis("step", t0, t1, sid, sel))
+        m.addAction("Broadband Noise Calibration...", lambda: self.open_analysis("noise", t0, t1, sid, sel))
+        m.addSeparator()
+        tm = m.addMenu("External tools")
+        from .external_tools import tools
+        for tool in tools(self.config):
+            tm.addAction(tool["name"], lambda t=tool: self.run_tool(t, t0, t1, sel))
+        if tm.actions():
+            tm.addSeparator()
+        tm.addAction("Set up external tools...", self.setup_tools)
         if sid:
             m.addSeparator()
             m.addAction(f"Use as noise in the filter design ({sid})",
@@ -362,9 +383,9 @@ class ViewerWindow(QMainWindow):
                         lambda: self.use_in_design("signal", sid, t0, t1))
         return m
 
-    def open_psd(self, t0, t1, want):
+    def open_psd(self, t0, t1, want, sids=None):
         from .analysis_dialogs import PsdDialog
-        sids = self._sids_or_message()
+        sids = self._pick(sids)
         if not sids:
             return None
         dlg = PsdDialog(self.view, sids, t0, t1, want, self)
@@ -372,15 +393,25 @@ class ViewerWindow(QMainWindow):
         dlg.show()
         return dlg
 
-    def open_analysis(self, kind, t0, t1, sid=None):
-        """Strong-motion analysis, or one of the calibration checks, of a selection."""
+    def open_analysis(self, kind, t0, t1, sid=None, sids=None):
+        """Strong-motion analysis, or one of the calibration checks, of a selection (sids: the
+        selected channels). A calibration with exactly two selected channels (Ctrl+drag) takes
+        the first picked as the calibration signal and the second as the sensor output; with one
+        or more than two it gets the rest of their stations from this viewer and the dialog
+        guesses the signal (it can be changed there)."""
         from .analysis_dialogs import CalibrationCheckDialog, StrongMotionDialog
-        sids = self._sids_or_message()
-        if not sids:
+        chosen = self._pick(sids)
+        if not chosen:
             return None
         if kind == "strong":
-            dlg = StrongMotionDialog(self.view, sids, t0, t1, sid, self)
+            dlg = StrongMotionDialog(self.view, chosen, t0, t1, sid, self)
         else:
+            if sids and len(chosen) == 2:
+                sids, sid = [chosen[1], chosen[0]], chosen[1]       # the output, then the signal
+            elif sids:
+                sids, sid = self._with_station(chosen), chosen[0]
+            else:
+                sids = chosen
             if len(sids) < 2:
                 self.statusBar().showMessage("A calibration needs two channels in this viewer: the sensor's "
                                              "output and the calibration signal", 8000)
@@ -390,24 +421,72 @@ class ViewerWindow(QMainWindow):
         dlg.show()
         return dlg
 
-    def open_report(self, kind, t0, t1, sid=None):
+    def open_report(self, kind, t0, t1, sid=None, sids=None):
+        """Peak values of the selected channels, or the relative orientation of their stations
+        (the N and E channels of those stations in this viewer; the first selected station is
+        the reference)."""
         from .analysis_dialogs import ReportDialog, orientation_report, peak_report
-        sids = self._sids_or_message()
-        if not sids:
+        chosen = self._pick(sids)
+        if not chosen:
             return None
         if kind == "peaks":
-            title, text = "Peak values", peak_report(self.view, sids, t0, t1)
+            title, text = "Peak values", peak_report(self.view, chosen, t0, t1)
         else:
-            title, text = "Relative orientation", orientation_report(self.view, sids, t0, t1, sid)
+            ref = chosen[0] if sids else sid
+            title, text = "Relative orientation", orientation_report(
+                self.view, self._with_station(chosen) if sids else chosen, t0, t1, ref)
         dlg = ReportDialog(title, text, self)
         dlg.setAttribute(Qt.WA_DeleteOnClose)
         dlg.show()
         return dlg
 
     def show_selection_menu(self, t0, t1, sid, pos):
-        m = self.build_selection_menu(t0, t1, sid)
+        """The menu of a selection; the selection stays drawn while it is open."""
+        sids = self.view.selected_channels() or None
+        if self.save_on_selection:
+            self.save_selection(t0, t1, sids)
+        m = self.build_selection_menu(t0, t1, sid, sids)
         m.exec(pos)
         m.deleteLater()
+        self.view.clear_selection()
+
+    def set_save_on_selection(self, on):
+        self.save_on_selection = bool(on)
+        self.stateChanged.emit()
+
+    def save_selection(self, t0, t1, sids=None):
+        """Save a selection at once (Save on selection): miniSEED, one file per channel, into the
+        Exports folder. Returns the written files."""
+        from ..core import export
+        sids = self._pick(sids)
+        if not sids:
+            return []
+        try:
+            written, _report = export.export_window(sids, t0, t1, paths.ensure(paths.exports_dir()), mode="separate",
+                                                    hub=self.engine.hub, log=lambda _m: None)
+        except (OSError, ValueError) as e:
+            self.statusBar().showMessage(f"Selection not saved: {e}", 8000)
+            return []
+        files = [p for p in written if p.lower().endswith(".mseed")]
+        self.statusBar().showMessage(f"Selection saved: {len(files)} file(s) in {paths.exports_dir()}"
+                                     if files else "Selection not saved: no data in it", 8000)
+        return files
+
+    def run_tool(self, tool, t0, t1, sids=None):
+        from .external_tools import run
+        sids = self._pick(sids)
+        if not sids:
+            return False
+        ok, text, _args = run(tool, self.engine, sids, t0, t1)
+        self.statusBar().showMessage(text, 10000)
+        return ok
+
+    def setup_tools(self):
+        from .external_tools import ExternalToolsDialog
+        dlg = ExternalToolsDialog(self.config, self)
+        dlg.setAttribute(Qt.WA_DeleteOnClose)
+        dlg.open()
+        return dlg
 
     # ------------------------------------------------------------------------------------
     # channel actions
@@ -530,9 +609,22 @@ class ViewerWindow(QMainWindow):
             self.statusBar().showMessage("Add channels to this viewer first", 5000)
         return sids
 
-    def open_spectrum(self, t0=None, t1=None):
+    def _pick(self, sids):
+        """The selected channels that are still in this viewer, else every channel of it."""
+        have = self.view.channels()
+        chosen = [s for s in (sids or []) if s in have]
+        return chosen or self._sids_or_message()
+
+    def _with_station(self, sids):
+        """The channels plus the other channels of their stations in this viewer (a calibration
+        signal, the N and E pair of a station), the chosen ones first."""
+        stations = {".".join(s.split(".")[:2]) for s in sids}
+        return list(sids) + [s for s in self.view.channels()
+                             if s not in sids and ".".join(s.split(".")[:2]) in stations]
+
+    def open_spectrum(self, t0=None, t1=None, sids=None):
         from .spectrum_view import SpectrumDialog
-        sids = self._sids_or_message()
+        sids = self._pick(sids)
         if not sids:
             return None
         if t0 is None:
@@ -542,8 +634,8 @@ class ViewerWindow(QMainWindow):
         dlg.show()
         return dlg
 
-    def open_export(self, t0=None, t1=None):
-        sids = self._sids_or_message()
+    def open_export(self, t0=None, t1=None, sids=None):
+        sids = self._pick(sids)
         if not sids:
             return None
         if t0 is None:
@@ -614,7 +706,8 @@ class ViewerWindow(QMainWindow):
     def show_keys(self):
         QMessageBox.information(self, "Viewer keys and mouse", (__doc__ or "").split("Keys:", 1)[-1].strip()
                                 + "\n\nMouse: wheel = amplitude, Shift+wheel = window length, Ctrl+wheel = "
-                                  "scroll in time, drag = pan (pauses), Shift+drag = select a time range, "
+                                  "scroll in time, drag = pan (pauses), Shift+drag = select a time range on the channels "
+                                  "dragged over, Ctrl+drag = on exactly two channels (first picked first), "
                                   "double-click = live, right-click = menu. Drag channels here from the "
                                   "Channels table of the main window.")
 

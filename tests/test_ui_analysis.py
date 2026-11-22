@@ -112,6 +112,14 @@ def test_sinewave_calibration_window(qapp, tmp_path):
         d.run()
         assert "two different channels" in d.text.toPlainText()
         d.close()
+        # Ctrl+drag from the calibration signal to the sensor: both picked in that order
+        d = w.open_analysis("sine", t0, t1, CAL, [CAL, OUT])
+        assert d.out_box.currentText() == OUT and d.cal_box.currentText() == CAL
+        d.close()
+        # one selected channel: the rest of its station comes from the viewer
+        d = w.open_analysis("step", t0, t1, OUT, [OUT])
+        assert d.out_box.currentText() == OUT and d.cal_box.currentText() == CAL
+        d.close()
         # one channel only: said in the status bar
         w.view.set_channels([OUT])
         assert w.open_analysis("sine", t0, t1, OUT) is None and "two channels" in w.statusBar().currentMessage()

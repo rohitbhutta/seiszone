@@ -46,7 +46,7 @@ port 80 (status, data streams, StationXML ~0.9 MB — about a minute over the sl
 Tests must never contact these or listen on 58772, 18000 or 18010 (the real Gecko connects to
 58772; the old service holds 18010; SeisZone's own server runs on 18000).
 
-## Status (2026-11-22, version 1.5.0)
+## Status (2026-11-22, version 1.6.0 built; 1.5.0 installed)
 
 * **2026-11-22 afternoon - multi-instrument check (report only, nothing changed yet):** see
   docs/reports/2026-11-22-multi-instrument-check.md and docs/history.md (the running work log -
@@ -147,6 +147,29 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   The REA/Ghidra work files are in `C:\D Drive\Rohit Claude App\rea-work`. Decompiling that
   viewer was declined: it breaks the standing rule above and probably its licence. A
   side-by-side comparison of the same data in both programs (behaviour only) was offered instead.
+
+### Version 1.6.0 (2026-11-22, built - not installed yet)
+
+* **Common scale per instrument.** The field complaint "with 5-6 instruments the band-pass only
+  works on the last instrument" was the Common amplitude scale (one range = the largest trace of
+  ALL channels; the others became flat lines). The filter always reached every channel. Common
+  is now shared per sensor (`waveform_view.instrument`: NET.STA.LOC + band/instrument code);
+  "Common, all channels" (`common_all`) keeps the old way. Proven with 60 min of 27 real channels.
+* **Selectors for a one-character location** (Minimus Lite / older Minimus use "1"): "1HH?" was
+  refused at every reconnect; now "1?HH?" (`seedlink_client.wire_selector` at sending, also for
+  old configs; `probe.selectors_for` makes it so). Checked read-only on Tuljapur.
+* **Selection menu like the third-party viewer's WaveView** (worked out from its User's Guide and
+  screenshots only, no code): Shift+drag selects the rows from the start row to the row under
+  the mouse; Ctrl+drag exactly two rows in the order picked (calibration: signal, then output);
+  the selection stays drawn (light band behind the traces, hatched over a gap) while the menu is
+  open; every tool works on the selected channels (`ViewerWindow._pick`; orientation and
+  calibration add the rest of the stations from the viewer, `_with_station`). New items: "Save
+  on selection" (tick, per viewer, state key `save_on_selection`; miniSEED into Exports) and
+  "External tools" (`ui/external_tools.py`, config "tools": name / program / args with {files}
+  {folder} {t0} {t1} {sids}; the selection written under %LOCALAPPDATA%\SeisZone\selections\).
+* **33 instruments added** from the IP sheet (tools/add_from_survey.py; docs/reports/). 38
+  sources, 149 channels. 10.8.0.137 is this PC - never add it.
+* Report, survey and plans: docs/reports/2026-11-22-*.md; running log: docs/history.md.
 
 ### Version 1.5.0 (2026-11-22)
 

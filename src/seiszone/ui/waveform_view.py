@@ -16,8 +16,10 @@ Per-channel settings (the viewer window's right-click menu): colour, scale facto
 locked offset (Null offsets leaves it), spectrogram on/off and its contrast.
 
 Mouse: the wheel zooms the amplitude, Shift+wheel steps the window length (both stay live),
-Ctrl+wheel scrolls in time and dragging pans (both pause); Shift+drag selects a time range
-(selectionMade: the viewer offers zoom, spectrum, export, filter design); a double-click goes
+Ctrl+wheel scrolls in time and dragging pans (both pause); Shift+drag selects a time range on
+the rows from the one where the drag starts to the one under the mouse, Ctrl+drag on exactly two
+rows in the order picked (selectionMade; selected_channels(); the selection stays drawn - hatched
+over a gap - until clear_selection(), which the viewer calls when its menu closes); a double-click goes
 live again. Channels dragged from the Channels table are added (CHANNEL_MIME).
 
 Speed is the main design constraint (12 channels x 200 sps x 60-minute windows, redrawn four
@@ -57,7 +59,7 @@ import weakref
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import QEvent, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QActionGroup, QColor, QCursor, QDoubleValidator, QFont, QIcon
+from PySide6.QtGui import QActionGroup, QBrush, QColor, QCursor, QDoubleValidator, QFont, QIcon
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QGraphicsGridLayout, QGraphicsWidget,
                                QLabel, QLineEdit, QMenu, QScrollArea, QSizePolicy, QStackedWidget, QToolBar, QToolButton,
                                QVBoxLayout, QWidget)
@@ -405,7 +407,10 @@ class WaveformView(QWidget):
         self._acur = None          # amplitude cursors: [sid, fraction, fraction] of its range, or None
         self._acur_lines = []
         self._moving_cursor = False
-        self._sel_items = []       # selection regions while Shift+dragging
+        self._sel_items = []       # selection regions while Shift+dragging (and while its menu is open)
+        self._sel_sids = []        # the channels they are drawn on
+        self._sel_pair = False     # Ctrl+drag: exactly two channels, in the order picked
+        self.selection = None      # (t0, t1, [channels]) of the last selection
         self._details = set()      # channels whose Details window shows mean / min / max lines
         self._design = None        # the open filter design dialog
         self._built = False
@@ -1756,33 +1761,84 @@ class WaveformView(QWidget):
         ev.accept()
         return True
 
+    def _drag_row(self, vb, pos):
+        """The trace whose row holds the mouse (pos in vb's coordinates; above the first row:
+        the first, below the last: the last), or None."""
+        rows = [tr for tr in self._traces if tr.vb.isVisible()]
+        if not rows:
+            return None
+        y = vb.mapToScene(pos).y()
+        for tr in rows:
+            r = tr.vb.sceneBoundingRect()
+            if r.top() <= y <= r.bottom():
+                return tr
+        return rows[0] if y < rows[0].vb.sceneBoundingRect().top() else rows[-1]
+
+    def _selected_rows(self, vb, ev):
+        """The traces a drag selects, in order: Shift = every row from the one where the drag
+        started to the one under the mouse now (top to bottom); Ctrl = those two rows only, in
+        the order they were picked (calibration: signal first, then the sensor output; relative
+        orientation: the reference first). Overlay: every channel (one row holds them all)."""
+        start = next((tr for tr in self._traces if tr.vb is vb), None)
+        if start is None or (self._overlay and len(self._traces) > 1):
+            return [tr for tr in self._traces if tr.sid]
+        here = self._drag_row(vb, ev.pos()) or start
+        if self._sel_pair:
+            return [start] if here is start else [start, here]
+        i, j = self._traces.index(start), self._traces.index(here)
+        return [tr for tr in self._traces[min(i, j):max(i, j) + 1] if tr.vb.isVisible()]
+
+    @staticmethod
+    def _selection_brush(gap):
+        """The selected part: a light band behind the traces (they stay readable on it),
+        hatched when a selected channel has a gap or an overlap there."""
+        c = QColor(theme.COLORS["text"])
+        c.setAlpha(80 if gap else 55)
+        return QBrush(c, Qt.BDiagPattern) if gap else QBrush(c)
+
+    def _has_gap(self, sid, lo, hi):
+        """True when the live buffer does not hold [lo, hi) of a channel in one piece."""
+        try:
+            segs = self.engine.hub.window(sid, lo, hi)
+        except Exception:  # noqa: BLE001 - drawing must never fail
+            return False
+        if len(segs) != 1:
+            return True
+        start, rate, y = segs[0]
+        return start > lo + 1.0 / rate or start + len(y) / rate < hi - 1.0 / rate
+
     def _on_drag(self, ev, vb):
-        """Shift+drag with the left button selects a time range (all channels); returns True
-        when the drag was taken."""
-        if ev.isStart():   # Shift at the start decides; letting it go during the drag changes nothing
+        """Shift+drag with the left button selects a time range on the rows from the one where
+        the drag started to the one under the mouse; Ctrl+drag selects it on exactly two rows
+        (the first and the one where the drag ends). Returns True when the drag was taken."""
+        if ev.isStart():   # the modifier at the start decides; letting it go changes nothing
             mods = ev.modifiers() if hasattr(ev, "modifiers") else Qt.NoModifier
-            self._selecting = ev.button() == Qt.LeftButton and bool(mods & Qt.ShiftModifier)
+            left = ev.button() == Qt.LeftButton
+            self._sel_pair = left and bool(mods & Qt.ControlModifier) and not bool(mods & Qt.ShiftModifier)
+            self._selecting = left and (bool(mods & Qt.ShiftModifier) or self._sel_pair)
         if not self._selecting:
             return False
         self._touched = time.monotonic()
         a = vb.mapToView(ev.buttonDownPos()).x()
         b = vb.mapToView(ev.pos()).x()
         lo, hi = min(a, b), max(a, b)
-        if ev.isStart() or not self._sel_items:
+        rows = self._selected_rows(vb, ev)
+        if ev.isStart() or not self._sel_items or [tr.sid for tr in rows] != self._sel_sids:
             self._clear_selection()
-            brush = QColor(theme.COLORS["accent"])
-            brush.setAlpha(60)
-            for tr in self._traces:
-                if tr.vb.isVisible():
-                    item = pg.LinearRegionItem((lo, hi), movable=False, brush=brush)
-                    item.setZValue(40)
-                    tr.vb.addItem(item, ignoreBounds=True)
-                    self._sel_items.append((tr.vb, item))
-                    count = pg.TextItem("", color=theme.COLORS["text"], anchor=(0, 0))   # samples selected
-                    count.setZValue(41)
-                    count.rate = tr.rate or self._rates.get(tr.sid, 0.0)
-                    tr.vb.addItem(count, ignoreBounds=True)
-                    self._sel_items.append((tr.vb, count))
+            self.selection = None
+            self._sel_sids = [tr.sid for tr in rows]
+            for tr in rows:
+                item = pg.LinearRegionItem((lo, hi), movable=False, brush=self._selection_brush(False))
+                item.setZValue(-5)                      # behind the trace
+                item.sid = tr.sid
+                tr.vb.addItem(item, ignoreBounds=True)
+                self._sel_items.append((tr.vb, item))
+                count = pg.TextItem("", color=theme.COLORS["text"], anchor=(0, 0))   # samples selected
+                count.setZValue(41)
+                count.rate = tr.rate or self._rates.get(tr.sid, 0.0)
+                count.sid = tr.sid
+                tr.vb.addItem(count, ignoreBounds=True)
+                self._sel_items.append((tr.vb, count))
         for svb, item in self._sel_items:
             if isinstance(item, pg.TextItem):
                 item.setText(str(int(round((hi - lo) * item.rate))) if item.rate else "")
@@ -1791,17 +1847,32 @@ class WaveformView(QWidget):
                 item.setRegion((lo, hi))
         if ev.isFinish():
             self._selecting = False
-            sid = next((tr.sid for tr in self._traces if tr.vb is vb), None)
-            QTimer.singleShot(0, self._clear_selection)
-            if hi - lo > 1e-3:
-                self.selectionMade.emit(lo, hi, sid, QCursor.pos())
+            if hi - lo > 1e-3 and self._sel_sids:
+                for _svb, item in self._sel_items:      # hatched where a channel has a gap
+                    if isinstance(item, pg.LinearRegionItem) and self._has_gap(item.sid, lo, hi):
+                        item.setBrush(self._selection_brush(True))
+                self.selection = (lo, hi, list(self._sel_sids))
+                # stays drawn until clear_selection() (the viewer: when its menu closes)
+                self.selectionMade.emit(lo, hi, self._sel_sids[0], QCursor.pos())
+            else:
+                self.clear_selection()
         ev.accept()
         return True
+
+    def selected_channels(self):
+        """The channels of the last selection (in their order), or [] when there is none."""
+        return list(self.selection[2]) if self.selection else []
+
+    def clear_selection(self):
+        """Remove the drawn selection (the viewer calls it when its menu closes)."""
+        self._clear_selection()
+        self.selection = None
 
     def _clear_selection(self):
         for vb, item in self._sel_items:
             vb.removeItem(item)
         self._sel_items = []
+        self._sel_sids = []
 
     def _on_xrange(self, *_args):
         if self._setting_range:

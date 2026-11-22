@@ -287,7 +287,7 @@ phase); `transfer_function(out, cal, rate) -> (f, h, coherence)` (Welch / cross 
 (seismometer: natural period and damping, free start time).
 Windows in `ui/analysis_dialogs.py`: `StrongMotionDialog(view, sids, t0, t1, sid, parent)` and
 `CalibrationCheckDialog(view, sids, t0, t1, kind, ref_sid, parent)` with kind sine / step / noise;
-opened by `ViewerWindow.open_analysis(kind, t0, t1, sid)` from the selection menu. The calibration
+opened by `ViewerWindow.open_analysis(kind, t0, t1, sid, sids)` from the selection menu. The calibration
 values (µV per count, resistor, coil constant) are kept per station in config `caltool`.
 
 ### 5.14 Engine — `core/engine.py`
@@ -350,8 +350,15 @@ menu in two parts (channel: Colour C, Scale S, Scale others to match Ctrl+S, Det
 submenu, Offset submenu, Locked offset, Spectrogram P, contrast, Calibration, Remove Del; window:
 Background, Lane lines L, Overlay O, Spectrogram size, All spectrograms Ctrl+P, Sort by,
 Channels, Label, Clear Ctrl+Del, No caption F11, Duplicate Ctrl+D, Spectrum / Export / Record /
-Picture). Shift+drag selection menu: zoom, spectrum, export, use as noise / signal in the
-filter design. Keys: Up/Down amplitude, Left/Right window, Ctrl+Left/Right scroll, Home, 1,
+Picture). Selection (1.6.0): Shift+drag = the rows from the start row to the row under the mouse,
+Ctrl+drag = exactly two rows in the order picked (`WaveformView._on_drag`, `selected_channels()`,
+`clear_selection()`; drawn behind the traces, hatched over a gap, kept while the menu is open).
+Selection menu (`ViewerWindow.build_selection_menu(t0, t1, sid, sids)`): Save, Zoom In, Save on
+selection (per viewer, state `save_on_selection`), Spectrum, PSD acc / vel, Peaks, Relative
+Orientation, Strong motion, Sinewave / Step / Broadband Noise Calibration, External tools
+(`ui/external_tools.py`, config "tools"), use as noise / signal in the filter design - all on the
+selected channels (`_pick`; orientation / calibration add their stations' other channels,
+`_with_station`; a Ctrl pair = calibration signal, then sensor output). Keys: Up/Down amplitude, Left/Right window, Ctrl+Left/Right scroll, Home, 1,
 Ctrl+1, Pause/Space, F, Ctrl+F, N, Z, +/-, Ctrl +/-, F5, Ctrl+Shift+P print, Ctrl+W close.
 
 `WaveformView(engine, config, parent=None, state=None)` settings: window (`WINDOWS` 10 s - 60

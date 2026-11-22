@@ -227,9 +227,16 @@ before SeisZone was started:
 * **Wheel**: larger / smaller traces (stays live). **Shift+wheel**: shorter / longer window.
   **Ctrl+wheel**: scroll back / forward in time (pauses).
 * **Drag**: move in time (pauses). **Double-click**: live again.
-* **Shift+drag**: select a time range (also while live). The number of samples selected is
-  shown on every channel, and a menu offers:
+* **Shift+drag**: select a time range (also while live) on the channels from the one where you
+  start to the one where you let go - drag down (or up) over several channels to take them all.
+  **Ctrl+drag**: exactly two channels - the one where you start and the one where you let go, in
+  that order (for a calibration: the calibration signal first, then the sensor output). The
+  selected part stays marked while the menu is open (hatched where a channel has a gap), the
+  number of samples is shown on each selected channel, and every item works on the selected
+  channels only:
   * **Save... (miniSEED)** - export the selection; **Zoom In** - show only the selection;
+  * **Save on selection** - when ticked, every new selection of this viewer is saved at once
+    (one miniSEED file per channel in Documents\SeisZone\Exports; the status bar says so);
   * **Spectrum...**, **PSD in Acceleration Units**, **PSD in Velocity Units** - the power
     spectral density of every channel (needs StationXML or a Calibration; else counts);
   * **Peak values** - peak, peak-to-peak, RMS, and for acceleration channels the peak in g and
@@ -241,6 +248,10 @@ before SeisZone was started:
     channel you choose a graph of its response spectrum (PSA, PSV or SD at 2, 5 or 10 %
     damping), its acceleration, velocity or displacement, or its Fourier spectrum;
   * **Sinewave / Step / Broadband Noise Calibration...** - see "Calibration checks" below;
+  * **External tools** - your own programs (an analysis package, a script): **Set up external
+    tools...** lists them (name, program, arguments). The selected channels are written as
+    miniSEED files into a new folder and the program is started with them; in the arguments
+    {files} stands for the files (the default), {folder}, {t0}, {t1} (UTC) and {sids};
   * use it as "noise" or "signal" in the filter design.
 * **Right-click** a channel: the menu below. The status bar shows the time and value under the
   mouse.
@@ -292,7 +303,8 @@ These compare the **calibration signal** fed into a sensor with the sensor's **o
 need both in the viewer: the sensor's channel and the channel that carries the calibration
 signal (the instrument must be sending that channel, and the calibration signal must be switched
 on at the instrument - SeisZone does not switch it on). Select the time of the calibration with
-Shift+drag, choose the check, then pick the two channels and press **Calculate**.
+Shift+drag, choose the check, then pick the two channels and press **Calculate** - or Ctrl+drag
+from the calibration signal's channel to the sensor's channel, and both are picked for you.
 
 | Check | Calibration signal | What you get |
 |-------|--------------------|--------------|

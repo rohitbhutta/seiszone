@@ -31,6 +31,8 @@ user interface warns). state.json is handled the same way (State.load_error / re
                "geometry": "<base64>"}],      # the viewer windows open at the last quit
   "filters": [{"name": "Teleseisms", "spec": {"hp": 0.02, "hp_order": 4, "lp": 0.1, "lp_order": 4}}],
   "calibration": {"SS.SMR03..HNZ": {"sensitivity": 407880.0, "units": "M/S**2"}},  # counts per unit
+  "tools": [{"name": "My analysis", "program": "C:\\Tools\\analysis.exe", "args": "{files}"}],
+                                      # external tools that get a viewer's selection (ui/external_tools.py)
   "ui": {"theme": "dark" | "light", "minimize_to_tray": true, "start_minimized": false,
          "start_with_windows": false, "geometry": "", "state": ""}
 }
@@ -69,6 +71,7 @@ DEFAULTS = {
     "viewers": [],
     "filters": [],
     "calibration": {},
+    "tools": [],
     "ui": {"theme": "dark", "minimize_to_tray": True, "start_minimized": False,
            "start_with_windows": False, "reopen_viewers": False, "geometry": "", "state": ""},
 }

@@ -4,6 +4,13 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-22 (evening, 2) - selection menu implemented; version 1.6.0
+
+* Shift+drag over several rows / Ctrl+drag for two channels; tools on the selected channels;
+  Save on selection; External tools (Set up external tools...). Tests added (viewer, analysis).
+* Version bumped to 1.6.0 (with the Common-per-instrument and selector fixes). See memory.md
+  "Version 1.6.0".
+
 ## 2026-11-22 16:11 - 33 instruments added
 
 * The user quit SeisZone from the tray; tools/add_from_survey.py write added 33 sources (38 in
