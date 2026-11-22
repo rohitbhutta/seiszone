@@ -698,6 +698,11 @@ def test_data_server_window(qapp, window, tmp_path):
         assert dlg.sl_clients.item(0, 0).text() == "127.0.0.1:50555" and dlg.sl_clients.item(0, 3).text() == "99"
         assert "streaming *" in dlg.sl_control.toPlainText()
         assert ":18000" in dlg.sl_how.text()
+        # the disk buffer: 2 days by default, its size, folder and how far back it reaches
+        assert dlg.sl_days.value() == 2
+        text = dlg.sl_buffer.text()
+        assert "Disk buffer: 2.6 GB" in text and "ServerBuffer" in text and "Kept 2 days" in text
+        assert "recordings are never touched" in text
         # a wrong SeedLink port shows its tab and says why; nothing is saved
         dlg.tabs.setCurrentIndex(0)
         dlg.sl_port.setText("58772")                      # the Gecko receiver's port
@@ -717,5 +722,16 @@ def test_data_server_window(qapp, window, tmp_path):
         dlg.sl_enabled.setChecked(True)
         dlg.sl_port.setText("18000")
         assert dlg.apply() and window.config.get("seedlink_server")["enabled"] is True
+        dlg.sl_days.setValue(5)
+        assert dlg.apply() and window.config.get("seedlink_server")["buffer_days"] == 5
+        dlg.refresh()
+        assert "Kept 5 days" in dlg.sl_buffer.text()
+        dlg.sl_days.setValue(0)
+        assert dlg.sl_days.text() == "off (memory only)"
+        assert dlg.apply() and window.config.get("seedlink_server")["buffer_days"] == 0
+        dlg.refresh()
+        assert dlg.sl_buffer.text().startswith("Disk buffer off")
+        dlg.sl_days.setValue(2)
+        assert dlg.apply()
     finally:
         dlg.close()

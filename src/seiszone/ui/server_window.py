@@ -5,7 +5,8 @@ page of the user's earlier viewer: switch, port, Clients, Control).
     Network Control > right-click > Add UDP Server > <this PC's IP>:1567.
   * SeedLink over TCP (core/seedlink_server.py, port 18000, on by default): for SeisZone,
     SeisComP, Swarm, ObsPy ... - Add source / server <this PC's IP>:18000. A SeedLink client asks
-    again for what it missed, so its data are backfilled after an outage.
+    again for what it missed, so its data are backfilled after an outage - from the disk buffer
+    (core/packet_store.py, "Keep on disk" days) also after hours away and across restarts.
 
 Settings are saved in config["gcf_server"] and config["seedlink_server"] (its "Listen on" and
 "Organization" stay in Settings > SeedLink server) and applied at once (Apply).
@@ -77,6 +78,36 @@ def _show_lines(box, lines, last):
 
 def _ip_list(ips, port):
     return " or ".join(f"<b>{ip}:{port}</b>" for ip in ips) if ips else f"<b>this PC's IP:{port}</b>"
+
+
+def _size(n):
+    if n is None:
+        return "?"
+    for unit, div in (("GB", 1024 ** 3), ("MB", 1024 ** 2), ("KB", 1024)):
+        if n >= div:
+            return f"{n / div:.1f} {unit}"
+    return f"{n} bytes"
+
+
+def buffer_text(b):
+    """One line about the disk buffer for the SeedLink tab."""
+    if not b:
+        return ""
+    if b.get("error"):
+        return f"Disk buffer not available: {b['error']}. Packets are kept in memory only (about the last 1-2 hours)."
+    if not b.get("enabled"):
+        return ("Disk buffer off: only the packets in memory (about the last 1-2 hours) can be sent again, "
+                "and none after SeisZone restarts.")
+    days = float(b.get("days") or 0)
+    text = f"Disk buffer: {_size(b.get('bytes'))} in {b.get('folder', '')}"
+    if b.get("oldest"):
+        text += time.strftime(", from %d-%m-%Y %H:%M UTC", time.gmtime(b["oldest"]))
+    text += (f". Kept {days:g} day{'s' if days != 1 else ''}: other computers catch up on that much, "
+             "also after SeisZone restarts, and the viewers show it. Older files are removed "
+             "(recordings are never touched).")
+    if b.get("paused"):
+        text += " Paused: less than 2 GB free on the disk."
+    return text
 
 
 class DataServerWindow(QDialog):
@@ -161,22 +192,38 @@ class DataServerWindow(QDialog):
         self.sl_enabled.setChecked(bool(s.get("enabled", True)))
         self.sl_port = QLineEdit(str(s.get("port") or 18000))
         self.sl_port.setFixedWidth(90)
+        self.sl_days = QSpinBox()
+        self.sl_days.setRange(0, 30)
+        self.sl_days.setSuffix(" days")
+        self.sl_days.setSpecialValueText("off (memory only)")
+        self.sl_days.setFixedWidth(170)
+        try:
+            self.sl_days.setValue(int(round(float(s.get("buffer_days", 2)))))
+        except (TypeError, ValueError):
+            self.sl_days.setValue(2)
+        self.sl_days.setToolTip("Every packet is also kept on disk this long, so other computers can catch up "
+                                "after an outage (also after SeisZone restarts) and the viewers show older data. "
+                                "About 1.5 GB per day with the current stations.")
         form = QFormLayout()
         form.addRow("", self.sl_enabled)
         row = QHBoxLayout()
         row.addWidget(self.sl_port)
         row.addStretch(1)
         form.addRow("TCP port", row)
+        form.addRow("Keep on disk", self.sl_days)
         self.sl_state = QLabel()
         self.sl_state.setWordWrap(True)
         self.sl_how = QLabel()
         self.sl_how.setWordWrap(True)
         self.sl_how.setTextFormat(Qt.RichText)
+        self.sl_buffer = QLabel()
+        self.sl_buffer.setWordWrap(True)
         self.sl_clients = _table(SL_COLUMNS)
         self.sl_control = _log_box()
         lay = QVBoxLayout(w)
         lay.addLayout(form)
         lay.addWidget(self.sl_state)
+        lay.addWidget(self.sl_buffer)
         lay.addWidget(self.sl_how)
         lay.addWidget(QLabel("Clients"))
         lay.addWidget(self.sl_clients, 2)
@@ -205,7 +252,8 @@ class DataServerWindow(QDialog):
                                            "(the usual SeedLink port is 18000).")
         old = self.config.get("gcf_server") or {}
         sl_old = dict(self.config.get("seedlink_server") or {})
-        sl_old.update({"enabled": self.sl_enabled.isChecked(), "port": sl_port})
+        sl_old.update({"enabled": self.sl_enabled.isChecked(), "port": sl_port,
+                       "buffer_days": self.sl_days.value()})
         sl_old.setdefault("bind", "0.0.0.0")
         sl_old.setdefault("organization", "SeisZone")
         return {"gcf_server": {"enabled": self.enabled.isChecked(), "bind": old.get("bind") or "0.0.0.0",
@@ -283,6 +331,9 @@ class DataServerWindow(QDialog):
                         c["ok"])
         else:
             self._state(self.sl_state, "The SeedLink server is off.", c["muted"])
+        b = st.get("buffer") or {}
+        self.sl_buffer.setText(buffer_text(b))
+        self.sl_buffer.setStyleSheet(f"color: {c['danger'] if b.get('error') or b.get('paused') else c['text']};")
         _fill(self.sl_clients, [(p.get("peer", ""), p.get("stations") or "-",
                                  time.strftime(WHEN, time.localtime(p.get("since") or 0)), str(p.get("packets", 0)))
                                 for p in st.get("peers") or []])

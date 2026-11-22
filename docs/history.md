@@ -4,6 +4,40 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 02:00-03:00 - 1.9.0: SeedLink server disk buffer (same pull request)
+
+* Asked: "fix the SeedLink backfill in any kind of option", plan first. Measured before planning
+  (SeisZone's own SeedLink server read on this PC with ObsPy and raw sessions):
+  * 36 SeedLink stations: no gaps in the last hour, also across the disconnects 00:37-00:50
+    (resume + TIME fetch work). (ObsPy's helper fails on 1-character location codes with "*":
+    an ObsPy limit, "??"/"???" works - not a SeisZone fault.)
+  * XX.PRAT / XX.SIRA (the GCF-UDP IIT instruments): real gaps (10 s, 60-83 s): no backfill.
+  * SeisZone's SeedLink server reached back only ~1 h 40 min (200,000 packets in memory) and
+    nothing across a SeisZone restart: clients of this PC could not backfill longer outages.
+* Plan approved ("Yes, do all of it"):
+  1. Read-only probe of 10.8.0.121:18000 and 10.8.0.163:18000: nothing answered - they stay on GCF
+     (SeedLink may be switchable in their web pages; then add them with port 18000).
+  2. core/packet_store.py PacketStore: every packet also on disk (packets/<YYYYMMDD>_<HH>.slp:
+     seq + length + raw, per arrival hour; and <NET.STA>/<day>/<NET.STA>_<date>_<HHMM>_<HHMM>.mseed
+     per station and data hour). Default 2 days (config seedlink_server.buffer_days, 0 = off),
+     folder %LOCALAPPDATA%\SeisZone\ServerBuffer (not synced; another config: beside it). Kept
+     below MAX_SPAN 0x700000 sequence numbers (24-bit half range). Purge every 10 min in a worker
+     thread (old files only; recordings never touched); pauses below 2 GB free.
+     hub.first_seq / has_seq / packets_from / seq_for_time reach into it; the server starts TIME
+     requests at the hour of the begin time and warns "fell behind" only for packets really gone.
+     Engine: numbers continue after the newest packet on disk (+ SEQ_SAFETY_GAP); status
+     server.buffer; the buffer folder is one of recording_folders() (viewers) and Export's folders.
+  3. Viewers show data older than the live buffer from it (RecordedData reads it like a recording).
+  4. Data server window, SeedLink tab: "Keep on disk" days (0 = off) and a line with size, folder,
+     oldest time. Picture docs/reports/2026-11-23-data-server-seedlink-buffer.png.
+* GCF gap recovery findings (v45 trailer: version 0x2d, 3-byte block number, source name;
+  "Request oldest v45" / "Request block N" over TCP on the same port; bytes unknown):
+  docs/reports/2026-11-23-gcf-gap-recovery-findings.md. The user then chose the SeedLink work.
+* New tests: tests/test_packet_store.py (8: round trip + restart, skipped numbers, purge, hub,
+  a client away for hours across a SeisZone restart in both resume styles, TIME start, viewers);
+  engine (buffer default, status, folders, numbers after a crash, off); Data server window.
+* Version 1.9.0.
+
 ## 2026-11-23 night - 1.8.1 on branch feature/backfill-seedlink-server (pull request)
 
 * Asked (2 screenshots): "live data viewing backfill" like the recording backfill, with the

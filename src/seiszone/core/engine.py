@@ -16,9 +16,12 @@ program, see core/ports.py) and tried again every LISTEN_RETRY seconds (with the
 listeners were opened with: a settings change is applied by apply_settings only), so a port
 that becomes free is taken within a few seconds; it never stops the engine.
 
-The SeedLink server's packet numbers continue from the previous run (state "server_seq" plus
-SEQ_SAFETY_GAP for the packets numbered after the last save), so a number a downstream client
-saved is never given to another packet after SeisZone restarts.
+The SeedLink server's packet numbers continue from the previous run (state "server_seq" or the
+newest packet in the disk buffer, plus SEQ_SAFETY_GAP for the packets numbered after the last
+save), so a number a downstream client saved is never given to another packet after SeisZone
+restarts. The disk buffer (core/packet_store.py, config seedlink_server.buffer_days) keeps the
+packets for days: SeedLink clients of this PC backfill from it, and the viewers read its
+per-station files like a recording folder.
 """
 
 import asyncio
@@ -36,6 +39,7 @@ from .gcf_link import GcfLink
 from .gecko import GeckoReceiver
 from .hub import DataHub
 from .links import RECEIVING
+from .packet_store import PacketStore
 from .recorder import RecordingManager
 from .seedlink_client import SeedLinkClient
 from .gcf_server import GcfServer
@@ -54,6 +58,8 @@ LISTEN_RETRY = 3.0        # s between new tries of a listener port that could no
 ADDR_IN_USE = {errno.EADDRINUSE, 10048}   # 10048 = WSAEADDRINUSE
 ADDR_DENIED = {errno.EACCES, 10013}       # 10013 = WSAEACCES (port excluded / reserved by Windows)
 SEQ_SAFETY_GAP = 100000   # server packet numbers skipped at start (numbered after the last save)
+STORE_FLUSH_EVERY = 5.0   # s between flushes of the disk buffer
+STORE_PURGE_EVERY = 600.0  # s between removals of what is older than the buffer keeps
 
 
 def listen_error(port, exc, owner=None):
@@ -111,9 +117,17 @@ class Engine:
         self.state = state if state is not None else cfg_mod.State()
         self.hub = hub if hub is not None else DataHub()
         self.hub.set_buffer_seconds(self._buffer_seconds())
+        self.store = None             # PacketStore (the SeedLink server's disk buffer) or None
+        self._store_cfg = None        # (days, folder) it was opened with
+        self._store_error = ""
+        self._open_store()
         saved = self.state.get("server_seq")
-        if isinstance(saved, int) and not self.hub.packets:
-            self.hub.seq = (saved + SEQ_SAFETY_GAP) & 0xFFFFFF
+        last = self.store.last_seq() if self.store is not None else None
+        if not self.hub.packets and (isinstance(saved, int) or last is not None):
+            base = saved if isinstance(saved, int) else last
+            if last is not None and ((last - base) & 0xFFFFFF) < 0x800000:
+                base = last               # the disk holds newer packets than the state says
+            self.hub.seq = (base + SEQ_SAFETY_GAP) & 0xFFFFFF
         self._saved_seq = None        # hub.seq last written to the state
         self.responses = ResponseStore()
         self.recorder = RecordingManager(self.hub, self.state, self.config.get("recording", "folder"))
@@ -146,6 +160,9 @@ class Engine:
         self._gs_cfg = None           # (enabled, bind, port, max_rate) it was opened with
         self._last_status_log = 0.0
         self._last_retry = 0.0
+        self._last_flush = 0.0
+        self._last_purge = 0.0
+        self._purging = False
 
     # ================================================================== life cycle
     def start(self):
@@ -156,6 +173,9 @@ class Engine:
             if not self._recorder_open:   # started again after stop(): a fresh recorder
                 self.recorder = RecordingManager(self.hub, self.state, self.config.get("recording", "folder"))
                 self._recorder_open = True
+            if self.store is None or self.store.closed:
+                self._store_cfg = None
+                self._open_store()
             if not self._history_loaded:
                 self._history_loaded = True
                 try:
@@ -224,7 +244,80 @@ class Engine:
             folders += [s.get("folder") for s in self.recorder.sessions() if s.get("folder")]
         except Exception:
             pass
+        if self.store is not None:   # the SeedLink server's disk buffer: every channel, days back
+            folders.append(self.store.folder)
         return list(dict.fromkeys(f for f in folders if f))
+
+    # ================================================================== the disk buffer
+    def _store_settings(self):
+        s = self.config.get("seedlink_server") or {}
+        try:
+            days = max(0.0, float(s.get("buffer_days", 2)))
+        except (TypeError, ValueError):
+            days = 2.0
+        folder = str(s.get("buffer_folder") or "").strip()
+        if not folder:   # the user's own config: LOCALAPPDATA; another one (a trial, a test): beside it
+            path = getattr(self.config, "path", None)
+            own = paths.config_file()
+            if path and os.path.normcase(os.path.abspath(path)) != os.path.normcase(os.path.abspath(own)):
+                folder = os.path.join(os.path.dirname(os.path.abspath(path)), "ServerBuffer")
+            else:
+                folder = paths.server_buffer_dir()
+        return days, folder
+
+    def _open_store(self):
+        """Open, re-open or close the disk buffer as the settings say (any thread, before the
+        engine runs, or the engine thread)."""
+        days, folder = self._store_settings()
+        if (days, folder) == self._store_cfg and (self.store is not None or days <= 0):
+            return
+        old = self.store
+        if old is not None and old.folder == folder and days > 0 and not old.closed:
+            old.days = days               # only the number of days changed
+            self._store_cfg = (days, folder)
+            log.info("SeedLink server buffer: keeps %g day(s) in %s", days, folder)
+            return
+        if old is not None:
+            self.hub.store = None
+            self.store = None
+            old.close()
+        self._store_cfg = (days, folder)
+        self._store_error = ""
+        if days <= 0:
+            log.info("SeedLink server buffer: off (packets kept in memory only)")
+            return
+        try:
+            self.store = PacketStore(folder, days)
+        except OSError as e:
+            self._store_error = f"cannot use {folder} ({e.strerror or e})"
+            log.warning("SeedLink server buffer: %s - packets kept in memory only", self._store_error)
+            return
+        self.hub.store = self.store
+        st = self.store.status()
+        log.info("SeedLink server buffer: %g day(s) in %s (%s)", days, folder,
+                 "empty" if st["oldest"] is None else
+                 "from " + time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(st["oldest"])))
+
+    def _store_status(self):
+        days, folder = self._store_cfg or self._store_settings()
+        if self.store is None:
+            return {"enabled": False, "days": days, "folder": folder, "error": self._store_error,
+                    "bytes": None, "oldest": None}
+        st = self.store.status()
+        st.update({"enabled": True, "error": ""})
+        return st
+
+    def _purge_store(self):
+        store = self.store
+        try:
+            if store is not None:
+                n = store.purge()
+                if n:
+                    log.info("SeedLink server buffer: %d file(s) older than %g day(s) removed", n, store.days)
+        except Exception:
+            log.exception("SeedLink server buffer: clean-up failed")
+        finally:
+            self._purging = False
 
     def _history_path(self):
         """The user's own config: LOCALAPPDATA\\SeisZone\\view_history.npz; another config file
@@ -298,6 +391,8 @@ class Engine:
         await self._close_server()
         self._close_gcf_server()
         self._save_seq()
+        if self.store is not None:
+            self.store.close()
         self.state.flush()
 
     def _save_seq(self):
@@ -415,7 +510,8 @@ class Engine:
                        "error": self._sl_error, "owner": s_owner, "owner_pid": s_pid,
                        "clients": srv.clients if srv else 0,
                        "peers": [dict(p) for p in list(srv.peers)] if srv else [],
-                       "control": list(srv.control) if srv else []},
+                       "control": list(srv.control) if srv else [],
+                       "buffer": self._store_status()},
             "gcf_server": self._gcf_server_status(),
             "started": self.started if self.running else None,
             "clock": utc_clock.clock.status(),
@@ -668,6 +764,7 @@ class Engine:
                 await self._open_gcf_server()
             elif self.gcf_server is not None:   # the SeedLink port it names may have changed
                 self.gcf_server.seedlink_port = self._sl_port if self._sl_server is not None else None
+            self._open_store()
 
     # ================================================================== housekeeping
     async def _housekeeping(self):
@@ -677,6 +774,13 @@ class Engine:
                 self._save_seq()
                 self.state.maybe_flush()
                 now = time.time()
+                if self.store is not None and now - self._last_flush >= STORE_FLUSH_EVERY:
+                    self._last_flush = now
+                    self.store.flush()
+                if self.store is not None and not self._purging and now - self._last_purge >= STORE_PURGE_EVERY:
+                    self._last_purge = now
+                    self._purging = True
+                    asyncio.get_running_loop().run_in_executor(None, self._purge_store)
                 if now - self._last_retry >= LISTEN_RETRY:
                     self._last_retry = now
                     await self._retry_listeners()

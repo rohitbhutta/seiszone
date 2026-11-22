@@ -460,6 +460,22 @@ def test_server_packet_numbers_continue_after_a_restart(tmp_path, remote):
         e.stop()
     saved = State(state.path).get("server_seq")
     assert saved == e.hub.seq and saved > 40 + engine_mod.SEQ_SAFETY_GAP
+    # the disk buffer (on by default) kept every packet: the viewers and Export read its folder
+    buf = e.status()["server"]["buffer"]
+    assert buf["enabled"] and buf["days"] == 2 and buf["last_seq"] == e.hub.seq
+    assert buf["folder"] == str(tmp_path / "ServerBuffer") and buf["folder"] in e.recording_folders()
+    # a state saved before the last packets (a crash): the numbers go on after the disk's newest
+    state2 = State(str(tmp_path / "state2.json"))
+    state2.set("server_seq", 40)
+    e2 = Engine(cfg, state2)
+    assert e2.hub.seq == buf["last_seq"] + engine_mod.SEQ_SAFETY_GAP
+    assert e2.hub.first_seq() == buf["first_seq"]          # and the old packets are served
+    e2.store.close()
+    # switched off: memory only, nothing kept on disk any more
+    cfg.update_section("seedlink_server", {"buffer_days": 0})
+    e3 = Engine(cfg, State(str(tmp_path / "state3.json")))
+    assert e3.store is None and e3.hub.store is None
+    assert not e3.status()["server"]["buffer"]["enabled"]
 
 
 def test_listener_retry_does_not_swallow_a_settings_change(make_engine):

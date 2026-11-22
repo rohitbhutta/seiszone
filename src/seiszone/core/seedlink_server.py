@@ -18,10 +18,12 @@ Protocol (SeedLink 3.1, as libslink and standard servers use it):
 
 Data packets are b"SL%06X" % seq + 512-byte record. "DATA n" starts AT packet n (libslink
 sends last received + 1), so a client that was away gets exactly what it missed while the
-ring still holds it. An n that is not held (pushed out of the ring, or a number of an earlier
-run - the engine keeps the numbers unique across runs) starts at the oldest packet held (that
-ends after the begin time, if one was given): resending is harmless, live only would lose
-data. Without a sequence number streaming is live only, unless a begin time was given (then
+ring still holds it. With the disk buffer (core/packet_store.py) "the ring" reaches back days and
+survives restarts, so a client that was away for hours resumes where it stopped. An n that is not
+held (pushed out, or a number of an earlier run - the engine keeps the numbers unique across
+runs) starts at the oldest packet held (that ends after the begin time, if one was given; on
+disk the search starts at the hour of the begin time): resending is harmless, live only would
+lose data. Without a sequence number streaming is live only, unless a begin time was given (then
 from the oldest held packet ending after it). A client that cannot keep up and falls out of
 the ring continues at the oldest packet held. Commands may end in CR, LF or CR LF (libslink
 and ObsPy send a bare CR). Everything runs in the engine's asyncio loop and never blocks it:
@@ -427,6 +429,10 @@ class SeedLinkServer:
             if ((req.seq - hub.next_seq()) & MASK) < 0x800000:
                 return hub.next_seq()   # not arrived yet: the client is up to date
         if req.seq is not None or req.begin is not None or req.fetch or fetch:
+            if req.begin is not None and hasattr(hub, "seq_for_time"):
+                at = hub.seq_for_time(req.begin)   # disk buffer: start near the begin time
+                if at is not None:
+                    return at
             first = hub.first_seq()
             return hub.next_seq() if first is None else first
         return hub.next_seq()
@@ -508,7 +514,7 @@ class SeedLinkServer:
                 wake.clear()
                 pkts, after = hub.packets_from(next_seq, BATCH_PACKETS)
                 if pkts:
-                    if pkts[0][0] != next_seq:
+                    if pkts[0][0] != next_seq and not hub.has_seq(next_seq):
                         log.warning("SeedLink server: client %s fell behind; continuing at the oldest "
                                     "packet held (%06X)", c.info["peer"], pkts[0][0])
                         for r in reqs:

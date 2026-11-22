@@ -17,7 +17,8 @@ user interface warns). state.json is handled the same way (State.load_error / re
      "details": {...what the instrument probe found: hostname, serial, firmware, lat, lon...}}
   ],
   "gecko":   {"enabled": true, "bind": "0.0.0.0", "ports": [58772], "rename": {}},   # Kelunji Gecko links connect IN
-  "seedlink_server": {"enabled": true, "bind": "0.0.0.0", "port": 18000, "organization": "SeisZone"},
+  "seedlink_server": {"enabled": true, "bind": "0.0.0.0", "port": 18000, "organization": "SeisZone",
+                      "buffer_days": 2, "buffer_folder": ""},   # packets kept on disk; "" = ServerBuffer
   "recording": {"folder": "<Documents>\\SeisZone\\Recordings", "file_minutes": 60, "layout": "channel"},
   "buffer_minutes": 60,                          # live data kept in memory per channel
   "time": {"check": true, "servers": []},        # check the PC clock (SNTP); [] = the built-in servers
@@ -63,7 +64,8 @@ DEFAULTS = {
     "version": CONFIG_VERSION,
     "sources": [],
     "gecko": {"enabled": True, "bind": "0.0.0.0", "ports": [58772], "rename": {}},
-    "seedlink_server": {"enabled": True, "bind": "0.0.0.0", "port": 18000, "organization": "SeisZone"},
+    "seedlink_server": {"enabled": True, "bind": "0.0.0.0", "port": 18000, "organization": "SeisZone",
+                        "buffer_days": 2, "buffer_folder": ""},
     "gcf_server": {"enabled": False, "bind": "0.0.0.0", "port": 1567, "max_rate": 1000},
     "recording": {"folder": "", "file_minutes": 60, "layout": "channel"},
     "buffer_minutes": 60,

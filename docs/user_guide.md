@@ -336,8 +336,11 @@ scale factor and offset when they are set. Breaks in a trace are gaps in the dat
 (SeedLink instruments always do: SeisZone asks for everything since the last record it got), an
 open viewer draws those data into the gap within about two seconds, like the recording gets them.
 You do not need to reopen the viewer. Data older than the live buffer (Settings > Display) are
-shown from the recordings. Instruments pulled over GCF UDP (port 1567) cannot send missed data
-again yet: their gaps stay.
+shown from the **disk buffer** of the SeedLink server (the last 2 days of every channel, see "The
+data server") and from your recordings - also when nothing is being recorded. Instruments pulled
+over GCF UDP (port 1567) cannot send missed data again yet: their gaps stay. If such an
+instrument can also send SeedLink (a switch in its own web page), add it again with port 18000:
+then it backfills like the others.
 
 ## 8. Recording
 
@@ -440,6 +443,14 @@ earlier viewer's "My Server" page. It has two tabs, one per server:
   Stations, Connected since, Packets sent) and what happened (Control). Tick or untick it, or
   type another port, and press **Apply**. Listen on and Organization stay in Settings >
   SeedLink server.
+* **Keep on disk** (SeedLink tab, default **2 days**): every packet is also written to
+  `%LOCALAPPDATA%\SeisZone\ServerBuffer`, like the earlier viewer's "Server Buffer". A computer
+  that reads this PC and was switched off for hours - even while SeisZone itself restarted -
+  gets everything it missed when it connects again, and the viewers show data that old. The tab
+  shows the space used (about 1.5 GB per day with 38 instruments) and how far back it reaches.
+  Older files are removed by themselves; this folder is not a recording and your recordings are
+  never touched. "off (memory only)" keeps only the last 1-2 hours, in memory. Below 2 GB free
+  disk space the buffer pauses until there is room again.
 
 GCF over UDP, step by step:
 

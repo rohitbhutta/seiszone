@@ -4,6 +4,7 @@
     %APPDATA%\\SeisZone\\state.json         SeedLink resume positions, recordings in progress
     %APPDATA%\\SeisZone\\stationxml\\       StationXML per NET.STA (instrument responses)
     %LOCALAPPDATA%\\SeisZone\\logs\\         program log (rotated)
+    %LOCALAPPDATA%\\SeisZone\\ServerBuffer\\ the SeedLink server's packets of the last days (not synced)
     %USERPROFILE%\\Documents\\SeisZone\\    recordings and exports (default, changeable)
 
 SEISZONE_HOME (environment) moves everything below one folder - used by the tests.
@@ -43,6 +44,10 @@ def stationxml_dir():
 
 def log_dir():
     return os.path.join(local_dir(), "logs")
+
+
+def server_buffer_dir():
+    return os.path.join(local_dir(), "ServerBuffer")
 
 
 def documents_dir():

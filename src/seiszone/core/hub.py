@@ -12,7 +12,9 @@ newest data (GPS glitch, firmware time jump) still goes to the packet ring and t
 cannot wipe a channel's live data or pin its latest time in the future.
 
 The packet ring keeps only the raw bytes of each record (the decoded samples are dropped once
-they are in the live buffer). Sequence numbers wrap at 24 bits; the engine starts them where
+they are in the live buffer). With a PacketStore (hub.store, core/packet_store.py) every packet
+is also kept on disk for days, and the sequence-number methods (first_seq, has_seq,
+packets_from, seq_for_time) reach back into it where the ring in memory ends. Sequence numbers wrap at 24 bits; the engine starts them where
 the previous run ended (plus a safety gap), so a number a SeedLink client saved is never
 reused for another packet after a restart.
 
@@ -199,6 +201,7 @@ class DataHub:
         self.decode_errors = 0
         self.future_rejected = 0    # records with a time far ahead (kept out of the live data)
         self._future_logged = 0.0
+        self.store = None           # PacketStore: the packets on disk (None: memory only)
 
     # ------------------------------------------------------------------ writing (engine thread)
     def add_record(self, rec, source_id=""):
@@ -221,7 +224,8 @@ class DataHub:
         utc = utc_clock.now()    # true UTC: compared with the data's own time stamps
         with self.lock:
             self.seq = (self.seq + 1) & 0xFFFFFF
-            self.packets.append((self.seq, rec))
+            seq = self.seq
+            self.packets.append((seq, rec))
             sid = rec.sid
             st = self.stats.get(sid)
             if (st is not None and rec.start > utc + FUTURE_LIMIT
@@ -253,6 +257,9 @@ class DataHub:
                 self.buffers[sid].add(rec.start, samples)
                 self.summaries[sid].add(rec.start, rec.rate, samples)
             rec._samples = None   # the ring keeps raw bytes only; the live buffer holds a copy
+        store = self.store
+        if store is not None:
+            store.append(seq, rec)
         for ev in list(self._waiters):
             ev.set()
         for fn in list(self.listeners):
@@ -298,13 +305,42 @@ class DataHub:
         self._waiters.discard(ev)
 
     def first_seq(self):
+        """The oldest packet number held: on disk (store) or else in the memory ring."""
+        store = self.store
+        disk = store.first_seq() if store is not None else None
+        with self.lock:
+            mem = self.packets[0][0] if self.packets else None
+        if disk is None:
+            return mem
+        if mem is None:
+            return disk
+        return disk if ((mem - disk) & 0xFFFFFF) < 0x800000 else mem
+
+    def _mem_first(self):
         with self.lock:
             return self.packets[0][0] if self.packets else None
 
     def packets_from(self, next_seq, limit=2000):
-        """Packets with sequence >= next_seq (24-bit wrapping), oldest first, at most `limit`.
-        If next_seq is older than the ring holds, starts at the oldest packet held.
-        Returns (list[(seq, Record)], next_seq_after_them)."""
+        """Packets with sequence >= next_seq (24-bit wrapping), oldest first, at most `limit`:
+        from the disk store while next_seq is older than the memory ring, then from the ring.
+        If next_seq is older than anything held, starts at the oldest packet held; numbers never
+        given out (the gap after a restart) are skipped. Returns (list[(seq, Record)],
+        next_seq_after_them)."""
+        oldest = self.first_seq()
+        if oldest is None:
+            return [], next_seq
+        if ((next_seq - oldest) & 0xFFFFFF) >= 0x800000:   # older than all held (fell behind)
+            next_seq = oldest
+        mem_first = self._mem_first()
+        store = self.store
+        if store is not None and (mem_first is None
+                                  or ((next_seq - oldest) & 0xFFFFFF) < ((mem_first - oldest) & 0xFFFFFF)):
+            out, after = store.read_from(next_seq, limit, stop_before=mem_first)
+            if out:
+                return out, after
+            if mem_first is None:
+                return [], next_seq
+            next_seq = mem_first        # nothing more on disk before the ring: go on in memory
         with self.lock:
             if not self.packets:
                 return [], next_seq
@@ -317,12 +353,23 @@ class DataHub:
             out = [self.packets[i] for i in range(offset, min(len(self.packets), offset + limit))]
         return out, (out[-1][0] + 1) & 0xFFFFFF
 
+    def seq_for_time(self, t):
+        """Where a request for data from time t can start: the first packet on disk that
+        arrived after t (less a margin), else None (start at the oldest packet held)."""
+        store = self.store
+        return store.seq_at_time(t) if store is not None else None
+
     def next_seq(self):
         """Sequence number the next packet will get."""
         with self.lock:
             return (self.seq + 1) & 0xFFFFFF
 
     def has_seq(self, seq):
+        """True when seq is between the oldest packet held (disk or memory) and the newest."""
+        store = self.store
+        if store is not None and store.first_seq() is not None:
+            oldest = self.first_seq()
+            return ((seq - oldest) & 0xFFFFFF) < ((self.next_seq() - oldest) & 0xFFFFFF)
         with self.lock:
             if not self.packets:
                 return False
