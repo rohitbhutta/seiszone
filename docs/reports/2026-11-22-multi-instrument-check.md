@@ -121,3 +121,25 @@ swarm, 2020 Bhachau event), KSNDMC "Seismic Monitoring", NICEE reading on reserv
   (same instrument, same filter, both viewers side by side) can be done instead.
 * The user's screen was not looked at (no screen tools in this session); the viewer was checked
   offscreen with the real code and real data.
+
+## 7. Side-by-side behaviour check with the third-party viewer (2026-11-22, later)
+
+Asked by the user instead of decompiling. Done by behaviour only: its windows were captured (only
+its own windows), its public User's Guide (in its install folder) was read, its settings file was
+read. No program code was read, decompiled or copied. The viewer was pulling GCF over UDP 1567
+from four units that SeisZone gets over SeedLink 18000: Tuljapur 10.8.0.78, Nagdhaniba 10.8.0.11,
+Panchavada 10.8.0.15, PATSIO 10.8.0.210.
+
+| Point | Third-party viewer | SeisZone 1.5.0 | Verdict |
+|---|---|---|---|
+| Data values | GCF blocks from the unit (30 s pulled read-only from Tuljapur, as the probe does) | SeedLink records from the same unit | **Identical**: 9 400 of 9 400 samples equal, value and time (HHZ/HHN/HHE vs INSTZ0/N0/E0) |
+| Filter | applied to every displayed stream; default band-pass 0.1-0.9 x Nyquist (10-30 s at 1-2 sps) | the same, zero phase | Same: both filter every channel |
+| Amplitude | one window zoom set by the user + a scale factor per stream (or per instrument, "all components"); physical units from its calibration file; "Scale others to match" is a one-off | "Common": every row gets the range of the largest trace of ALL channels, recomputed all the time | **Different - this is the bug.** With mixed instruments SeisZone flattens all but the largest |
+| Time | shows "PC Time (UTC)" from the PC clock (19 s fast here), so its latency reads ~19 s too long | corrected UTC from time servers (1.5.0) | SeisZone better |
+| Latency of low-rate streams | GCF blocks: Tuljapur sent 500-sample blocks (5 s at 100 sps) | SeedLink 512-byte records: 50 sps BH? streams arrive 7-15 s late (a record fills slowly) | GCF on 1567 is faster for low rates; SeedLink keeps backfill. Protocol property, not a bug |
+
+Verdict: SeisZone receives exactly the same data and filters every channel the same way. The one
+real difference is the amplitude scale: "Common" must not mix instruments. Fix plan (unchanged,
+now confirmed): Common per instrument (all components of one sensor share a range, like the
+viewer's "all components" scaling), each instrument its own range; the old behaviour as an extra
+choice; plus the selector fix for location "1".

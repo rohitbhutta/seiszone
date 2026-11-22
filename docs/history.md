@@ -4,6 +4,16 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-22 (afternoon, 2) - side-by-side behaviour check (report only)
+
+* Behaviour only (no code of the third-party viewer read): its windows, its User's Guide and its
+  settings. It pulls GCF/UDP 1567 from Tuljapur, Nagdhaniba, Panchavada, PATSIO.
+* Data: 30 s of Tuljapur GCF vs SeisZone's SeedLink data: 9 400 / 9 400 samples identical.
+* Filter: both apply it to every channel, same default band. Amplitude: the viewer uses a
+  user zoom + per-stream / per-instrument factors; SeisZone's Common scale (largest of all
+  channels) is the cause of the "only one instrument filtered" look.
+* Report section 7. Still waiting for the user's OK to fix.
+
 ## 2026-11-22 (afternoon) - multi-instrument check (report only, nothing changed)
 
 * Asked: add all IPs of `Downloads\IP Distrubation.xlsx`, check SeedLink 18000 vs GCF 1567,

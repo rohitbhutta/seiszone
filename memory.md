@@ -54,6 +54,8 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   complaint is the Common amplitude scale (one range for all instruments), not the filter. 97
   sheet IPs surveyed read-only: 34 SeedLink units, 1 Centaur, 4 GCF-only, 10.8.0.137 = this PC.
   Selector bug: location "1" gives refused selector "1HH?". Waiting for the user's OK to fix.
+  Side-by-side check (report section 7): same data sample for sample (GCF vs SeedLink, Tuljapur),
+  same filtering; only the Common amplitude scale differs - confirmed as the cause.
 * Project at `C:\D Drive\Only Coding\seiszone` (git repository). Since 2026-11-21 it is pushed to
   the PRIVATE GitHub repository https://github.com/rohitbhutta/seiszone (remote `origin`, branch
   `main`; gh CLI logged in as rohitbhutta and set as git's GitHub credential helper). From
