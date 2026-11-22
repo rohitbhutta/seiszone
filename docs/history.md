@@ -4,6 +4,13 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-22 16:11 - 33 instruments added
+
+* The user quit SeisZone from the tray; tools/add_from_survey.py write added 33 sources (38 in
+  all) and fixed Tuljapur's selector ("1HH?" -> "1?HH?"). SeisZone 1.5.0 started again: "sources
+  38/38 receiving, 149 channels", no refused selector. PC clock now 18.4 s fast.
+* Next: the selection menu (user OK'd the plan), then build 1.6.0 (Common per instrument needs it).
+
 ## 2026-11-22 (evening) - fixes for many instruments; sources prepared; selection plan
 
 * Fixed (not built yet): Common scale per instrument (`waveform_view.instrument`; old behaviour

@@ -59,7 +59,8 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
 * **2026-11-22 evening:** Common scale per instrument + selector fix for location "1" are in the
   code (tests pass), NOT built/released yet. 33 sources from the IP sheet wait in
   tools/add_from_survey.py output (run `write` with SeisZone quit). Selection-menu plan in
-  docs/reports/2026-11-22-selection-menu-plan.md waits for the user's OK. See docs/history.md.
+  docs/reports/2026-11-22-selection-menu-plan.md: OK'd by the user, being implemented. See docs/history.md.
+* **2026-11-22 16:11:** the 33 sources are added (38 sources, 149 channels, all receiving).
 * Project at `C:\D Drive\Only Coding\seiszone` (git repository). Since 2026-11-21 it is pushed to
   the PRIVATE GitHub repository https://github.com/rohitbhutta/seiszone (remote `origin`, branch
   `main`; gh CLI logged in as rohitbhutta and set as git's GitHub credential helper). From
