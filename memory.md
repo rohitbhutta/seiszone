@@ -497,7 +497,7 @@ User files: `%APPDATA%\SeisZone` (config.json, state.json, stationxml\), `%LOCAL
 
 ## Open items / next steps
 
-1. (done) 1.0.1 = 5c60396, 1.0.2 = 4092142, 1.1.0 = 465a94a, 1.2.0 = af71f90, 1.2.1 = af4da1b, 1.3.0 = 7a7cfe8, 1.4.0 = 6cce137, 1.5.0 = commit "SeisZone 1.5.0" on main.
+1. (done) 1.0.1 = 5c60396, 1.0.2 = 4092142, 1.1.0 = 465a94a, 1.2.0 = af71f90, 1.2.1 = af4da1b, 1.3.0 = 7a7cfe8, 1.4.0 = 6cce137, 1.5.0 = commit "SeisZone 1.5.0" on main. 1.6.0 = 3fc703d "SeisZone 1.6.0" on main, pushed 2026-11-22 at the user's OK.
 2. User installs build/dist/SeisZoneSetup.exe 1.2.0 (UAC); checks closing viewers / dialogs keeps
    SeisZone running, a 1-day window shows the history, the filter design drag, the label panel.
 3. Optional: a Calibration for SS.SMR03 channels so they can be shown in g.
