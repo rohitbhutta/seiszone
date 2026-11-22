@@ -25,6 +25,8 @@ def parse_scale(text, current):
     """The scale factor typed: "2", "x2" / "*2" (times the current one), "/2" (divided), "1".
     None when it is not a positive number."""
     t = text.strip().lower().replace(",", ".")
+    if t == "auto":       # as in the earlier viewer: back to the plain trace
+        return 1.0
     try:
         if t[:1] in ("*", "x", "×"):
             v = current * float(t[1:])
@@ -55,7 +57,9 @@ class ScaleDialog(QDialog):
             group.addButton(b)
         self.this.setChecked(True)
         hint = QLabel("A factor of 2 shows the trace twice as large. Type *2 or /2 to change the current factor, "
-                      "1 to go back. The amplitude zoom of the window (Up / Down) multiplies it.")
+                      "1 or auto to go back, or another channel of this viewer (e.g. "
+                      f"{next((s for s in view.channels() if s != sid), sid)}) to show this one as high as "
+                      "that one. The amplitude zoom of the window (Up / Down) multiplies it.")
         hint.setWordWrap(True)
         hint.setStyleSheet(f"color: {theme.COLORS['muted']};")
         self.message = QLabel()
@@ -83,10 +87,24 @@ class ScaleDialog(QDialog):
         return [self.sid]
 
     def apply(self):
+        text = self.edit.text().strip()
+        ref = next((s for s in self.view.channels() if s.lower() == text.lower()), None)
+        if ref is not None:   # another channel's name: each target as high as that channel
+            done = False
+            for s in self.targets():
+                f = self.view.match_factor(s, ref) if s != ref else None
+                if f is not None and math.isfinite(f) and f > 0:
+                    self.view.set_trace_scale(s, f)
+                    done = True
+            if not done:
+                self.message.setText(f"{ref} has no data on screen to match.")
+                return False
+            self.accept()
+            return True
         current = float(self.view.trace_settings(self.sid)["scale"])
-        value = parse_scale(self.edit.text(), current)
+        value = parse_scale(text, current)
         if value is None:
-            self.message.setText("Type a number above 0, such as 2, *2 or /2.")
+            self.message.setText("Type a number above 0 (such as 2, *2 or /2), auto, or a channel of this viewer.")
             return False
         for s in self.targets():
             self.view.set_trace_scale(s, value)

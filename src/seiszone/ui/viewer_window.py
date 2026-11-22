@@ -12,11 +12,12 @@ zoom, save on selection, spectrum, PSD, peaks, orientation, strong motion, the c
 external tools and the filter design - each on the selected channels only. The status bar shows
 the time and value under the mouse.
 
-Keys: Up/Down amplitude, Left/Right window length, Ctrl+Left/Right scroll, Home amplitude x1,
-Pause/Space live, F filter, Ctrl+F filter design, N null offsets, Z zero offset, P spectrogram
-(Ctrl+P all), +/- spectrogram contrast (Ctrl: all), S scale, Ctrl+S scale others to match, 1
-scale x1 (Ctrl+1 all), D details, C colour, Del remove channel, Ctrl+Del clear, L lane lines,
-O overlay, F5 redraw, F11 no caption (full screen), Ctrl+D duplicate, Ctrl+Shift+P print,
+Keys: Up/Down amplitude (in the Per pixel scale: the 1:N zoom, x2), Left/Right window length,
+Ctrl+Left/Right scroll, Home amplitude x1 (Per pixel: fit the zoom), Pause/Space live, F filter,
+Ctrl+F filter design, N null offsets, Z zero offset, P spectrogram (Ctrl+P all), +/- spectrogram
+contrast (Ctrl: all), S scale, Ctrl+S scale others to match, 1 scale x1 (Ctrl+1 all), D details,
+C colour, Del remove channel, Ctrl+Del clear, L lane lines, O overlay, K clean display, Shift+O
+traces may overlap, F5 redraw, F11 no caption (full screen), Ctrl+D duplicate, Ctrl+Shift+P print,
 Ctrl+W close the viewer.
 """
 
@@ -182,6 +183,10 @@ class ViewerWindow(QMainWindow):
         self.a_lanes = A("Show lane lines", lambda: v.set_lanes(not v.lanes()), "L", checkable=True)
         self.a_overlay = A("Overlay channels", lambda: v.set_overlay(not v.overlay()), "O",
                            checkable=True, tip="All channels drawn in one row, on top of each other")
+        self.a_clean = A("Clean display", lambda: v.set_clean(not v.clean()), "K", checkable=True,
+                         tip="No amplitude axis, caption, frame or gap per row: the traces packed tightly")
+        self.a_overlap = A("Traces may overlap", lambda: v.set_overlap(not v.overlap()), "Shift+O",
+                           checkable=True, tip="A loud trace draws over the rows next to it instead of being cut")
         self.a_redraw = A("Redraw", v.redraw, "F5")
         self.a_caption = A("No caption (full screen)", self.toggle_caption, "F11", checkable=True)
         self.a_duplicate = A("Duplicate", self.duplicate, "Ctrl+D")
@@ -206,7 +211,8 @@ class ViewerWindow(QMainWindow):
         m.addSeparator()
         m.addActions([self.a_time_in, self.a_time_out, self.a_back, self.a_fwd])
         m.addSeparator()
-        m.addActions([self.a_null, self.a_lanes, self.a_overlay, self.a_background, self.a_spec_all])
+        m.addActions([self.a_null, self.a_lanes, self.a_overlay, self.a_clean, self.a_overlap, self.a_background,
+                      self.a_spec_all])
         self.size_menu = m.addMenu("Spectrogram size")
         self.size_menu.aboutToShow.connect(lambda: self._fill_size_menu(self.size_menu))
         m.addSeparator()
@@ -229,6 +235,8 @@ class ViewerWindow(QMainWindow):
     def _sync_checks(self):
         self.a_lanes.setChecked(self.view.lanes())
         self.a_overlay.setChecked(self.view.overlay())
+        self.a_clean.setChecked(self.view.clean())
+        self.a_overlap.setChecked(self.view.overlap())
         self.a_caption.setChecked(not self._caption)
 
     def _fill_window_filter_menu(self, menu):
@@ -305,6 +313,8 @@ class ViewerWindow(QMainWindow):
         m.addAction(self.a_background)
         m.addAction(self.a_lanes)
         m.addAction(self.a_overlay)
+        m.addAction(self.a_clean)
+        m.addAction(self.a_overlap)
         size = m.addMenu("Spectrogram size")
         self._fill_size_menu(size)
         m.addAction(self.a_spec_all)

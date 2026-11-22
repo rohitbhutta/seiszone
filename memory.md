@@ -46,7 +46,11 @@ port 80 (status, data streams, StationXML ~0.9 MB — about a minute over the sl
 Tests must never contact these or listen on 58772, 18000 or 18010 (the real Gecko connects to
 58772; the old service holds 18010; SeisZone's own server runs on 18000).
 
-## Status (2026-11-22, version 1.6.0 installed)
+## Status (2026-11-22, version 1.6.0 installed; 1.7.0 built, waiting for the user to install)
+
+* **2026-11-22 evening - 1.7.0:** viewer mode like the earlier viewer's WaveView (Per pixel 1:N,
+  factors in the label, Scale others to match, Clean display, overlap) - see "Version 1.7.0" and
+  docs/history.md. Its pull list now has all 36 GCF units (C:\scream\scream.ini, backup kept).
 
 * **2026-11-22 afternoon - multi-instrument check (report only, nothing changed yet):** see
   docs/reports/2026-11-22-multi-instrument-check.md and docs/history.md (the running work log -
@@ -148,6 +152,17 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   viewer was declined: it breaks the standing rule above and probably its licence. A
   side-by-side comparison of the same data in both programs (behaviour only) was offered instead.
 
+### Version 1.7.0 (2026-11-22, built; not installed yet)
+
+* **Per pixel (1:N) scale** like the earlier viewer's WaveView zoom: `WaveformView._cpp` (state
+  "cpp"), range = cpp x row height (`_row_px`, from `_fit_rows`) / the trace's factor; Up/Down/wheel
+  x2, Home = `fit_cpp` (median trace fills 0.9 of its row). The factor is shown in the label box
+  (`panel_lines(..., scale)`). `scale_others_to_match` = that viewer's: per-channel factors
+  (`match_factor`, 4 significant digits) + fitted zoom; Scale dialog takes "auto" and a channel id.
+* **Clean display** (`clean`, key K: no row axes/captions/frames/gaps) and **Traces may overlap**
+  (`overlap`, Shift+O: rows do not clip; lower rows draw on top).
+* Checked against its 12-stream window: median trace height ratio 1.00 (report section 11).
+
 ### Version 1.6.0 (2026-11-22, installed 16:46; 38/38 sources, 153 channels)
 
 * **Common scale per instrument.** The field complaint "with 5-6 instruments the band-pass only
@@ -162,7 +177,7 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   19:10: all 36 GCF units added to its pull list (C:\scream\scream.ini, backup kept); GCF vs SeisZone
   135 channels, 415 059/415 059 samples identical (section 9). Next: picture compare + viewer plan.
   19:25: pictures match (section 10); filter needs no change; plan
-  docs/reports/2026-11-22-viewer-like-plan.md waits for the user's OK.
+  docs/reports/2026-11-22-viewer-like-plan.md - built in 1.7.0 (below).
 * **Selectors for a one-character location** (Minimus Lite / older Minimus use "1"): "1HH?" was
   refused at every reconnect; now "1?HH?" (`seedlink_client.wire_selector` at sending, also for
   old configs; `probe.selectors_for` makes it so). Checked read-only on Tuljapur.

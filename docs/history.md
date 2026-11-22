@@ -4,6 +4,17 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-22 20:10 - 1.7.0: a viewer mode like the earlier viewer's WaveView
+
+* At the user's OK ("Yes, build it"): Scale "Per pixel (1:N)" (cpp, power of two, Up/Down/wheel
+  x2, Home fits), factor shown in the label box, Scale others to match like that viewer (factors
+  + fitted zoom), Scale dialog "auto" / a channel's name, Clean display (K), Traces may overlap
+  (Shift+O). Tests: test_per_pixel_zoom_like_the_earlier_viewer, test_clean_display_and_overlap,
+  scale-to-match test rewritten. Version 1.7.0.
+* Side by side with its 12-stream window in the same settings: median trace height ratio 1.00
+  (0.84-1.06 per row). Report section 11; picture 2026-11-22-side-by-side-per-pixel-mode.png.
+* Not built: its tick rhythm (minute ticks, longer every 10 min).
+
 ## 2026-11-22 19:25 - multi-instrument side by side; viewer plan written
 
 * Its ~130-channel window: one zoom 1:536 870 912, all flat but IS.PAZ.0J.BHZ raw (glitching

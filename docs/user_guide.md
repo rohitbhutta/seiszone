@@ -213,7 +213,10 @@ before SeisZone was started:
   quiet component looks quiet next to the others; every instrument has its own scale - the choice
   of a new viewer), Common, all channels (one scale for every trace: the largest one sets it, so
   with different instruments the quiet ones look flat), Auto (each trace fills its row), Fixed ± a
-  value you type.
+  value you type, or **Per pixel (1:N)** - the zoom of the earlier viewer: one value for the whole
+  window, N counts per pixel of row height (shown as 1:16, 1:8192 in place of the amplitude
+  zoom; Up / Down or the mouse wheel halve / double it, Home fits it to the traces). Each trace is
+  divided by its own scale factor, which its label box shows instead of the units (×3067).
 * **Remove mean**: centres each trace on zero. **Null** (key **N**): fixes each trace's offset
   at its mean now.
 * **Time cursors**: two vertical lines to drag; the button shows the time between them and the
@@ -263,8 +266,8 @@ For the channel under the mouse:
 | Entry | Key | What it does |
 |-------|-----|--------------|
 | Colour... | C | the trace colour |
-| Scale... | S | a scale factor for this channel (2 = twice as large; *2, /2; also for all channels of the station or of the viewer) |
-| Scale others to match | Ctrl+S | every channel gets the amplitude range this one shows |
+| Scale... | S | a scale factor for this channel (2 = twice as large; *2, /2; auto or 1 = back; another channel's name = as high as that one; also for all channels of the station or of the viewer) |
+| Scale others to match | Ctrl+S | every other channel gets the scale factor at which it is as high as this one (shown in its label box), and the viewer goes to Per pixel with the zoom at which this one fills its row - as in the earlier viewer |
 | Details... | D | mean, minimum, maximum, difference and RMS of the visible data; type an offset; Null / Zero / Mean removal. The plot shows the mean (dotted) and min / max lines |
 | Filter | | its own filter: same as the window, none, any filter of the list, or Design for this channel |
 | Offset | Z = zero | follow Remove mean, Null now (fix at the mean), Zero (absolute values) |
@@ -276,7 +279,9 @@ For the channel under the mouse:
 | Remove from this viewer | Del | |
 
 For the whole viewer: Background colour, Show lane lines (L), Overlay channels (O, all traces
-in one row on top of each other), Spectrogram size, All spectrograms on / off (Ctrl+P), Sort by
+in one row on top of each other), Clean display (K: no amplitude axis, caption, frame or gap per
+row - the traces packed like the earlier viewer's), Traces may overlap (Shift+O: a loud trace
+draws over its neighbours instead of being cut at its row), Spectrogram size, All spectrograms on / off (Ctrl+P), Sort by
 (channel, component Z-N-E, station, sample rate, also reversed), Channels..., Window title... (the
 viewer's name), Clear window (Ctrl+Del), No caption (F11: full screen without menu and bar,
 F11 again to return), Duplicate (Ctrl+D), and Spectrum / Export / Record these channels / Save

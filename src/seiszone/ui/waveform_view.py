@@ -9,8 +9,11 @@ mean removal, null offsets, time / amplitude cursors and Live/Pause.
 
 Whole-window settings: time window, filter (switched with F, chosen from filter_dialog's list or
 designed), units (counts, physical, physical with acceleration in g), scale mode (each trace
-fills its row / one range per instrument / one range for all / fixed ±), amplitude zoom (x2 steps), mean removal, lane
-lines, overlay (all traces in one row), background colour, spectrogram height.
+fills its row / one range per instrument / one range for all / fixed ± / per pixel 1:N - the
+earlier viewer's zoom: N units per pixel for the whole window, each trace divided by its own
+factor), amplitude zoom (x2 steps), mean removal, lane lines, overlay (all traces in one row),
+clean display (no row axes, captions, frames or gaps), overlap (a loud trace may draw over its
+neighbours), background colour, spectrogram height.
 Per-channel settings (the viewer window's right-click menu): colour, scale factor, own filter
 (or none), offset (follow the mean removal / fixed: null = the mean now, zero = absolute values),
 locked offset (Null offsets leaves it), spectrogram on/off and its contrast.
@@ -87,8 +90,13 @@ UNITS = [("counts", "Counts"), ("physical", "Physical"), ("physical_g", "Physica
 # accelerometer next to a broadband seismometer) differ by orders of magnitude, so one range for all
 # channels showed only the largest instrument and flattened the rest - with a band-pass on it looked
 # as if only that instrument was filtered (2026-11-22). "common_all" keeps the old behaviour.
+# "pixel" is the zoom of the user's earlier viewer: one value for the whole window, 1:N = N units
+# (counts) per pixel of row height, stepped x2; each trace is divided by its own scale factor
+# (shown in its label box), which "Scale others to match" sets so every trace has the same height.
 SCALES = [("auto", "Auto"), ("common", "Common per instrument"), ("common_all", "Common, all channels"),
-          ("fixed", "Fixed ±")]
+          ("fixed", "Fixed ±"), ("pixel", "Per pixel (1:N)")]
+CPP_RANGE = (2.0 ** -60, 2.0 ** 50)   # units per pixel of the "pixel" scale
+MATCH_FILL = 0.9                      # "Scale others to match": the reference fills this part of its row
 SPEC_SIZES = [32, 64, 128, 256]
 GAIN_RANGE = (1.0 / 64, 4096.0)   # amplitude zoom of the whole window, in x2 steps
 G = 9.80665                      # m/s² per g
@@ -137,6 +145,34 @@ def fmt_value(v, physical):
 
 def fmt_gain(g):
     return f"×{g:g}" if g >= 1 else f"×1/{1 / g:g}"
+
+
+def fmt_cpp(n):
+    """The "pixel" zoom as the earlier viewer shows it: 1:16, 1:8192, 1:2.4e-09."""
+    if n >= 1 and abs(n - round(n)) < 1e-9:
+        return f"1:{round(n)}"
+    return f"1:{n:.3g}"
+
+
+def clamp_cpp(n):
+    """A "pixel" zoom: a power of two within CPP_RANGE (None for nonsense)."""
+    try:
+        n = float(n)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(n) or n <= 0:
+        return None
+    return min(CPP_RANGE[1], max(CPP_RANGE[0], 2.0 ** round(math.log2(n))))
+
+
+def fit_cpp(spans, row_px, fill=MATCH_FILL):
+    """The smallest power-of-two "pixel" zoom at which a trace `spans` units high (peak to peak,
+    factor applied) still fits `fill` of a row of `row_px` pixels."""
+    spans = [s for s in spans if s and math.isfinite(s) and s > 0]
+    if not spans or row_px <= 0:
+        return None
+    need = float(np.median(spans)) / (max(1.0, row_px) * fill)
+    return min(CPP_RANGE[1], max(CPP_RANGE[0], 2.0 ** math.ceil(math.log2(need))))
 
 
 def pre_roll(spec, rate=0.0):
@@ -368,6 +404,10 @@ class WaveformView(QWidget):
             self._fixed = abs(float(st.get("fixed", v.get("fixed_scale", 1000.0)))) or 1000.0
         except (TypeError, ValueError):
             self._fixed = 1000.0
+        self._cpp = clamp_cpp(st.get("cpp"))   # "pixel" zoom (None: picked from the data when first used)
+        self._clean = bool(st.get("clean", False))       # no row axes, captions, frames or gaps
+        self._overlap = bool(st.get("overlap", False))   # a loud trace may draw over its neighbours
+        self._row_px = 100.0       # data height of one row in pixels (_fit_rows)
         self._demean = bool(st.get("demean", v.get("demean", True)))
         self._gain = self._clamp_gain(st.get("gain", 1.0))
         self._lanes = bool(st.get("lanes", True))
@@ -584,7 +624,9 @@ class WaveformView(QWidget):
                                      "Auto: each trace fills its row. Common per instrument: the components of "
                                      "one sensor share one amplitude range, every instrument has its own. Common, "
                                      "all channels: one range for every trace (the largest one sets it). Fixed: ± "
-                                     "the value given. The amplitude zoom applies to all of them")
+                                     "the value given. Per pixel (1:N): one zoom for the whole window, N counts "
+                                     "per pixel, each trace divided by its own scale factor (Scale others to "
+                                     "match sets the factors). The amplitude zoom applies to all of them")
         # bound methods only (no lambdas holding self: they would keep the widget alive forever)
         self.units_box.currentIndexChanged.connect(self._set_units)
         self.scale_box.currentIndexChanged.connect(self._set_scale)
@@ -638,6 +680,7 @@ class WaveformView(QWidget):
         self.note.setMinimumWidth(0)
         bar.addWidget(self.note)   # (the time range is in the viewer window's status bar)
         self._fixed_action.setVisible(self._scale == "fixed")
+        self._update_gain_label()
         self._update_filter_button()
         self._update_live_button()
         self._update_pps_button()
@@ -731,8 +774,13 @@ class WaveformView(QWidget):
             tr.label.setParentItem(host)
             tr.label.anchor(itemPos=(0, 0), parentPos=(0, 0), offset=(4, 2 + (LABEL_STEP * i if overlay else 0)))
             visible = i == 0 or not overlay
-            for item in (tr.vb, tr.left, tr.panel):
+            for item in (tr.vb, tr.panel):
                 item.setVisible(visible)
+            tr.left.setVisible(visible and not self._clean)      # clean: no amplitude axis, no caption
+            tr.left.setWidth(1 if self._clean else AXIS_WIDTH)
+            tr.label.setVisible(not self._clean)
+            tr.vb.setFlag(tr.vb.GraphicsItemFlag.ItemClipsChildrenToShape, not self._overlap)
+            tr.vb.setZValue(i if self._overlap else 0)          # overlap: a lower row draws over the upper
             spec = self._spec_on(sid)
             if spec:
                 self._ensure_spec_row(tr, i)
@@ -742,7 +790,7 @@ class WaveformView(QWidget):
             last = i == (0 if overlay else n - 1)
             tr.bottom.setVisible(visible)
             tr.bottom.setStyle(showValues=last, tickLength=5 if last else 0)
-            tr.bottom.setHeight(TIME_AXIS_HEIGHT if last else ROW_GAP)
+            tr.bottom.setHeight(TIME_AXIS_HEIGHT if last else self._row_gap())
         self.stack.setCurrentWidget(self.scroll if self._traces else self.empty)
         self._color_traces()
         self._size_canvas()
@@ -762,9 +810,13 @@ class WaveformView(QWidget):
             visible = i == 0 or not overlay
             spec = self._spec_size if visible and tr.sid and self._spec_on(tr.sid) else 0
             last = i == (0 if overlay else n - 1)
-            gap = TIME_AXIS_HEIGHT if last else (ROW_GAP if visible else 0)
+            gap = TIME_AXIS_HEIGHT if last else (self._row_gap() if visible else 0)
             plan.append((visible, spec, gap))
         return plan
+
+    def _row_gap(self):
+        """Pixels between two rows: none in the clean display (rows packed like the earlier viewer)."""
+        return 0 if self._clean else ROW_GAP
 
     def _size_canvas(self, width=None, height=None):
         """The plot canvas fills the scroll area, and is taller when the rows need more room
@@ -793,6 +845,10 @@ class WaveformView(QWidget):
         fixed = sum(s + g for _v, s, g in plan)
         shown = sum(1 for v, _s, _g in plan if v) or 1
         each = max(float(MIN_ROW), (avail - fixed) / shown)
+        if abs(each - self._row_px) > 0.5:
+            self._row_px = each
+            if self._scale == "pixel" and self._traces:
+                self._apply_y_ranges()   # the zoom is per pixel: a taller row shows more units
         rows = 3 * len(plan)
         for i in range(max(rows, lay.rowCount())):   # rows of removed plots give their height back
             if i >= rows:
@@ -834,8 +890,8 @@ class WaveformView(QWidget):
             for ax in (tr.left, tr.bottom):
                 ax.setPen(pg.mkPen(c["border"]))
                 ax.setTextPen(pg.mkPen(c["muted"]))
-            tr.vb.setBorder(pg.mkPen(c["grid"]) if self._lanes else None)
-            tr.bottom.setGrid(128 if self._lanes else False)
+            tr.vb.setBorder(pg.mkPen(c["grid"]) if self._lanes and not self._clean else None)
+            tr.bottom.setGrid(128 if self._lanes and not self._clean else False)
             tr.label.bg = bg
             tr.label.frame = c["accent"] if tr.sid and tr.sid == self._active else None
             tr.label.update()
@@ -844,12 +900,17 @@ class WaveformView(QWidget):
         self._update_panels()
 
     @staticmethod
-    def panel_lines(sid, units, label=""):
+    def panel_lines(sid, units, label="", scale=1.0):
         """The three lines of a channel's label box: its label (else the station),
-        location.channel, units."""
+        location.channel, and its units - or its scale factor ("×3067") when it has one, as the
+        earlier viewer shows it."""
         parts = sid.split(".")
         loc_cha = f"{parts[2]}.{parts[3]}" if len(parts) == 4 and parts[2] else parts[-1]
-        return (label or ".".join(parts[:2])), loc_cha, units
+        try:
+            scale = float(scale)
+        except (TypeError, ValueError):
+            scale = 1.0
+        return (label or ".".join(parts[:2])), loc_cha, (units if scale == 1.0 else fmt_gain(scale))
 
     def set_trace_label(self, sid, text):
         """A name for the channel, shown in its box on the left and in its caption."""
@@ -860,8 +921,9 @@ class WaveformView(QWidget):
         """The label boxes left of the traces (all channels in the first row's panel when
         overlaid)."""
         bg = theme.COLORS["panel2"]
-        entries = [(self.panel_lines(tr.sid, tr.units, self._ts(tr.sid)["label"]), self.trace_color(i, tr.sid),
-                    tr.sid == self._active) for i, tr in enumerate(self._traces) if tr.sid]
+        entries = [(self.panel_lines(tr.sid, tr.units, self._ts(tr.sid)["label"], self._ts(tr.sid)["scale"]),
+                    self.trace_color(i, tr.sid), tr.sid == self._active)
+                   for i, tr in enumerate(self._traces) if tr.sid]
         overlay = self._overlay and len(self._traces) > 1
         for i, tr in enumerate(self._traces):
             if overlay:
@@ -987,7 +1049,7 @@ class WaveformView(QWidget):
                 "filter": self._filter_key, "custom": self._custom, "units": self._units, "scale": self._scale,
                 "fixed": self._fixed, "demean": self._demean, "gain": self._gain, "lanes": self._lanes,
                 "overlay": self._overlay, "background": self._bg, "spec_size": self._spec_size,
-                "traces": traces}
+                "cpp": self._cpp, "clean": self._clean, "overlap": self._overlap, "traces": traces}
 
     # ------------------------------------------------------------------------------------
     # whole-window settings
@@ -1043,27 +1105,74 @@ class WaveformView(QWidget):
                                    "1440 minutes (one day), with the history of the last day.")
 
     def zoom_amplitude(self, steps):
-        """Larger (steps > 0) or smaller traces, x2 per step; the view stays live."""
+        """Larger (steps > 0) or smaller traces, x2 per step; the view stays live. In the
+        "pixel" scale it halves (larger) or doubles (smaller) the units per pixel."""
+        if self._scale == "pixel":
+            n = clamp_cpp((self._cpp or self._fitted_cpp() or 1.0) / 2.0 ** int(steps))
+            if n != self._cpp:
+                self.set_cpp(n)
+            return
         g = self._clamp_gain(self._gain * 2.0 ** int(steps))
         if g != self._gain:
             self._gain = g
-            self.gain_label.setText(fmt_gain(g))
+            self._update_gain_label()
             self._apply_y_ranges()
             self.changed.emit()
 
     def reset_amplitude(self):
+        """Amplitude zoom x1 (Home); in the "pixel" scale: the zoom at which the traces fit."""
+        if self._scale == "pixel":
+            n = self._fitted_cpp()
+            if n is not None and n != self._cpp:
+                self.set_cpp(n)
+            return
         if self._gain != 1.0:
             self._gain = 1.0
-            self.gain_label.setText(fmt_gain(1.0))
+            self._update_gain_label()
             self._apply_y_ranges()
             self.changed.emit()
+
+    def _update_gain_label(self):
+        if self._scale == "pixel":
+            n = self._cpp
+            unit = "counts" if self._units == "counts" else "units"
+            self.gain_label.setText(fmt_cpp(n) if n else "1:?")
+            self.gain_label.setToolTip(f"Zoom of every trace: 1 pixel = {n:g} {unit} (each trace divided by its "
+                                       "own scale factor). Up / Down or the mouse wheel halve / double it; click "
+                                       "(or Home) to fit the traces again." if n else "Zoom of every trace")
+        else:
+            self.gain_label.setText(fmt_gain(self._gain))
+            self.gain_label.setToolTip("Amplitude zoom of every trace - click to reset it to ×1 (Home)")
+
+    def cpp(self):
+        """The "pixel" zoom: units (counts) per pixel of row height, or None before it is set."""
+        return self._cpp
+
+    def set_cpp(self, value):
+        """The "pixel" zoom (a power of two; switches to that scale mode)."""
+        n = clamp_cpp(value)
+        if n is None:
+            return
+        self._cpp = n
+        if self._scale != "pixel":
+            self.scale_box.setCurrentIndex(self.scale_box.findData("pixel"))   # _set_scale: recompute
+            return
+        self._update_gain_label()
+        self._apply_y_ranges()
+        self.changed.emit()
+
+    def _fitted_cpp(self):
+        """The "pixel" zoom at which the typical trace (factor applied) fills its row."""
+        spans = [(tr.hi - tr.lo) * float(self._ts(tr.sid)["scale"]) for tr in self._traces
+                 if tr.sid and tr.lo is not None]
+        return fit_cpp(spans, self._row_px)
 
     def reset_scales(self):
         """Every channel's own scale factor and the amplitude zoom back to 1 (Ctrl+1)."""
         for ts in self._tset.values():
             ts.pop("scale", None)
         self._gain = 1.0
-        self.gain_label.setText(fmt_gain(1.0))
+        self._update_gain_label()
         self._changed()
 
     def pan(self, fraction):
@@ -1254,6 +1363,9 @@ class WaveformView(QWidget):
     def _set_units(self, _index):
         self._units = self.units_box.currentData()
         self._sens.clear()
+        if self._scale == "pixel":
+            self._cpp = None          # counts and physical units differ by orders: fit the zoom again
+        self._update_gain_label()
         self._changed()
 
     def set_units(self, units):
@@ -1264,6 +1376,9 @@ class WaveformView(QWidget):
     def _set_scale(self, _index):
         self._scale = scale = self.scale_box.currentData()
         self._fixed_action.setVisible(scale == "fixed")
+        if scale == "pixel" and self._cpp is None:
+            self._cpp = self._fitted_cpp()     # (None without data yet: picked when the data come)
+        self._update_gain_label()
         self._changed()
 
     def _fixed_edited(self):
@@ -1299,6 +1414,25 @@ class WaveformView(QWidget):
 
     def lanes(self):
         return self._lanes
+
+    def set_clean(self, on):
+        """Clean display: no amplitude axis, caption, frame or gap per row - the traces packed
+        like the earlier viewer's (the label boxes on the left stay)."""
+        if bool(on) != self._clean:
+            self._clean = bool(on)
+            self._changed(rebuild=True)
+
+    def clean(self):
+        return self._clean
+
+    def set_overlap(self, on):
+        """Let a loud trace draw over the rows next to it instead of being cut at its row."""
+        if bool(on) != self._overlap:
+            self._overlap = bool(on)
+            self._changed(rebuild=True)
+
+    def overlap(self):
+        return self._overlap
 
     def set_overlay(self, on):
         if bool(on) != self._overlay:
@@ -1391,19 +1525,39 @@ class WaveformView(QWidget):
         if math.isfinite(v) and v > 0:
             self._set_ts(sid, scale=v)
 
+    def match_factor(self, sid, ref):
+        """The scale factor at which channel `sid` shows the same peak-to-peak height as `ref`
+        does with its own factor (visible data), or None without data."""
+        a, b = self._trace(sid), self._trace(ref)
+        if a is None or b is None or a.lo is None or b.lo is None or a.hi <= a.lo or b.hi <= b.lo:
+            return None
+        f = float(self._ts(ref)["scale"]) * (b.hi - b.lo) / (a.hi - a.lo)
+        return float(f"{f:.4g}")
+
     def scale_others_to_match(self, sid):
-        """Every channel gets the amplitude range this one shows now (fixed scale mode)."""
-        tr = self._trace(sid)
-        if tr is None or tr.yrange is None:
+        """One-time scaling like the earlier viewer: every other channel gets the scale factor at
+        which its visible peak-to-peak range is as high as this one's, and the window goes to the
+        "pixel" scale with the zoom at which this channel fills most of its row. Channels without
+        data keep their factor."""
+        ref = self._trace(sid)
+        if ref is None or ref.lo is None or ref.hi <= ref.lo:
             return
-        half = (tr.yrange[1] - tr.yrange[0]) / 2.0
-        if self._scale != "fixed":
-            half /= 1.0 + 2 * 0.06   # without the padding of the auto / common modes
-        for ts in self._tset.values():
-            ts.pop("scale", None)
+        for tr in self._traces:
+            if tr.sid and tr.sid != sid:
+                f = self.match_factor(tr.sid, sid)
+                if f is not None and math.isfinite(f) and f > 0:
+                    own = self._tset.setdefault(tr.sid, {})
+                    if f == 1.0:
+                        own.pop("scale", None)
+                    else:
+                        own["scale"] = f
         self._gain = 1.0
-        self.gain_label.setText(fmt_gain(1.0))
-        self.set_fixed_scale(half)
+        self._cpp = fit_cpp([(ref.hi - ref.lo) * float(self._ts(sid)["scale"])], self._row_px)
+        if self._scale != "pixel":
+            self.scale_box.setCurrentIndex(self.scale_box.findData("pixel"))   # _set_scale: recompute
+        else:
+            self._update_gain_label()
+            self._changed()
 
     def set_trace_filter(self, sid, key, custom=None):
         """A channel's own filter: None = the window's, "off" = none, a catalogue key, or
@@ -2314,6 +2468,11 @@ class WaveformView(QWidget):
 
     def _apply_y_ranges(self):
         mode = self._scale
+        if mode == "pixel" and self._cpp is None:
+            self._cpp = self._fitted_cpp()     # the first data in a new "pixel" window
+            if self._cpp is not None:
+                self._update_gain_label()
+                self.changed.emit()
         spans = [tr.hi - tr.lo for tr in self._traces if tr.lo is not None]
         half_common = max(spans) / 2 if spans else 1.0
         half_inst = {}                     # instrument -> half of its largest component's range
@@ -2338,6 +2497,10 @@ class WaveformView(QWidget):
             magnify = self._gain * (1.0 if overlay else float(ts["scale"]))
             if lo_ is None:
                 lo, hi = -1.0, 1.0
+            elif mode == "pixel":   # N units per pixel for the whole window, divided by the trace's factor
+                mid = 0.0 if centred else (lo_ + hi_) / 2
+                half = (self._cpp or 1.0) * self._row_px / 2.0 / (1.0 if overlay else float(ts["scale"]))
+                lo, hi = mid - half, mid + half
             elif mode == "fixed":
                 mid = 0.0 if centred else (lo_ + hi_) / 2
                 lo, hi = mid - self._fixed / magnify, mid + self._fixed / magnify
@@ -2354,7 +2517,7 @@ class WaveformView(QWidget):
                 lo, hi = lo - d, hi + d
             if (lo, hi, mode) != tr.ykey:
                 tr.ykey = (lo, hi, mode)
-                tr.vb.setYRange(lo, hi, padding=0 if mode == "fixed" else 0.06)
+                tr.vb.setYRange(lo, hi, padding=0 if mode in ("fixed", "pixel") else 0.06)
                 tr.yrange = tuple(float(v) for v in tr.vb.viewRange()[1])
         if overlay:   # the others are drawn in the first row: they share its range
             for tr in self._traces[1:]:

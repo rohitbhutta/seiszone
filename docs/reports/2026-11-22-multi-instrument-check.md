@@ -208,3 +208,17 @@ The user opened WaveView windows for the new instruments. Captured 13:49 UTC (pi
   FIR 31/63/127/255 taps 0.923/0.915/0.905/0.904 (median ratio), correlation 0.78-0.83 for all.
   The small gap is how it draws, not the filter; SeisZone's filter stays.
 * Plan for the remaining look-and-behaviour differences: 2026-11-22-viewer-like-plan.md.
+
+## 11. The new "Per pixel (1:N)" mode against its window (1.7.0, 2026-11-22 20:10)
+
+Built from the plan (2026-11-22-viewer-like-plan.md): Scale "Per pixel (1:N)" (one zoom for the
+window, N counts per pixel, x2 steps on Up/Down/wheel, Home fits), the trace's factor in its label
+box (×3067), "Scale others to match" as in that viewer (factors so every trace is as high as the
+reference, then the zoom at which the reference fills its row), Scale dialog "auto" and "another
+channel's name", Clean display (K) and Traces may overlap (Shift+O). Pixels per second already
+existed. Not built: its minute / 10-minute tick rhythm (pyqtgraph picks the ticks).
+
+Its 12-stream window drawn by SeisZone with the same settings (1:8192, 2 px/s, its factors,
+Clean + overlap, Default band-pass; picture 2026-11-22-side-by-side-per-pixel-mode.png): median
+trace height per row, SeisZone / that viewer = 0.88, 1.00, 0.84, 1.00, 1.06, 1.00, 1.00, 0.91,
+0.93, 1.00, 1.00, 1.00 (median 1.00). Same events at the same places.

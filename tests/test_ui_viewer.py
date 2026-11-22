@@ -7,6 +7,7 @@ saved state and the window functions. Saves build/screens/viewer.png for a visua
 Nothing here touches the network: FakeEngine never connects anywhere.
 """
 
+import math
 import os
 import sys
 import time
@@ -231,15 +232,79 @@ def test_scale_factors_and_scale_others_to_match(win, qapp):
     assert not d.apply() and "number" in d.message.text()
     d.edit.setText("1")
     assert d.apply() and all(v.trace_settings(s)["scale"] == 1.0 for s in SIDS)
-    # every channel gets the amplitude range the reference shows
+    # like the earlier viewer: every other channel gets the factor at which it is as high as the
+    # reference, and the window goes to the per-pixel zoom at which the reference fits its row
+    v.set_live(False)
     v.zoom_amplitude(1)
-    ref = v._traces[1]
-    shown = (ref.yrange[1] - ref.yrange[0]) / (1 + 2 * 0.06)
     v.scale_others_to_match(SIDS[1])
-    assert v._scale == "fixed" and v.scale_box.currentData() == "fixed" and v.gain() == 1.0
-    assert {round(t.yrange[1] - t.yrange[0], 3) for t in v._traces} == {round(shown, 3)}
+    qapp.processEvents()
+    assert v._scale == "pixel" and v.scale_box.currentData() == "pixel" and v.gain() == 1.0
+    assert v.cpp() and math.log2(v.cpp()) == int(math.log2(v.cpp()))
+    px = [(t.hi - t.lo) * v.trace_settings(t.sid)["scale"] / v.cpp() for t in v._traces]
+    assert max(px) == pytest.approx(min(px), rel=0.02) and px[1] <= 0.9 * v._row_px + 1
+    assert any(v.trace_settings(s)["scale"] != 1.0 for s in SIDS)
     v.reset_scales()
     v.scale_box.setCurrentIndex(v.scale_box.findData("auto"))
+    v.set_live(True)
+
+
+def test_per_pixel_zoom_like_the_earlier_viewer(win, qapp):
+    v = win.view
+    v.set_live(False)
+    v.scale_box.setCurrentIndex(v.scale_box.findData("pixel"))
+    qapp.processEvents()
+    n = v.cpp()
+    assert n and 2.0 ** round(math.log2(n)) == n and v.gain_label.text() == f"1:{n:g}".replace(".0", "")
+    tr = v._traces[0]
+    assert span(tr) == pytest.approx(n * v._row_px)               # N units per pixel of row height
+    v.zoom_amplitude(1)                                           # Up: larger traces, half the units per pixel
+    assert v.cpp() == n / 2 and span(tr) == pytest.approx(n / 2 * v._row_px)
+    v.zoom_amplitude(-2)
+    assert v.cpp() == n * 2
+    v.reset_amplitude()                                           # Home: fit again
+    assert v.cpp() == n
+    v.set_trace_scale(SIDS[0], 4.0)                               # its own factor divides it
+    assert span(tr) == pytest.approx(n * v._row_px / 4)
+    assert tr.panel.entries[0][0][2] == "×4"                      # shown instead of the units, like "*4"
+    st = v.state()
+    assert st["cpp"] == n and st["scale"] == "pixel"
+    v2 = WaveformView(win.engine, win.engine.config, state=st)
+    assert v2.cpp() == n and v2.gain_label.text().startswith("1:")
+    v2.deleteLater()
+    d = ScaleDialog(v, SIDS[0])
+    d.edit.setText("auto")
+    assert d.apply() and v.trace_settings(SIDS[0])["scale"] == 1.0
+    d = ScaleDialog(v, SIDS[3])
+    d.edit.setText(SIDS[0].lower())                               # another channel: as high as that one
+    assert d.apply()
+    a, b = v._trace(SIDS[3]), v._trace(SIDS[0])
+    assert (a.hi - a.lo) * v.trace_settings(SIDS[3])["scale"] == pytest.approx(b.hi - b.lo, rel=0.02)
+    v.set_cpp(1000)                                               # any value becomes a power of two
+    assert v.cpp() == 1024
+    v.reset_scales()
+    v.scale_box.setCurrentIndex(v.scale_box.findData("auto"))
+    v.set_live(True)
+
+
+def test_clean_display_and_overlap(win, qapp):
+    v = win.view
+    tr = v._traces[0]
+    assert tr.left.isVisible() and tr.label.isVisible()
+    v.set_clean(True)
+    qapp.processEvents()
+    assert v.clean() and not tr.left.isVisible() and not tr.label.isVisible() and v._row_gap() == 0
+    assert all(g == 0 for _v, _s, g in v._row_plan()[:-1]) and tr.panel.entries   # label boxes stay
+    assert v.state()["clean"] is True
+    assert tr.vb.flags() & tr.vb.GraphicsItemFlag.ItemClipsChildrenToShape
+    v.set_overlap(True)
+    assert v.overlap() and not (tr.vb.flags() & tr.vb.GraphicsItemFlag.ItemClipsChildrenToShape)
+    assert v.state()["overlap"] is True
+    m = win.build_context_menu(None)
+    texts = [a.text() for a in m.actions()]
+    assert "Clean display" in texts and "Traces may overlap" in texts
+    v.set_clean(False)
+    v.set_overlap(False)
+    assert tr.left.isVisible() and tr.label.isVisible()
 
 
 # ------------------------------------------------------------------------------------------

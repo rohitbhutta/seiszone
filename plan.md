@@ -365,8 +365,12 @@ Ctrl+1, Pause/Space, F, Ctrl+F, N, Z, +/-, Ctrl +/-, F5, Ctrl+Shift+P print, Ctr
 min), `filter_on` / `filter` (a `filter_dialog.filter_catalogue` key: "default", the FILTERS
 names, "saved:<name>", "custom" with `custom` spec), units counts / physical / physical_g
 (acceleration in g), scale auto / common (per instrument: NET.STA.LOC + band/instrument code, `waveform_view.instrument`) /
-common_all (one range for all) / fixed + `fixed`, `demean`, `gain` (x2 steps, 1/64 -
-4096), `lanes`, `overlay`, `background`, `spec_size` (32-256), per channel `traces[sid]` =
+common_all (one range for all) / fixed + `fixed` / pixel (1.7.0: `cpp` units per pixel of row
+height, a power of two, None = fitted from the data; range = cpp x row height / the trace's
+factor; Up/Down halve/double it, Home fits it; `scale_others_to_match` sets each other channel's
+factor = ref factor x ref range / its range and fits cpp to the reference), `demean`, `gain` (x2
+steps, 1/64 - 4096), `lanes`, `overlay`, `clean` (no row axes/captions/frames/gaps), `overlap`
+(rows do not clip their traces), `background`, `spec_size` (32-256), per channel `traces[sid]` =
 `TRACE_DEFAULTS` keys that differ: color, scale, filter (None = window's, "off", a key,
 "custom") + custom, offset (None = follow demean, else counts subtracted), locked, spectrogram,
 contrast. Grid rows per channel: 3i trace, 3i+1 spectrogram, 3i+2 time axis / gap. A trace is
