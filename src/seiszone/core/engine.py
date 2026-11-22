@@ -665,6 +665,8 @@ class Engine:
             if self._gcf_server_settings() != self._gs_cfg or (self._gs_cfg[0] and self.gcf_server is None):
                 self._close_gcf_server()
                 await self._open_gcf_server()
+            elif self.gcf_server is not None:   # the SeedLink port it names may have changed
+                self.gcf_server.seedlink_port = self._sl_port if self._sl_server is not None else None
 
     # ================================================================== housekeeping
     async def _housekeeping(self):

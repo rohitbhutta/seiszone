@@ -24,7 +24,7 @@ from test_gecko_gcf import TEDT_MAP, TEDT_SIDS, FakeScream
 
 from seiszone import VERSION
 from seiszone.config import Config, State
-from seiszone.core import cli, links, mseed
+from seiszone.core import cli, links, mseed, recorder
 from seiszone.core import probe as probe_mod
 from seiszone.core.engine import Engine
 from seiszone.core.hub import DataHub
@@ -262,10 +262,10 @@ def test_recording_through_engine(make_engine, remote, tmp_path):
              what="several records per file")
     engine.recorder.stop(rid)
     files = sorted(glob.glob(os.path.join(folder, "WB.KUM", "*", "*.mseed")))
-    assert sorted(os.path.basename(p).split("__")[0] for p in files) == sorted(SIDS)
+    assert sorted(recorder.FILE_RE.match(os.path.basename(p)).group("code") for p in files) == sorted(SIDS)
     for p in files:
         recs = mseed.read_file(p, check=True)
-        assert recs and {r.sid for r in recs} == {os.path.basename(p).split("__")[0]}
+        assert recs and {r.sid for r in recs} == {recorder.FILE_RE.match(os.path.basename(p)).group("code")}
     assert os.path.exists(os.path.join(folder, "recording_log.txt"))
 
 

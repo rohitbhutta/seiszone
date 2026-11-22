@@ -106,7 +106,7 @@ def window(qapp, tmp_path):
 def test_window_builds_and_timers_tick(qapp, window):
     assert window.windowTitle() == f"SeisZone {VERSION}"
     texts = [a.text() for a in window.toolbar.actions() if a.text()]
-    assert texts == ["Add source", "Remove", "Reconnect", "Open viewer", "Record", "Export", "Settings", "About"]
+    assert texts == ["Add source", "Remove", "Reconnect", "Open viewer", "Record", "Export", "Data server", "Settings", "About"]
     assert window.centralWidget() is window.channels           # the waveforms are in viewer windows
     window.show()
     pump(qapp, 2.0)

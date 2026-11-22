@@ -220,7 +220,7 @@ def test_waveform_renders(view, engine, qapp):
         assert x[0] >= t0 - 1 and x[-1] <= t1 + 1
         assert tr.hi > 30000                              # the burst is visible
         assert tr.sid in tr.label.text and "min" in tr.label.text
-    assert "KUMARI" in view._traces[0].label.text
+    assert "KUMARI" in view._traces[0].panel.entries[0][0]       # the site is in the label box
     # the same channels again: nothing rebuilt
     plots = [tr.vb for tr in view._traces]
     view.set_channels(list(SIDS))
