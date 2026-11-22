@@ -450,6 +450,37 @@ def test_probe_seedlink_offline(fast):
     assert text[-1] == "StationXML: not found (values are shown in counts)"
 
 
+@pytest.mark.parametrize("reply, want", [
+    (b"SeedLink v3.1 (2024.001) :: SLPROTO:3.1 CAP\r\nGEOFON DC\r\n", ("SeedLink v3.1 (2024.001) :: SLPROTO:3.1 CAP", "GEOFON DC")),
+    (b"SeedLink v3.0 (ringserver/2020.075)\nIRIS DMC\n", ("SeedLink v3.0 (ringserver/2020.075)", "IRIS DMC")),
+    (b"SeedLink v3.1 (digitiser) :: SLPROTO:3.1\rStation\r", ("SeedLink v3.1 (digitiser) :: SLPROTO:3.1", "Station")),
+    (b"SeedLink v2.5 (old unit)\r\n", ("SeedLink v2.5 (old unit)", "")),          # only one line
+    (b"HTTP/1.1 400 Bad Request\r\nServer: x\r\n", None),                        # not SeedLink
+])
+def test_any_seedlink_server_banner(fast, monkeypatch, reply, want):
+    """HELLO answers of different SeedLink servers on a port typed by the user: line ends CR LF,
+    LF or CR, one line only; another service on the port is not taken for SeedLink."""
+    monkeypatch.setattr(ip, "BANNER_SECOND_LINE_WAIT", 0.3)
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    port = srv.getsockname()[1]
+
+    def serve():
+        conn, _ = srv.accept()
+        with conn:
+            conn.recv(100)
+            conn.sendall(reply)
+            time.sleep(1.0)
+    t = threading.Thread(target=serve, daemon=True)
+    t.start()
+    try:
+        assert ip.seedlink_hello("127.0.0.1", port, timeout=3) == want
+    finally:
+        t.join(3)
+        srv.close()
+
+
 def test_probe_prefers_direct_seedlink(fake, fast):
     """Typed IP:1567 on a unit that also has SeedLink -> SeisZone uses the instrument's SeedLink."""
     fast.setattr(ip, "HTTP_PORT", fake.http_port)

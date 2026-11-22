@@ -1,4 +1,10 @@
-"""AddSourceDialog: the user types only "IP address : port" and gets a working instrument.
+"""AddSourceDialog: the user types only the IP address (and, if needed, the port) and gets a
+working instrument.
+
+Port box (or "IP:port" in the address field): empty = SeedLink on 18000, the default (and only
+when nothing answers there, GCF on 1567); a typed port is used as it is - SeedLink first, then
+GCF - so any SeedLink server on any port is found (SeisComP, ringserver, digitisers, another
+SeisZone ...).
 
 Detect runs core.probe.probe() in a QThread (it may take up to a few minutes over a slow VPN:
 SeedLink INFO, a GCF data sample, the instrument's web page and its StationXML). Its progress
@@ -83,22 +89,35 @@ class AddSourceDialog(QDialog):
 
         title = QLabel("Add an instrument or SeedLink server")
         title.setStyleSheet("font-size: 13pt; font-weight: 600;")
-        intro = QLabel("Type its IP address and, if you know it, the port. SeisZone finds the stations, "
-                       "channels, sample rates and StationXML by itself.")
+        intro = QLabel("Type its IP address. Leave the port empty for SeedLink on 18000 (the default), or "
+                       "type the port of any SeedLink or GCF server. SeisZone finds the stations, channels, "
+                       "sample rates and StationXML by itself.")
         intro.setWordWrap(True)
         intro.setStyleSheet(f"color: {c['muted']};")
 
         self.edit = QLineEdit(initial_text)
-        self.edit.setPlaceholderText("IP address : port     e.g. 10.8.0.182:18000")
+        self.edit.setPlaceholderText("IP address     e.g. 10.8.0.182")
         self.edit.setClearButtonEnabled(True)
         self.edit.setMinimumHeight(30)
         self.edit.setStyleSheet("font-size: 11pt;")
         self.edit.textEdited.connect(self._text_edited)
+        self.port_edit = QLineEdit()
+        self.port_edit.setPlaceholderText(f"{DEFAULT_SEEDLINK_PORT}")
+        self.port_edit.setToolTip(f"Empty: SeedLink on {DEFAULT_SEEDLINK_PORT} (the default; GCF on 1567 only if "
+                                  "nothing answers there). Any other port: that port is used, SeedLink first, "
+                                  "then GCF.")
+        self.port_edit.setFixedWidth(90)
+        self.port_edit.setMinimumHeight(30)
+        self.port_edit.setStyleSheet("font-size: 11pt;")
+        self.port_edit.textEdited.connect(self._text_edited)
+        port_label = QLabel("Port")
         self.detect_button = QPushButton(theme.icon("zoom"), "Detect")
         self.detect_button.setMinimumHeight(30)
         self.detect_button.clicked.connect(self.detect)
         row = QHBoxLayout()
         row.addWidget(self.edit, 1)
+        row.addWidget(port_label)
+        row.addWidget(self.port_edit)
         row.addWidget(self.detect_button)
 
         links = "&nbsp;&nbsp;&middot;&nbsp;&nbsp;".join(
@@ -234,8 +253,27 @@ class AddSourceDialog(QDialog):
         if self.state == "detecting":
             return
         self.edit.setText(text)
+        self.port_edit.clear()
         self._text_edited(text)
         self.edit.setFocus()
+
+    def target(self):
+        """'host' or 'host:port' for the probe from the address field and the Port box (empty:
+        the default, SeedLink on 18000). ValueError with a message for the user."""
+        from ..core.probe import parse_target
+        text = self.edit.text().strip()
+        if not text:
+            raise ValueError("Type the IP address of the instrument first, for example 10.8.0.182.")
+        host, typed = parse_target(text)
+        p = self.port_edit.text().strip()
+        if not p:
+            return f"{host}:{typed}" if typed else host
+        if not p.isdigit() or not 1 <= int(p) <= 65535:
+            raise ValueError(f"The port '{p}' is not a number from 1 to 65535 (leave it empty for "
+                             f"{DEFAULT_SEEDLINK_PORT}).")
+        if typed and typed != int(p):
+            raise ValueError(f"The address says port {typed} and the Port box says {int(p)}: keep only one.")
+        return f"{host}:{int(p)}"
 
     def _text_edited(self, _text):
         """A changed address makes the old result meaningless: back to Detect."""
@@ -247,6 +285,7 @@ class AddSourceDialog(QDialog):
         self.state = state
         detecting = state == "detecting"
         self.edit.setEnabled(not detecting)
+        self.port_edit.setEnabled(not detecting)
         self.detect_button.setEnabled(not detecting)
         self.busy.setVisible(detecting)
         self.card.setVisible(state in ("found", "nothing"))
@@ -272,9 +311,8 @@ class AddSourceDialog(QDialog):
     def detect(self):
         if self.state == "detecting":
             return
-        text = self.edit.text().strip()
-        if not text:
-            self.show_error("Type the IP address of the instrument first, for example 10.8.0.182:18000.")
+        if not self.edit.text().strip():
+            self.show_error("Type the IP address of the instrument first, for example 10.8.0.182.")
             return
         try:
             from ..core import probe as probe_mod
@@ -282,9 +320,12 @@ class AddSourceDialog(QDialog):
             self.show_error(f"Instrument detection is not available in this build ({e}).")
             return
         try:
-            probe_mod.parse_target(text)
+            text = self.target()
         except ValueError as e:
-            self.show_error(f"{str(e).rstrip('.')}. Type it like 10.8.0.182:18000 or just 10.8.0.182.")
+            msg = str(e).rstrip(".")
+            if "Port box" not in msg and "port '" not in msg:
+                msg += ". Type it like 10.8.0.182:18000 or just 10.8.0.182"
+            self.show_error(msg + ".")
             return
         self.error.hide()
         self.inst = None
@@ -476,10 +517,11 @@ class AddSourceDialog(QDialog):
         """Nothing was detected: add the address as a SeedLink source with every channel."""
         try:
             from ..core.probe import parse_target
-            host, port = parse_target(self.edit.text())
+            host, port = parse_target(self.target())
         except ImportError:
             text = self.edit.text().strip()
             host, _, p = text.partition(":")
+            p = self.port_edit.text().strip() or p
             port = int(p) if p.isdigit() else None
         except ValueError as e:
             self.show_error(str(e))

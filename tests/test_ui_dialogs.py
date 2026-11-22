@@ -558,6 +558,47 @@ def test_add_dialog_validation_and_retyping(make_engine, qapp, monkeypatch):
     dlg.reject()
 
 
+def test_add_dialog_port_box(make_engine, qapp, monkeypatch):
+    """The Port box: empty = SeedLink on 18000 (the default); a typed port is used as it is."""
+    from seiszone.ui.add_source_dialog import AddSourceDialog
+    engine = make_engine(with_source=False)
+    calls = []
+    fake_probe(monkeypatch, seedlink_instrument(), calls)
+    dlg = AddSourceDialog(engine, engine.config)
+    assert dlg.port_edit.text() == "" and dlg.port_edit.placeholderText() == "18000"
+    detect(qapp, dlg, "10.8.0.182")                     # no port: the probe's default (18000 first)
+    assert calls[-1]["text"] == "10.8.0.182"
+    dlg.port_edit.setText("16000")                      # another SeedLink server port, typed by hand
+    detect(qapp, dlg, "10.8.0.182")
+    assert calls[-1]["text"] == "10.8.0.182:16000"      # (the probe connects to that port)
+    dlg.reject()
+    # "IP:port" in the address field still works; two different ports are refused
+    dlg2 = AddSourceDialog(engine, engine.config)
+    dlg2.port_edit.setText("18001")
+    detect(qapp, dlg2, "10.8.0.182:18001")
+    assert calls[-1]["text"] == "10.8.0.182:18001"
+    n = len(calls)
+    for port, msg in (("17000", "keep only one"), ("abc", "not a number from 1 to 65535"),
+                      ("70000", "not a number from 1 to 65535")):
+        dlg2.port_edit.setText(port)
+        dlg2.detect()
+        assert dlg2.error.isVisible() and msg in dlg2.error.text(), port
+    assert len(calls) == n
+    dlg2.reject()
+    # nothing answered: "Add anyway as SeedLink" takes the Port box, else 18000
+    nothing = probe_mod.Instrument("10.8.0.199")
+    fake_probe(monkeypatch, nothing)
+    for port, want in (("18010", 18010), ("", 18000)):
+        dlg3 = AddSourceDialog(engine, engine.config)
+        dlg3.port_edit.setText(port)
+        detect(qapp, dlg3, "10.8.0.199")
+        assert dlg3.state == "nothing"
+        dlg3.manual_button.click()
+        src = [c[1] for c in engine.calls if c[0] == "add_source"][-1]
+        assert src["host"] == "10.8.0.199" and src["port"] == want
+        engine.config.remove_source(dlg3.added_source["id"])   # (the next one is not asked to replace it)
+
+
 def test_add_dialog_closed_while_detecting(make_engine, qapp, monkeypatch):
     from seiszone.ui import add_source_dialog as mod
     engine = make_engine(with_source=False)

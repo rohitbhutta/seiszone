@@ -53,7 +53,9 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   buffer (core/packet_store.py, 2 days in %LOCALAPPDATA%\SeisZone\ServerBuffer): clients of this
   PC backfill after hours away and across restarts, viewers show older data. GCF gap recovery not
   built: findings in docs/reports/2026-11-23-gcf-gap-recovery-findings.md (do not guess the bytes).
-  IIT R / IIT Roorkee 3 do not answer SeedLink on 18000 (2026-11-23). See docs/history.md.
+  IIT R / IIT Roorkee 3 do not answer SeedLink on 18000 (2026-11-23). Add source has a Port box
+  (empty = 18000; a typed port is used as given) and accepts any SeedLink server's banner. See
+  docs/history.md.
 * **2026-11-23 00:26 - 1.8.0 installed and running** (38/38 sources, missed data fetched; the
   first installer run closed SeisZone and ended without installing - check the version after an
   install). Data server off; not yet tried from a second computer.

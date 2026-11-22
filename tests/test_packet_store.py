@@ -1,4 +1,4 @@
-﻿"""The SeedLink server's disk buffer (core/packet_store.py): packets kept on disk for days, read
+"""The SeedLink server's disk buffer (core/packet_store.py): packets kept on disk for days, read
 back in order after a restart, old files removed, the hub and the server reaching back into it,
 and the viewers reading its per-station files. Everything is local (tmp_path, 127.0.0.1 with
 random ports); no instrument is contacted."""

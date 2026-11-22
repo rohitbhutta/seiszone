@@ -53,7 +53,10 @@ Your recordings, exports, settings and log files are **not** deleted.
 ## 3. Add an instrument (only IP address and port)
 
 1. Click **Add source** in the toolbar (or press Ctrl+N).
-2. Type the IP address and the port, for example `10.8.0.182:18000`.
+2. Type the IP address in the first box, for example `10.8.0.182`. Type the port in the **Port**
+   box only if it is not the usual SeedLink port: **empty = 18000** (the default). Any other port
+   you type, for example `16000` or `18001`, is used exactly as typed. (Typing `10.8.0.182:16000`
+   in the address box works too.)
 3. Click **Detect**. SeisZone asks the instrument what it is: station and network code, site
    name, channels, and its StationXML (instrument response). Over a slow VPN this can take
    a minute or two; the progress lines show what it is doing.
@@ -72,9 +75,15 @@ What you type decides how SeisZone reads the instrument:
 
 | You type | SeisZone reads |
 |----------|----------------|
-| `10.8.0.182` (IP only) | **SeedLink** (miniSEED) on port 18000. Only if no SeedLink server answers there does it try GCF on 1567 (and says so). |
-| `10.8.0.182:18000` | **SeedLink** only |
-| `10.8.0.182:1567` | **GCF** only (Scream protocol) |
+| `10.8.0.182`, Port empty | **SeedLink** (miniSEED) on port **18000**, the default. Only if no SeedLink server answers there does it try GCF on 1567 (and says so). |
+| Port `18000` | **SeedLink** only |
+| Port `1567` | **GCF** only (Scream protocol) |
+| Any other port, e.g. `16000` | **SeedLink** on that port first (any SeedLink server: SeisComP, ringserver, another digitiser, another SeisZone), then GCF on that port |
+
+SeisZone recognises every SeedLink server by its answer to HELLO, also those that end their
+lines differently or send only one line. If detection finds nothing but you know a SeedLink
+server is there, **Add anyway as SeedLink** adds it with the port in the Port box (empty = 18000)
+and keeps trying to connect.
 
 * **SeedLink is the best choice:** after a break (VPN down, PC off) the instrument sends the
   missed data again, so recordings have no gaps. SeisZone shows **live data first** and fetches

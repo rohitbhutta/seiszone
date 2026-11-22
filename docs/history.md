@@ -4,6 +4,19 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 03:00 - 1.9.0: Port box in Add source; any SeedLink server (same pull request)
+
+* Asked: SeedLink sources by IP and a port typed by hand; no port = 18000 (default); a typed port
+  is used as given; detect any type of SeedLink server.
+* Add source: a **Port** box beside the address (placeholder 18000). Empty = the probe's default
+  (SeedLink 18000, then GCF 1567); a typed port is used exactly (SeedLink first, then GCF).
+  "IP:port" in the address box still works; two different ports are refused; "Add anyway as
+  SeedLink" uses the Port box (empty = 18000). Picture docs/reports/2026-11-23-add-source-port-box.png.
+* probe: one banner reader (_read_banner) for HELLO and INFO: lines ending CR LF, LF or CR, and
+  servers that send only one banner line (after BANNER_SECOND_LINE_WAIT 1.5 s) are accepted; the
+  first line must name SeedLink or SLPROTO (another service on the port is not taken for it).
+* Tests: test_any_seedlink_server_banner (5 server answers), test_add_dialog_port_box.
+
 ## 2026-11-23 02:00-03:00 - 1.9.0: SeedLink server disk buffer (same pull request)
 
 * Asked: "fix the SeedLink backfill in any kind of option", plan first. Measured before planning

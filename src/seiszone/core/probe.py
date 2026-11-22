@@ -76,38 +76,54 @@ def parse_target(text):
 # SeedLink
 # --------------------------------------------------------------------------
 
+BANNER_SECOND_LINE_WAIT = 1.5   # s to wait for the organization line once the first line came
+
+
+def _read_banner(s, timeout):
+    """The HELLO answer of any SeedLink server: (software, organization) or None. Lines may end
+    in CR LF (the standard), LF or CR; a server that sends only the first line is accepted after
+    BANNER_SECOND_LINE_WAIT (organization ""). The first line must name SeedLink (or SLPROTO)."""
+    buf = b""
+    t0 = time.time()
+    s.settimeout(timeout)
+    while time.time() - t0 < timeout:
+        try:
+            d = s.recv(4096)
+        except socket.timeout:
+            break
+        if not d:
+            break
+        buf += d
+        lines = buf.replace(b"\r\n", b"\n").replace(b"\r", b"\n").split(b"\n")
+        if len(lines) >= 3:              # two complete lines
+            break
+        if len(lines) == 2:              # the first line is complete: the second may never come
+            s.settimeout(BANNER_SECOND_LINE_WAIT)
+    lines = [x.strip() for x in buf.decode("latin-1", "replace").replace("\r\n", "\n").replace("\r", "\n")
+             .split("\n")]
+    first = lines[0] if lines else ""
+    if not first or not ("seedlink" in first.lower() or "slproto" in first.lower()):
+        return None
+    return first, (lines[1] if len(lines) > 1 else "")
+
+
 def seedlink_hello(host, port, timeout=8):
     """Banner lines (software, organization) or None if no SeedLink server answers."""
     try:
         with socket.create_connection((host, port), timeout=timeout) as s:
-            s.settimeout(timeout)
             s.sendall(b"HELLO\r\n")
-            buf = b""
-            t0 = time.time()
-            while buf.count(b"\r\n") < 2 and time.time() - t0 < timeout:
-                d = s.recv(4096)
-                if not d:
-                    break
-                buf += d
+            return _read_banner(s, timeout)
     except OSError:
         return None
-    lines = buf.decode("latin-1", "replace").split("\r\n")
-    if len(lines) < 2 or "seedlink" not in lines[0].lower():
-        return None
-    return lines[0].strip(), lines[1].strip()
 
 
 def seedlink_info(host, port, level, timeout=15):
     """XML text of INFO <level> (all SLINFO packets joined). OSError if the server refuses."""
     with socket.create_connection((host, port), timeout=timeout) as s:
-        s.settimeout(timeout)
         s.sendall(b"HELLO\r\n")
-        h = b""
-        while h.count(b"\r\n") < 2:
-            d = s.recv(4096)
-            if not d:
-                raise OSError("connection closed")
-            h += d
+        if _read_banner(s, timeout) is None:
+            raise OSError("not a SeedLink server")
+        s.settimeout(timeout)
         s.sendall(f"INFO {level}\r\n".encode())
         xml, buf = b"", b""
         while True:
