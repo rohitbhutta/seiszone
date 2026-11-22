@@ -4,6 +4,17 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-22 19:25 - multi-instrument side by side; viewer plan written
+
+* Its ~130-channel window: one zoom 1:536 870 912, all flat but IS.PAZ.0J.BHZ raw (glitching
+  sensor) - the same flat effect the user reported, in that viewer.
+* Its 12-stream window vs SeisZone (Fixed +- with per-trace gain = its factors): same events,
+  same relative sizes; each of its traces = zoom / factor (within 4-17 %).
+* Filter: IIR and FIR designs all give 0.90-0.92 of its drawn amplitude - no filter change needed.
+* Plan for a viewer mode like that WaveView: docs/reports/2026-11-22-viewer-like-plan.md
+  (counts-per-pixel zoom, factor in the label + match others, pixels per second, clean rows,
+  overlap, minute ticks). Waiting for the user's OK.
+
 ## 2026-11-22 19:10 - all instruments added to the third-party viewer; data identical
 
 * At the user's request (user closed it first): 32 UDP pull servers added to C:\scream\scream.ini

@@ -161,6 +161,8 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   (1 s) and amplitudes (5-11 %); its look = Scale "Fixed +-" 2048 counts (report section 8).
   19:10: all 36 GCF units added to its pull list (C:\scream\scream.ini, backup kept); GCF vs SeisZone
   135 channels, 415 059/415 059 samples identical (section 9). Next: picture compare + viewer plan.
+  19:25: pictures match (section 10); filter needs no change; plan
+  docs/reports/2026-11-22-viewer-like-plan.md waits for the user's OK.
 * **Selectors for a one-character location** (Minimus Lite / older Minimus use "1"): "1HH?" was
   refused at every reconnect; now "1?HH?" (`seedlink_client.wire_selector` at sending, also for
   old configs; `probe.selectors_for` makes it so). Checked read-only on Tuljapur.

@@ -189,3 +189,22 @@ TimeScale = pixels per second (1, 2, 5); Filter_LP / Filter_HP = the window's cu
 (on, corner, order 4); per stream: colour, a vertical offset, a scale "auto" or a factor
 (e.g. 3067, 848.6 - shown in the label as "*3067" instead of the units), a gain 1.0.
 Its WaveView shows only data received since it started (no history after a restart).
+
+## 10. Multi-instrument window side by side; filter designs tested (2026-11-22 19:25)
+
+The user opened WaveView windows for the new instruments. Captured 13:49 UTC (pictures only).
+
+* Its window with ~130 channels was at zoom 1:536 870 912 with every trace flat except one
+  jumping trace: IS.PAZ.0J.BHZ (unit 2762) unfiltered - correlation 0.98 with its raw data
+  (glitches of 16.6 million counts). One zoom for the whole window: the same flat-trace effect
+  the user reported, in that viewer too.
+* Its 12-stream window (Panchavada, PATSIO, Nagdhaniba, Tuljapur; 2 px/s; zoom 1:8192; factors
+  *3067, *848.6 ...): each trace = window zoom / its factor; measured counts per pixel
+  1.04-1.17 x 8192/factor; envelope correlation 0.65-0.96. SeisZone drew the same window with
+  Fixed +-262144 counts and per-trace gain = its factor: same events (Panchavada 13:44:50,
+  PATSIO 13:48, Tuljapur spikes), same relative sizes. Picture
+  2026-11-22-side-by-side-4-instruments.png.
+* Filter designs against its drawn amplitudes: SeisZone's zero-phase IIR 0.918, causal IIR 0.874,
+  FIR 31/63/127/255 taps 0.923/0.915/0.905/0.904 (median ratio), correlation 0.78-0.83 for all.
+  The small gap is how it draws, not the filter; SeisZone's filter stays.
+* Plan for the remaining look-and-behaviour differences: 2026-11-22-viewer-like-plan.md.
