@@ -4,6 +4,11 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-22 19:55 - 1.7.0 pushed to GitHub
+
+* At the user's OK: main pushed to origin (90f0834..f02bd41): the checks against the earlier
+  viewer (reports sections 8-11, pictures, GCF comparison list), the viewer plan and 1.7.0.
+
 ## 2026-11-22 19:50 - 1.7.0 installed
 
 * The user quit SeisZone from the tray and chose "start the installer"; Claude started
