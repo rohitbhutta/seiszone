@@ -4,6 +4,11 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-22 20:20 - 1.7.0 built
+
+* Full suite 328 passed, 1 skipped. Commit ee9c838. build/dist/SeisZoneSetup.exe (68.8 MB, exe
+  reports 1.7.0). Not installed yet (the user quits SeisZone from the tray, then runs it). Not pushed.
+
 ## 2026-11-22 20:10 - 1.7.0: a viewer mode like the earlier viewer's WaveView
 
 * At the user's OK ("Yes, build it"): Scale "Per pixel (1:N)" (cpp, power of two, Up/Down/wheel
