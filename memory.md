@@ -48,6 +48,7 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
 
 ## Status (2026-11-22, version 1.7.0 installed 19:48)
 
+* **2026-11-23 - 1.8.0 merged into main** (pull request #1, merge commit e7cdd87); not installed yet.
 * **2026-11-23 00:10 - 1.8.0 built** (build/dist/SeisZoneSetup.exe 69.0 MB, from branch
   feature/viewer-recording-server c28970e; pull request #1 still open on GitHub then; not
   installed yet).

@@ -4,6 +4,11 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 - 1.8.0 merged into main
+
+* At the user's OK ("Yes, merge it"): branch pushed with the build note, pull request #1 merged
+  (merge commit e7cdd87); local main pulled. The branch is kept. Installer unchanged (same code).
+
 ## 2026-11-23 00:10 - 1.8.0 built
 
 * The user wrote "Merged, build the installer". GitHub still showed pull request #1 open and
