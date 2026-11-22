@@ -253,6 +253,47 @@ def summarize_blocks(blocks):
     return out
 
 
+SEISZONE_STATUS = re.compile(r"^SeisZone \S+ (?P<station>[^ .]+\.[^ .]+)(?P<site>.*?)(?: seedlink=(?P<sl>\d+))?$")
+SEISZONE_NAME = re.compile(r"^(?P<system>[0-9A-Z]+) (?P<stream>[0-9A-Z]+) = (?P<sid>[^ ]+\.[^ ]+\.[^ ]*\.[^ ]+)$")
+
+
+def seiszone_status(texts):
+    """What the status blocks of another SeisZone's GCF server say (core/gcf_server.py):
+    {"seedlink": port or None, "sites": {NET.STA: site}, "names": {system: {stream: sid}}},
+    or None when they come from an instrument or another server."""
+    out = None
+    for text in texts or []:
+        lines = [ln.strip() for ln in str(text).splitlines() if ln.strip()]
+        m = SEISZONE_STATUS.match(lines[0]) if lines else None
+        if not m:
+            continue
+        out = out or {"seedlink": None, "sites": {}, "names": {}}
+        if m.group("sl"):
+            out["seedlink"] = int(m.group("sl"))
+        out["sites"][m.group("station")] = m.group("site").strip()
+        for ln in lines[1:]:
+            n = SEISZONE_NAME.match(ln)
+            if n:
+                out["names"].setdefault(n.group("system"), {})[n.group("stream")] = n.group("sid")
+    return out
+
+
+def _seiszone_web(sz, system, streams):
+    """A stand-in for the web page of a digitiser relayed by another SeisZone: its exact SEED
+    names from the status blocks (None when they did not name this digitiser)."""
+    names = (sz or {}).get("names", {}).get(system)
+    if not names:
+        return None
+    first = next(iter(names.values())).split(".")
+    station = f"{first[0]}.{first[1]}"
+    out = {"net": first[0], "sta": first[1], "site": sz["sites"].get(station, ""), "streams": []}
+    for stream, sid in names.items():
+        _net, _sta, loc, cha = sid.split(".")
+        out["streams"].append({"gcf": stream, "loc": loc, "cha": cha,
+                               "rate": streams.get(stream, {}).get("rate", 0)})
+    return out
+
+
 def pick_system(blocks, web=None):
     """(system id, [the others]) of the digitisers seen: a Scream server can relay several, and
     their stream ids may be the same. The one the web page names wins, else the one with the
@@ -642,6 +683,18 @@ def probe(text, log=None, prefer_direct=True, need_xml=None, web=_UNREAD):
     for p in gcf_ports:
         log(f"Trying GCF (Scream UDP) on {host}:{p} ...")
         res = gcf_udp_sample(host, p)
+        sz = seiszone_status(res.get("status")) if res else None
+        if sz and sz["seedlink"]:
+            log(f"This is SeisZone on another computer; its SeedLink server is on port {sz['seedlink']} - "
+                "reading all its stations from there ...")
+            other = probe(f"{host}:{sz['seedlink']}", log, prefer_direct=False, need_xml=need_xml)
+            if other.found:
+                other.details["typed"] = f"{host}:{p}"
+                other.notes.insert(0, f"Typed {host}:{p}: this is SeisZone on another computer. SeisZone reads "
+                                      f"all its stations from its SeedLink server ({host}:{sz['seedlink']}), "
+                                      "with their own names, and fetches data missed during an outage again.")
+                return other
+            log("Its SeedLink server did not answer - reading GCF instead (one station per source).")
         if res:
             inst.method, inst.port = "gcf-udp", p
             web = finish()
@@ -671,6 +724,8 @@ def probe(text, log=None, prefer_direct=True, need_xml=None, web=_UNREAD):
 def _finish_gcf(inst, res, web, log):
     chosen, others = pick_system(res["blocks"], web)
     streams = summarize_blocks([b for b in res["blocks"] if b.system_id == chosen])
+    if not web:   # relayed by another SeisZone: its status blocks give the exact names
+        web = _seiszone_web(seiszone_status(res.get("status")), chosen, streams) or web
     inst.details["gcf_status"] = res.get("status", [])[-3:]
     sysids = [chosen] if chosen else []
     inst.details["system_id"] = chosen

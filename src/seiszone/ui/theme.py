@@ -245,6 +245,20 @@ def _draw(name, p, s):
         p.setPen(_pen(acc, s * 0.07))
         for k, rad in enumerate((0.14, 0.26)):
             p.drawArc(QRectF(s / 2 - s * rad, s * 0.33 - s * rad, 2 * s * rad, 2 * s * rad), 30 * 16, 120 * 16)
+    elif name in ("eye", "eye-off"):
+        on = name == "eye"
+        path = QPainterPath()
+        path.moveTo(s * 0.08, s / 2)
+        path.quadTo(s / 2, s * 0.08, s * 0.92, s / 2)
+        path.quadTo(s / 2, s * 0.92, s * 0.08, s / 2)
+        p.setPen(_pen(acc if on else c["muted"], s * 0.08))
+        p.drawPath(path)
+        p.setBrush(QColor(acc if on else c["muted"]))
+        p.drawEllipse(QPointF(s / 2, s / 2), s * 0.14, s * 0.14)
+        p.setBrush(Qt.NoBrush)
+        if not on:
+            p.setPen(_pen(c["muted"], s * 0.09))
+            p.drawLine(QPointF(s * 0.18, s * 0.82), QPointF(s * 0.82, s * 0.18))
     else:  # "app" and unknown names
         _draw_app(p, s)
 

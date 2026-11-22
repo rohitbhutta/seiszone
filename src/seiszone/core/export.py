@@ -23,7 +23,7 @@ import struct
 import numpy as np
 
 from . import mseed
-from .recorder import FILE_RE, stamp_time
+from .recorder import FILE_RE, name_time
 
 UTC = dt.timezone.utc
 MAX_FILE_SPAN = 2 * 3600.0     # s: a recording file may hold records starting this long before t0
@@ -65,7 +65,7 @@ def find_files(folders, sid, t0, t1, lookback=MAX_FILE_SPAN):
                 m = FILE_RE.match(e.name)
                 if not m or m.group("code") not in (sid, station):
                     continue
-                t = stamp_time(m.group("stamp"))
+                t = name_time(m)
                 key = os.path.normcase(os.path.realpath(e.path))
                 if t0 - lookback <= t < t1 and key not in seen:
                     seen.add(key)
@@ -115,7 +115,7 @@ def recorded_sids(folders, t0, t1):
                     entries = []
                 for e in entries:
                     m = FILE_RE.match(e.name)
-                    if not m or not t0 - MAX_FILE_SPAN <= stamp_time(m.group("stamp")) < t1:
+                    if not m or not t0 - MAX_FILE_SPAN <= name_time(m) < t1:
                         continue
                     code = m.group("code")
                     if code.count(".") == 3:

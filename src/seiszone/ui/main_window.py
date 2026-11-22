@@ -27,6 +27,7 @@ from .channels_panel import ChannelsPanel
 from .export_dialog import ExportDialog
 from .log_panel import LogPanel
 from .record_dialog import RecordDialog
+from .server_window import DataServerWindow
 from .settings_dialog import SettingsDialog
 from .sources_panel import SourcesPanel
 from .viewer_window import ViewerWindow
@@ -234,6 +235,9 @@ class MainWindow(QMainWindow):
                             "Start, watch and stop recordings to miniSEED files", "Ctrl+R")
         self.act_export = A("Export", self.open_export_dialog, "export",
                             "Export a time window of the ticked channels to miniSEED", "Ctrl+E")
+        self.act_server = A("Data server", self.open_data_server, "server",
+                            "Send all data to other computers on the network (UDP port 1567): see who is "
+                            "connected")
         self.act_close_viewers = A("Close all viewers", self.close_viewers, None, "Close every viewer window")
         self.act_settings = A("Settings", self.open_settings, "settings",
                               "Receiver, server, recording and display settings", "Ctrl+,")
@@ -248,7 +252,7 @@ class MainWindow(QMainWindow):
         tb.setMovable(False)
         tb.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         for a in (self.act_add, self.act_remove, self.act_reconnect, None, self.act_view, self.act_record,
-                  self.act_export, None, self.act_settings, self.act_about):
+                  self.act_export, self.act_server, None, self.act_settings, self.act_about):
             if a is None:
                 tb.addSeparator()
             else:
@@ -260,7 +264,7 @@ class MainWindow(QMainWindow):
     def _build_menus(self):
         mb = self.menuBar()
         m = mb.addMenu("&File")
-        m.addActions([self.act_add, self.act_export, self.act_settings])
+        m.addActions([self.act_add, self.act_export, self.act_server, self.act_settings])
         m.addSeparator()
         m.addAction(self.act_quit)
         m = mb.addMenu("&View")
@@ -282,7 +286,7 @@ class MainWindow(QMainWindow):
     def _build_status_bar(self):
         sb = self.statusBar()
         self.st = {}
-        for key in ("sources", "gecko", "server", "recording", "disk", "clock"):
+        for key in ("sources", "gecko", "server", "gcf_server", "recording", "disk", "clock"):
             lab = QLabel()
             sb.addPermanentWidget(lab)
             self.st[key] = lab
@@ -388,6 +392,19 @@ class MainWindow(QMainWindow):
                       None, "\n".join(str(p.get("peer", "")) for p in s.get("peers") or []))
         else:
             self._set(self.st["server"], "SeedLink server off", c["muted"])
+
+        gs = status.get("gcf_server") or {}
+        if gs.get("error"):
+            self._set(self.st["gcf_server"], f"Data server :{gs.get('port')} - not sending", c["danger"], gs["error"])
+        elif gs.get("listening"):
+            k = int(gs.get("clients") or 0)
+            self._set(self.st["gcf_server"], f"Data server :{gs.get('port')} - {k} client{'s' if k != 1 else ''}",
+                      c["ok"] if k else None, "\n".join(p.get("address", "") for p in gs.get("peers") or [])
+                      or "Waiting for other computers (Data server window)")
+        else:
+            self.st["gcf_server"].hide()
+        if gs.get("error") or gs.get("listening"):
+            self.st["gcf_server"].show()
 
         rec = [x for x in sessions if x.get("state") == "recording"]
         if rec:
@@ -543,6 +560,9 @@ class MainWindow(QMainWindow):
             dlg.reject()
         return self._open("export", lambda: ExportDialog(self.engine, self.config, self,
                                                          sids=sids, t0=t0, t1=t1))
+
+    def open_data_server(self):
+        return self._open("data_server", lambda: DataServerWindow(self.engine, self.config, self), modal=False)
 
     def open_settings(self):
         return self._open("settings", lambda: SettingsDialog(self.engine, self.config, self),

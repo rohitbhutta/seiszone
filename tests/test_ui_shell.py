@@ -106,7 +106,7 @@ def window(qapp, tmp_path):
 def test_window_builds_and_timers_tick(qapp, window):
     assert window.windowTitle() == f"SeisZone {VERSION}"
     texts = [a.text() for a in window.toolbar.actions() if a.text()]
-    assert texts == ["Add source", "Remove", "Reconnect", "Open viewer", "Record", "Export", "Settings", "About"]
+    assert texts == ["Add source", "Remove", "Reconnect", "Open viewer", "Record", "Export", "Data server", "Settings", "About"]
     assert window.centralWidget() is window.channels           # the waveforms are in viewer windows
     window.show()
     pump(qapp, 2.0)
@@ -664,3 +664,32 @@ def test_settings_default_window_is_for_new_viewers(qapp, window, monkeypatch):
     window._settings_applied()
     v = window.open_viewer(["WB.KUM.0J.HNZ"])
     assert v.view.pps() == 0.5            # the time scale nearest to an hour on the plot
+
+
+def test_data_server_window(qapp, window, tmp_path):
+    """The Data server window: off by default, switched on (saved, applied), clients and control."""
+    from seiszone.ui.server_window import DataServerWindow
+    assert window.act_server in window.toolbar.actions()
+    dlg = window.open_data_server()
+    try:
+        assert isinstance(dlg, DataServerWindow) and not dlg.isModal()
+        assert not dlg.enabled.isChecked() and dlg.port.text() == "1567"
+        assert "off" in dlg.state.text()
+        dlg.port.setText("99999")
+        assert not dlg.apply() and "1 to 65535" in dlg.error.text()
+        dlg.port.setText("1567")
+        dlg.enabled.setChecked(True)
+        dlg.max_rate.setValue(500)
+        assert dlg.apply()
+        assert window.config.get("gcf_server") == {"enabled": True, "bind": "0.0.0.0", "port": 1567, "max_rate": 500}
+        assert ("apply_settings",) in window.engine.calls
+        dlg.refresh()
+        assert "Server active on UDP port 1567 - 1 client" in dlg.state.text()
+        assert dlg.clients.rowCount() == 1 and dlg.clients.item(0, 0).text() == "192.168.1.100:1567"
+        assert dlg.clients.item(0, 1).text() == "B"
+        assert "Added client 192.168.1.100:1567" in dlg.control.toPlainText()
+        assert ":1567" in dlg.how.text() and "Add UDP Server" in dlg.how.text()
+        window._update_status(window.engine.status(), [])
+        assert "Data server :1567 - 1 client" in window.st["gcf_server"].text()
+    finally:
+        dlg.close()

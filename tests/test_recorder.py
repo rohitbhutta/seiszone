@@ -65,8 +65,9 @@ def test_period_files_are_byte_identical(tmp_path, minutes):
     assert all_files(folder) == sorted(os.path.relpath(p, folder) for p in expected)
     for path, raws in expected.items():
         name = os.path.basename(path)
-        stamp = name.split("__")[1][:15]
-        p0 = recorder.stamp_time(stamp)
+        m = recorder.FILE_RE.match(name)
+        p0 = recorder.name_time(m)
+        assert m.group("stamp") is None                     # the new name, not the 1.7 one
         assert p0 % (minutes * 60) == 0
         assert os.path.basename(os.path.dirname(path)) == mseed.fmt_time(p0)[:10]
         with open(path, "rb") as fh:
@@ -115,8 +116,8 @@ def test_channel_selection_and_station_layout(tmp_path):
     e, _ = records("WB.KUM.0J.HNE", HOUR + 10, 60, seed=3)
     for a, b, c in zip(z, n, e):
         feed(hub, [a, b, c])
-    assert all_files(one) == [os.path.join("WB.KUM", "2025-11-01", "WB.KUM.0J.HNZ__20251101T120000Z.mseed")]
-    assert all_files(sta) == [os.path.join("WB.KUM", "2025-11-01", "WB.KUM__20251101T120000Z.mseed")]
+    assert all_files(one) == [os.path.join("WB.KUM", "2025-11-01", "WB.KUM.0J.HNZ_20251101_1200_1300.mseed")]
+    assert all_files(sta) == [os.path.join("WB.KUM", "2025-11-01", "WB.KUM_20251101_1200_1300.mseed")]
     got = list(mseed.read_file(os.path.join(sta, all_files(sta)[0])))
     assert {r.sid for r in got} == {"WB.KUM.0J.HNZ", "WB.KUM.0J.HNN"}
     assert len(got) == len(z) + len(n)
@@ -137,7 +138,7 @@ def test_all_channels_includes_new_ones(tmp_path):
     b, _ = records("SS.SMR03..HHZ", HOUR + 30, 30, rate=100.0)   # a channel that appears later
     feed(hub, b)
     files = all_files(folder)
-    assert os.path.join("SS.SMR03", "2025-11-01", "SS.SMR03..HHZ__20251101T120000Z.mseed") in files
+    assert os.path.join("SS.SMR03", "2025-11-01", "SS.SMR03..HHZ_20251101_1200_1300.mseed") in files
     assert "SS.SMR03..HHZ: first data" in rec_log(folder)
     assert mgr.sessions()[0]["sids"] is None
     mgr.close()
@@ -338,6 +339,88 @@ def test_new_handle_never_evicts_itself(tmp_path, monkeypatch):
         assert fh.read() == rec.raw
     assert not s.pending and s.last_error == "" and len(mgr._handles) == 4
     mgr.close()
+
+
+def test_file_names_hold_the_date_start_and_end():
+    f = recorder.file_path
+    assert os.path.basename(f("R", "KA.KAND.9J.MNE", HOUR + 5, 60, "channel")) == \
+        "KA.KAND.9J.MNE_20251101_1200_1300.mseed"
+    assert os.path.basename(f("R", "KA.KAND.9J.MNE", HOUR + 16 * 60, 15, "station")) == \
+        "KA.KAND_20251101_1215_1230.mseed"
+    last = f("R", "KA.KAND.9J.MNE", HOUR + 11 * 3600 + 50, 60, "channel")    # 23:00 - midnight
+    assert last == os.path.join("R", "KA.KAND", "2025-11-01", "KA.KAND.9J.MNE_20251101_2300_2400.mseed")
+    assert os.path.basename(f("R", "KA.KAND.9J.MNE", HOUR + 5, 60, "channel", legacy=True)) == \
+        "KA.KAND.9J.MNE__20251101T120000Z.mseed"
+    for name, code in (("KA.KAND.9J.MNE_20251101_1200_1300.mseed", "KA.KAND.9J.MNE"),
+                       ("KA.KAND__20251101T120000Z.mseed", "KA.KAND"),
+                       ("SS.SMR03..HHZ_20251101_1200_1300.mseed", "SS.SMR03..HHZ")):
+        m = recorder.FILE_RE.match(name)
+        assert m.group("code") == code and recorder.name_time(m) == HOUR
+    assert recorder.FILE_RE.match("notes.mseed") is None
+
+
+def test_a_period_begun_under_the_old_name_goes_on_in_that_file(tmp_path):
+    """SeisZone updated in the middle of an hour: that hour stays in one file."""
+    hub, state, mgr = make(tmp_path)
+    folder = str(tmp_path / "rec")
+    sid = "WB.KUM.0J.HNZ"
+    recs, _ = records(sid, HOUR + 5, 240)
+    old = recorder.file_path(folder, sid, HOUR + 5, 60, "channel", legacy=True)
+    os.makedirs(os.path.dirname(old))
+    with open(old, "wb") as fh:                  # written by 1.7 before the update
+        fh.write(b"".join(r.raw for r in recs[:5]))
+    mgr.start("upgrade", folder, sids=[sid])
+    feed(hub, recs[3:12])                        # resent from the saved position, then new data
+    feed(hub, records(sid, HOUR + 3600 + 1, 10, seed=4)[0])       # the next hour: the new name
+    assert all_files(folder) == [os.path.join("WB.KUM", "2025-11-01", "WB.KUM.0J.HNZ_20251101_1300_1400.mseed"),
+                                 os.path.join("WB.KUM", "2025-11-01", "WB.KUM.0J.HNZ__20251101T120000Z.mseed")]
+    with open(old, "rb") as fh:
+        assert fh.read() == b"".join(r.raw for r in recs[:12])
+    mgr.close()
+
+
+def test_computer_off_while_recording_is_backfilled_into_the_same_files(tmp_path):
+    """The PC is switched off at 12:02 while recording and on again at 12:40. SeisZone starts,
+    the recording goes on, live data comes first (12:40 on), then the instrument's missed data
+    (12:02 - 12:40) arrives from the SeedLink fetch, some of it again. Everything ends up in
+    the folder and hour files of the recording, once, and the viewers' export reads it whole."""
+    hub, state, mgr = make(tmp_path)
+    folder = str(tmp_path / "rec")
+    sid = "WB.KUM.0J.HNZ"
+    recs, y = records(sid, HOUR + 5, 3600)       # 12:00:05 - 13:00:05, 20 sps
+    k_off = next(i for i, r in enumerate(recs) if r.start > HOUR + 120)
+    k_on = next(i for i, r in enumerate(recs) if r.start > HOUR + 40 * 60)
+    mgr.start("power cut", folder, sids=[sid], file_minutes=15)
+    feed(hub, recs[:k_off])
+    for h in list(mgr._handles.values()):        # power cut: no clean close
+        h[0].close()
+    mgr._handles.clear()
+    mgr._persist(force=True)
+
+    hub2 = DataHub()
+    mgr2 = RecordingManager(hub2, State(state.path), str(tmp_path / "default"), background=False)
+    feed(hub2, recs[k_on:])                      # live data first
+    feed(hub2, recs[k_off - 3:k_on])             # then the fetch from the last record received
+    mgr2.close()
+    st = []
+    for name in all_files(folder):
+        st += list(mseed.read_file(os.path.join(folder, name)))
+    keys = [(r.start, r.nsamp) for r in st]
+    assert len(keys) == len(set(keys)) == len(recs)                       # each record once
+    assert all(os.path.basename(p).startswith(sid + "_20251101_1") for p in all_files(folder))
+    assert len(all_files(folder)) == 5                                   # 12:00 12:15 12:30 12:45 13:00
+    for name in all_files(folder):                                       # each record in its period
+        m = recorder.FILE_RE.match(os.path.basename(name))
+        p0 = recorder.name_time(m)
+        assert all(p0 <= r.start < p0 + 900 for r in mseed.read_file(os.path.join(folder, name)))
+    text = rec_log(folder)
+    assert "SeisZone restarted - recording continues" in text
+    from obspy import read
+    from seiszone.core import export
+    assert len(export.find_files([folder], sid, HOUR + 5, HOUR + 3605)) == 5   # found by the viewers / export
+    st = read(os.path.join(folder, "WB.KUM", "*", "*.mseed"))
+    st.merge()
+    assert len(st) == 1 and np.array_equal(st[0].data, y)                # no gap, nothing twice
 
 
 def test_resend_after_a_crash_is_not_appended_twice(tmp_path):

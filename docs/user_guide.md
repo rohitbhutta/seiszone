@@ -176,7 +176,8 @@ main window alone; tick **Open the viewer windows again that were open when Seis
 closed** in Settings > Program to have them back at every start.
 
 On the left of every trace a box shows its **station** (or the label you gave the channel), its
-**location.channel** and its **units** (counts, m/s, m/s² or g). The colours follow the
+**location.channel**, the **site name** (for example Nagdhaniba) and its **units** (counts, m/s,
+m/s² or g). The colours follow the
 component: **Z green, N red, E sky blue**, others blue. The box
 of the channel under the mouse is drawn in full colour.
 
@@ -219,6 +220,9 @@ before SeisZone was started:
   divided by its own scale factor, which its label box shows instead of the units (×3067).
 * **Remove mean**: centres each trace on zero. **Null** (key **N**): fixes each trace's offset
   at its mean now.
+* **The eye**: shows or hides the details line above each trace (channel, min / max, units,
+  filter) - the eye is lit while they are shown, crossed out while hidden (key **I**). The label
+  boxes on the left stay.
 * **Time cursors**: two vertical lines to drag; the button shows the time between them and the
   matching frequency. **Ampl cursors**: two horizontal lines on the channel under the mouse;
   the button shows the difference.
@@ -229,9 +233,9 @@ before SeisZone was started:
 
 * **Wheel**: larger / smaller traces (stays live). **Shift+wheel**: shorter / longer window.
   **Ctrl+wheel**: scroll back / forward in time (pauses).
-* **Drag**: move in time (pauses). **Double-click**: live again.
-* **Shift+drag**: select a time range (also while live) on the channels from the one where you
-  start to the one where you let go - drag down (or up) over several channels to take them all.
+* **Shift+drag**: move in time (pauses). **Double-click**: live again.
+* **Drag**: select a time range (also while live), as in the earlier viewer, on the channels
+  from the one where you start to the one where you let go - drag down (or up) over several channels to take them all.
   **Ctrl+drag**: exactly two channels - the one where you start and the one where you let go, in
   that order (for a calibration: the calibration signal first, then the sensor output). The
   selected part stays marked while the menu is open (hatched where a channel has a gap), the
@@ -258,6 +262,8 @@ before SeisZone was started:
   * use it as "noise" or "signal" in the filter design.
 * **Right-click** a channel: the menu below. The status bar shows the time and value under the
   mouse.
+* Prefer dragging to move in time? Untick **View > Drag selects a time range**: then a drag
+  moves in time and Shift+drag selects (each viewer keeps its choice).
 
 ### Right-click menu
 
@@ -347,10 +353,23 @@ Start a recording:
 Where the files go:
 
 ```
-<folder>\WB.KUM\2026-03-14\WB.KUM.0J.HNZ__20260314T100000Z.mseed     (one file per channel)
-<folder>\WB.KUM\2026-03-14\WB.KUM__20260314T100000Z.mseed            (one file per station)
+<folder>\WB.KUM\2026-03-14\WB.KUM.0J.HNZ_20260314_1000_1100.mseed   (one file per channel)
+<folder>\WB.KUM\2026-03-14\WB.KUM_20260314_1000_1100.mseed          (one file per station)
 <folder>\recording_log.txt
 ```
+
+The name holds the date, the start and the end time of the file (UTC, HHMM): the files above
+hold 10:00 to 11:00 UTC. The last file of a day ends at `2400`. Files recorded by SeisZone 1.7
+and older are named `WB.KUM.0J.HNZ__20260314T100000Z.mseed`; they are still found by the
+viewers and the export, and are never renamed.
+
+**When the computer was switched off or restarted while recording:** the recording goes on by
+itself when SeisZone starts again. For SeedLink instruments SeisZone asks each instrument for
+the data it missed (from the last record it received, as far back as the instrument still
+holds it) and writes it into the same folder and into the file of its hour,
+next to what was already recorded - nothing is written twice. `recording_log.txt` says when
+data came back and which gap stayed. Instruments pulled over GCF UDP (port 1567) cannot send
+old data again: the time the computer was off stays a gap in their files.
 
 The files are standard **miniSEED**: any seismology program can read them. SeisZone writes the
 data exactly as the instrument sent it (no conversion, no loss). Data that arrives late (for
@@ -400,6 +419,31 @@ In the other program, add a SeedLink source with:
 The other program can ask for recent data again after it was closed (standard SeedLink
 sequence numbers), as long as SeisZone still holds it in memory. The Sources list shows the
 connected programs under **SeedLink server :18000**.
+
+### The data server: this PC's data on another computer (UDP 1567)
+
+The **Data server** button (main window tool bar, also in the File menu) opens a window like the
+earlier viewer's "My Server" page:
+
+1. Tick **Send all data to other computers on the network (GCF over UDP)** and press **Apply**.
+   The port is **1567**; "Channels up to" leaves out channels with a higher sample rate.
+2. On the other computer (same network):
+   * **earlier viewer**: Windows > Network Control > right-click > **Add UDP Server**, type
+     **this PC's IP:1567** (the window shows this PC's IP addresses);
+   * **SeisZone**: **Add source**, type **this PC's IP:1567**. SeisZone sees that it is
+     SeisZone and reads all its stations from its SeedLink server (port 18000) instead: the exact
+     channel names, and data missed while the network was down is fetched again. If that
+     SeedLink server is off, it reads GCF (one station per source, with its exact names).
+3. The window lists the connected computers (Clients, Params, since when, last request, blocks
+   sent) and what happened (Control). The status bar shows **Data server :1567 - 1 client**.
+
+Only one program on a PC can use a port. If the earlier viewer runs on this PC with port 1567,
+the window says "port 1567 is in use by another program": choose another port (for example
+1568) and type that on the other computer. The server is off until you switch it on, so it never
+takes the port from the earlier viewer by itself.
+
+Each channel goes out in blocks of up to 2 seconds starting on whole seconds, as instruments
+send them; less than a second at the very start of a stream (or after a gap) is not sent.
 
 ## 11. Settings
 

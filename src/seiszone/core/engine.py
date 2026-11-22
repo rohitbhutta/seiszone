@@ -4,6 +4,7 @@
   * one Link task per enabled source (SeedLinkClient, GcfLink), each with its own stop Event,
   * the Gecko listeners (Kelunji Gecko recorders connect IN, config["gecko"]["ports"]),
   * SeisZone's own SeedLink server (config["seedlink_server"]),
+  * SeisZone's own GCF server over UDP (config["gcf_server"], off by default, port 1567),
   * the DataHub, the RecordingManager (a hub listener) and the ResponseStore.
 
 The user interface calls the public methods from its own thread. They change config.json at
@@ -37,6 +38,7 @@ from .hub import DataHub
 from .links import RECEIVING
 from .recorder import RecordingManager
 from .seedlink_client import SeedLinkClient
+from .gcf_server import GcfServer
 from .seedlink_server import SeedLinkServer
 from .stationxml import ResponseStore
 
@@ -138,6 +140,10 @@ class Engine:
         self._sl_error = ""
         self._sl_owner = (None, None)  # (owner, pid) of its port while that is busy
         self._sl_cfg = None           # (enabled, bind, port) it was opened with
+        self.gcf_server = None        # GcfServer while its UDP port is open
+        self._gs_port = None
+        self._gs_error = ""
+        self._gs_cfg = None           # (enabled, bind, port, max_rate) it was opened with
         self._last_status_log = 0.0
         self._last_retry = 0.0
 
@@ -263,13 +269,14 @@ class Engine:
             async with self._changes:
                 await self._open_gecko()
                 await self._open_server()
+                await self._open_gcf_server()
                 for src in self.config.sources():
                     self.hub.descriptions.update(station_descriptions(src))
                     if src.get("enabled", True):
                         self._start_link(src)
             n = sum(1 for s in self.config.sources() if s.get("enabled", True))
-            log.info("engine started: %d source(s), Gecko %s, SeedLink server %s", n,
-                     self._gecko_text(), self._server_text())
+            log.info("engine started: %d source(s), Gecko %s, SeedLink server %s, GCF server %s", n,
+                     self._gecko_text(), self._server_text(), self._gcf_server_text())
             self._last_status_log = self._last_retry = time.time()
         finally:
             self._ready.set()
@@ -289,6 +296,7 @@ class Engine:
         await self._wait_links(running)
         await self._close_gecko(list(self._gecko_servers))
         await self._close_server()
+        self._close_gcf_server()
         self._save_seq()
         self.state.flush()
 
@@ -407,6 +415,7 @@ class Engine:
                        "error": self._sl_error, "owner": s_owner, "owner_pid": s_pid,
                        "clients": srv.clients if srv else 0,
                        "peers": [dict(p) for p in list(srv.peers)] if srv else []},
+            "gcf_server": self._gcf_server_status(),
             "started": self.started if self.running else None,
             "clock": utc_clock.clock.status(),
         }
@@ -472,6 +481,81 @@ class Engine:
         except (TypeError, ValueError):
             port = 18000
         return bool(s.get("enabled", True)), s.get("bind") or "0.0.0.0", port
+
+    def _gcf_server_settings(self):
+        s = self.config.get("gcf_server") or {}
+        try:
+            port = int(s.get("port", 1567))
+        except (TypeError, ValueError):
+            port = 1567
+        try:
+            max_rate = float(s.get("max_rate", 1000))
+        except (TypeError, ValueError):
+            max_rate = 1000.0
+        return bool(s.get("enabled", False)), s.get("bind") or "0.0.0.0", port, max_rate
+
+    def _gcf_names(self):
+        """{sid: (system id, stream id)} of the channels read over GCF: the GCF server sends
+        them under the digitiser's own names."""
+        out = {}
+        for src in self.config.sources():
+            g = src.get("gcf") or {}
+            system = g.get("system_id") or (src.get("details") or {}).get("system_id")
+            if not system:
+                continue
+            for stream, names in (g.get("map") or {}).items():
+                try:
+                    loc, cha = names
+                except (TypeError, ValueError):
+                    continue
+                out[f"{g.get('net', 'XX')}.{g.get('sta', 'GCF')}.{loc}.{cha}"] = (system, stream)
+        return out
+
+    async def _open_gcf_server(self, cfg=None):
+        if cfg is None:
+            cfg = self._gs_cfg = self._gcf_server_settings()
+        enabled, bind, port, max_rate = cfg
+        if not enabled:
+            self._gs_error = ""
+            return
+        if self.gcf_server is not None:
+            return
+        server = GcfServer(self.hub, self.state, max_rate=max_rate,
+                           seedlink_port=self._sl_port if self._sl_server is not None else None,
+                           gcf_names=self._gcf_names())
+        try:
+            self._gs_port = await server.open(bind, port)
+        except OSError as e:
+            server.close()
+            text = listen_error(port, e)
+            if e.errno in ADDR_IN_USE:
+                text += " (only one program on this PC can use it - is the earlier viewer running?)"
+            if self._gs_error != text:
+                log.error("GCF server: %s (%s)", text, e)
+            self._gs_error = text
+            return
+        self.gcf_server = server
+        self._gs_error = ""
+        log.info("GCF server listening on UDP %s:%d (channels up to %g sps)", bind, self._gs_port, max_rate)
+
+    def _close_gcf_server(self):
+        srv, self.gcf_server = self.gcf_server, None
+        self._gs_port, self._gs_error = None, ""
+        if srv is not None:
+            srv.close()
+
+    def _gcf_server_status(self):
+        enabled, bind, port, max_rate = self._gs_cfg or self._gcf_server_settings()
+        srv = self.gcf_server
+        return {"enabled": enabled, "bind": bind, "port": self._gs_port or port, "max_rate": max_rate,
+                "listening": srv is not None, "error": self._gs_error,
+                "clients": len(srv.clients) if srv else 0, "peers": srv.peers() if srv else [],
+                "blocks": srv.blocks_sent if srv else 0, "control": list(srv.control) if srv else []}
+
+    def _gcf_server_text(self):
+        if not (self._gs_cfg or self._gcf_server_settings())[0]:
+            return "off"
+        return self._gs_error or f"on UDP {self._gs_port}"
 
     def _gecko_owner(self):
         """(owner, pid) of the busy Gecko ports: the old service first (the one SeisZone can
@@ -578,6 +662,11 @@ class Engine:
                 await self._open_server()
             elif self.server is not None:
                 self.server.organization = self.config.get("seedlink_server", "organization") or "SeisZone"
+            if self._gcf_server_settings() != self._gs_cfg or (self._gs_cfg[0] and self.gcf_server is None):
+                self._close_gcf_server()
+                await self._open_gcf_server()
+            elif self.gcf_server is not None:   # the SeedLink port it names may have changed
+                self.gcf_server.seedlink_port = self._sl_port if self._sl_server is not None else None
 
     # ================================================================== housekeeping
     async def _housekeeping(self):
@@ -600,9 +689,11 @@ class Engine:
 
     async def _retry_listeners(self):
         """Ports that were busy may be free now (e.g. another program has ended)."""
-        if not (self._gecko_errors or self._sl_error):
+        if not (self._gecko_errors or self._sl_error or self._gs_error):
             return
         async with self._changes:
+            if self._gs_error and self._gs_cfg is not None:
+                await self._open_gcf_server(cfg=self._gs_cfg)
             if self._gecko_errors and self._gecko_cfg is not None:
                 await self._open_gecko(only=set(self._gecko_errors), cfg=self._gecko_cfg)
             if self._sl_error and self._sl_cfg is not None:
@@ -630,4 +721,5 @@ class Engine:
         return (f"sources {rec}/{len(srcs)} receiving, {len(self.hub.stream_ids())} channels, "
                 f"Gecko links {len(st['gecko']['links'])} ({self._gecko_text()}), "
                 f"SeedLink server {self._server_text()} with {st['server']['clients']} client(s), "
+                f"GCF server {self._gcf_server_text()} with {st['gcf_server']['clients']} client(s), "
                 f"recordings {len(sessions)}")

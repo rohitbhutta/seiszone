@@ -27,6 +27,7 @@ are carried over and cleaned up.
 | G10 | Own SeedLink server (default port 18000; 18010 until 1.0.1) so other programs can read all data | `core/seedlink_server.py` |
 | G11 | StationXML per station; show counts or physical units | `core/stationxml.py` |
 | G12 | Logs, tray icon, start with Windows, one installer | `ui/app.py`, `installer/` |
+| G13 | Own GCF data server over UDP (port 1567, off by default) so another PC (the earlier viewer or SeisZone) pulls all data | `core/gcf_server.py`, `ui/server_window.py` |
 
 Standing rules: never use the name of the user's separate business or of the third-party viewer; recording is user-controlled and data is never
 deleted (low disk space only warns); the program runs as the normal user (no admin) — only the
@@ -225,8 +226,10 @@ epoch covering t), `channels(net, sta)`. ElementTree only (no ObsPy).
 layout="channel"|"station") -> id`, `stop(id)`, `sessions() -> [dict id name folder sids
 file_minutes layout started stopped state files bytes last_write last_error]`,
 `flush()`, `close()`, `disk_status(folder) -> (free_bytes, warning_text|None)`.
-Files: `<folder>/<NET.STA>/<YYYY-MM-DD>/<NET.STA.LOC.CHA>__<YYYYMMDDTHHMMSSZ>.mseed` (layout
-channel) or `<NET.STA>__<...>.mseed` (layout station); the period (15/30/60 min, aligned to the
+Files: `<folder>/<NET.STA>/<YYYY-MM-DD>/<NET.STA.LOC.CHA>_<YYYYMMDD>_<HHMM>_<HHMM>.mseed` (layout
+channel) or `<NET.STA>_<...>.mseed` (layout station) - date, start and end of the period, UTC,
+the last of a day ending at 2400 (1.8; 1.7 and older: `<code>__<YYYYMMDDTHHMMSSZ>.mseed`, still
+read, and a period begun under that name goes on in that file); the period (15/30/60 min, aligned to the
 clock, UTC) is chosen by each record's start time; the raw record bytes are appended unchanged
 (lossless, backfilled records go into the right older file). Each recording writes
 `<folder>/recording_log.txt` (start, stop, new files, gaps per channel, links lost/back).

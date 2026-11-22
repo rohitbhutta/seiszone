@@ -24,7 +24,7 @@ from test_gecko_gcf import TEDT_MAP, TEDT_SIDS, FakeScream
 
 from seiszone import VERSION
 from seiszone.config import Config, State
-from seiszone.core import cli, links, mseed
+from seiszone.core import cli, links, mseed, recorder
 from seiszone.core import probe as probe_mod
 from seiszone.core.engine import Engine
 from seiszone.core.hub import DataHub
@@ -262,10 +262,10 @@ def test_recording_through_engine(make_engine, remote, tmp_path):
              what="several records per file")
     engine.recorder.stop(rid)
     files = sorted(glob.glob(os.path.join(folder, "WB.KUM", "*", "*.mseed")))
-    assert sorted(os.path.basename(p).split("__")[0] for p in files) == sorted(SIDS)
+    assert sorted(recorder.FILE_RE.match(os.path.basename(p)).group("code") for p in files) == sorted(SIDS)
     for p in files:
         recs = mseed.read_file(p, check=True)
-        assert recs and {r.sid for r in recs} == {os.path.basename(p).split("__")[0]}
+        assert recs and {r.sid for r in recs} == {recorder.FILE_RE.match(os.path.basename(p)).group("code")}
     assert os.path.exists(os.path.join(folder, "recording_log.txt"))
 
 
@@ -679,3 +679,34 @@ def test_cli_exit_codes(tmp_path, capsys, monkeypatch, quiet_log):
         raise RuntimeError("engine start failed (test)")
     monkeypatch.setattr(Engine, "_main", broken)
     assert cli.main(["--engine", "--seconds", "1", "--interval", "0.5", "--config", cfg.path]) == 1
+
+
+def test_gcf_data_server_switched_on_busy_port_and_off(make_engine, monkeypatch):
+    """The GCF data server is off by default; switched on it answers GCFPING; a port another
+    program holds is reported and taken once it is free; switched off it stops."""
+    from seiszone.core import engine as engine_mod
+    monkeypatch.setattr(engine_mod, "LISTEN_RETRY", 0.2)
+    e = make_engine()
+    st = e.status()["gcf_server"]
+    assert not st["enabled"] and not st["listening"] and "GCF server off" in e.status_line()
+    busy = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    busy.bind(("127.0.0.1", 0))
+    port = busy.getsockname()[1]
+    e.config.update_section("gcf_server", {"enabled": True, "bind": "127.0.0.1", "port": port})
+    e.apply_settings().result(5)
+    st = e.status()["gcf_server"]
+    assert not st["listening"] and f"port {port} is in use" in st["error"]
+    busy.close()
+    wait_for(lambda: e.status()["gcf_server"]["listening"], 5, "the GCF server on the freed port")
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as c:
+        c.settimeout(3)
+        c.sendto(b"GCFPING", ("127.0.0.1", port))
+        assert c.recvfrom(100)[0] == b"GCFACKN"
+        c.sendto(b"GCFSEND:B", ("127.0.0.1", port))
+        wait_for(lambda: e.status()["gcf_server"]["clients"] == 1, 5, "the client")
+        assert e.status()["gcf_server"]["peers"][0]["params"] == "B"
+        c.sendto(b"GCFSTOP", ("127.0.0.1", port))
+        assert c.recvfrom(100)[0] == b"GCFACKN"
+    e.config.update_section("gcf_server", {"enabled": False})
+    e.apply_settings().result(5)
+    assert not e.status()["gcf_server"]["listening"]

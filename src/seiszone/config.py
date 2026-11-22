@@ -64,6 +64,7 @@ DEFAULTS = {
     "sources": [],
     "gecko": {"enabled": True, "bind": "0.0.0.0", "ports": [58772], "rename": {}},
     "seedlink_server": {"enabled": True, "bind": "0.0.0.0", "port": 18000, "organization": "SeisZone"},
+    "gcf_server": {"enabled": False, "bind": "0.0.0.0", "port": 1567, "max_rate": 1000},
     "recording": {"folder": "", "file_minutes": 60, "layout": "channel"},
     "buffer_minutes": 60,
     "view": {"window_seconds": 300, "filter": "none", "units": "counts", "scale": "auto",
