@@ -48,7 +48,10 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
 
 ## Status (2026-11-22, version 1.7.0 installed 19:48)
 
-* **2026-11-23 - 1.8.0 merged into main** (pull request #1, merge commit e7cdd87); not installed yet.
+* **2026-11-23 00:26 - 1.8.0 installed and running** (38/38 sources, missed data fetched; the
+  first installer run closed SeisZone and ended without installing - check the version after an
+  install). Data server off; not yet tried from a second computer.
+* **2026-11-23 - 1.8.0 merged into main** (pull request #1, merge commit e7cdd87).
 * **2026-11-23 00:10 - 1.8.0 built** (build/dist/SeisZoneSetup.exe 69.0 MB, from branch
   feature/viewer-recording-server c28970e; pull request #1 still open on GitHub then; not
   installed yet).
@@ -159,7 +162,7 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   viewer was declined: it breaks the standing rule above and probably its licence. A
   side-by-side comparison of the same data in both programs (behaviour only) was offered instead.
 
-### Version 1.8.0 (2026-11-22, pull request; built 2026-11-23 00:09, not installed)
+### Version 1.8.0 (2026-11-22; built 2026-11-23 00:09, installed 00:26; 38/38 sources)
 
 * Viewer: `panel_lines(sid, units, label, scale, site)` -> 4 lines (site from
   hub.descriptions; the caption no longer has it); `set_captions` / eye button (`eye_button`,
