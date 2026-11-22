@@ -143,3 +143,27 @@ real difference is the amplitude scale: "Common" must not mix instruments. Fix p
 now confirmed): Common per instrument (all components of one sensor share a range, like the
 viewer's "all components" scaling), each instrument its own range; the old behaviour as an extra
 choice; plus the selector fix for location "1".
+
+## 8. Same instrument, same minutes: picture and numbers (2026-11-22 18:55)
+
+The user asked whether a SeisZone viewer shows the same as the third-party viewer. Compared on
+Tuljapur (MINL-7465 = MU.TLJP.1.HH?, 100 sps), the instrument open in its WaveView. Its window
+was captured (picture only) at 13:21 UTC; its settings were read from C:\scream\scream.ini and
+its User's Guide (no code). SeisZone's data: the same minutes from its own server (127.0.0.1:18000).
+SeisZone 1.6.0 drawn offscreen with Default band-pass.
+
+| Point | Third-party viewer | SeisZone 1.6.0 | Verdict |
+|---|---|---|---|
+| Filter | Default filter = FIR band-pass 0.1-0.9 x Nyquist (5-45 Hz at 100 sps) | Default band-pass 0.1-0.9 x Nyquist, zero-phase IIR | Same band. Peaks agree within 5-11 %, noise within 7-15 % (measured from its picture at 16 counts per pixel; its 1-2 px line width explains most of it) |
+| Events | 13:01:48, 13:09:45, 13:13:03 UTC; E biggest at 13:09:45, N biggest at 13:13:03 | the same | Same. Envelope correlation Z 0.91, N 0.79, E 0.85 |
+| Time axis | plot column 0 = 12:57:08 by its axis | 12:57:07 by cross-correlation of the data | Same within 1 s (1 pixel). Only its top-right clock is the PC clock (19 s fast) |
+| Amplitude scale | one vertical zoom for the whole window, in counts per pixel (here 1:16; scream.ini DefAmpScale=2048) | Default "Common per instrument" fits each sensor to its largest component | Different by design. Scale "Fixed +-" 2048 counts with Units "Counts" gives the same look (picture) |
+| Units label | nm/s (from its calvals.txt: 7465 G=1998-2002 V/(m/s), 2.398 uV/count) | counts or physical units from StationXML | Values on the axis can differ slightly; the waveform does not |
+| Horizontal | fixed 1 pixel per second | the window fits the chosen time span | Layout only |
+
+Picture: 2026-11-22-side-by-side-tuljapur.png (its WaveView on top, SeisZone Fixed +-2048 below).
+
+Verdict: for the same instrument and minutes SeisZone shows the same waveform, the same events at
+the same time and the same amplitudes (within what a picture can measure). The only intended
+difference is the default amplitude scale; to look exactly like it, choose Scale "Fixed +-",
+Units "Counts", 2048.

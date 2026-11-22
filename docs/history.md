@@ -4,6 +4,16 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-22 18:55 - same instrument, same minutes: SeisZone vs the third-party viewer
+
+* Tuljapur (7465) over 12:57-13:21 UTC: same band (0.1-0.9 x Nyquist), same events at the same
+  time (within 1 s), peaks within 5-11 %, envelope correlation 0.79-0.91. Only intended
+  difference: its scale is one fixed counts-per-pixel zoom (1:16, DefAmpScale 2048); SeisZone's
+  default fits each sensor. Scale "Fixed +-" 2048 + Units "Counts" looks the same. Details:
+  docs/reports/2026-11-22-multi-instrument-check.md section 8; picture
+  docs/reports/2026-11-22-side-by-side-tuljapur.png. Its settings were only read
+  (C:\scream\scream.ini, calvals.txt); no code read.
+
 ## 2026-11-22 18:40 - check: band-pass with every instrument in one viewer (1.6.0)
 
 * The user asked whether the viewer now filters correctly with many instruments, like the
