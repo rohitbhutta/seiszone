@@ -4,6 +4,15 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 00:10 - 1.8.0 built
+
+* The user wrote "Merged, build the installer". GitHub still showed pull request #1 open and
+  main at 338dffa, so the installer was built from the branch head c28970e (the same code).
+* `python installer/build.py`: build/dist/SeisZoneSetup.exe 69.0 MB (00:09), SeisZone.exe
+  reports 1.8.0; the frozen archive holds seiszone.core.gcf_server and seiszone.ui.server_window.
+* Next: the user merges the pull request and runs the installer (UAC); then a test with the earlier
+  viewer or SeisZone on a second computer pulling from this PC's data server.
+
 ## 2026-11-22 night - 1.8.0 on branch feature/viewer-recording-server (pull request)
 
 * Asked (with 5 screenshots): site name into the label box, an eye button to hide the details
