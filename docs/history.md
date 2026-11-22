@@ -8,7 +8,9 @@ what was found and what is waiting. Reports with the details are in docs/reports
 
 * Shift+drag over several rows / Ctrl+drag for two channels; tools on the selected channels;
   Save on selection; External tools (Set up external tools...). Tests added (viewer, analysis).
-* Version bumped to 1.6.0 (with the Common-per-instrument and selector fixes). See memory.md
+* Version bumped to 1.6.0 (with the Common-per-instrument and selector fixes). Full suite
+  326 passed, 1 skipped. Built 16:31: build/dist/SeisZoneSetup.exe (68.8 MB, exe reports 1.6.0);
+  not installed yet (the user installs it). See memory.md
   "Version 1.6.0".
 
 ## 2026-11-22 16:11 - 33 instruments added
