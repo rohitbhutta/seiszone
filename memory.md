@@ -155,6 +155,8 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   ALL channels; the others became flat lines). The filter always reached every channel. Common
   is now shared per sensor (`waveform_view.instrument`: NET.STA.LOC + band/instrument code);
   "Common, all channels" (`common_all`) keeps the old way. Proven with 60 min of 27 real channels.
+  Checked again 2026-11-22 18:40 with all 118 waveform channels / 42 sensors: all filtered
+  within 1.3 s; flat rows are faults (KS.ALM.0J.HHE dead, IS.PAZ.0J.BHZ glitches) - docs/history.md.
 * **Selectors for a one-character location** (Minimus Lite / older Minimus use "1"): "1HH?" was
   refused at every reconnect; now "1?HH?" (`seedlink_client.wire_selector` at sending, also for
   old configs; `probe.selectors_for` makes it so). Checked read-only on Tuljapur.

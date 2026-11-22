@@ -4,6 +4,22 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-22 18:40 - check: band-pass with every instrument in one viewer (1.6.0)
+
+* The user asked whether the viewer now filters correctly with many instruments, like the
+  third-party viewer. Checked offscreen with the 1.6.0 code and the last 10 minutes of every
+  station read from SeisZone's own server (127.0.0.1:18000; no instrument contacted): 118
+  waveform channels from 42 sensors, Default band-pass, Scale "Common per instrument".
+* All 118 rows filtered. With the app's 250 ms refresh: 89 rows at once, all 118 within 1.3 s
+  (the refresh budget works round-robin, about 2.5 ms per row). Picture of 6 sensors:
+  docs/reports/2026-11-22-many-instruments-bandpass.png.
+* Rows that look flat are real, not the filter: KS.ALM.0J.HHE is dead (raw value constant, range
+  0); IS.PAZ.0J.BHZ has huge glitches (raw range 16.6 million counts against ~5000 on E/N), so
+  its E and N look flat on the shared per-instrument scale (use Scale "Auto" or a per-trace
+  gain to see them). Quieter Z components (PATSI, BHD, SRG, HID, KAND) are simply smaller.
+* Not seen on the user's screen: no SeisZone viewer was open, and the third-party viewer showed
+  one instrument (7465), so there was no many-instrument side-by-side.
+
 ## 2026-11-22 16:50 - pushed to GitHub
 
 * At the user's OK: main pushed to origin (f4d3c0c..6799cdb), all 1.6.0 work.
