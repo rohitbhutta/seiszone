@@ -265,7 +265,7 @@ def test_per_pixel_zoom_like_the_earlier_viewer(win, qapp):
     assert v.cpp() == n
     v.set_trace_scale(SIDS[0], 4.0)                               # its own factor divides it
     assert span(tr) == pytest.approx(n * v._row_px / 4)
-    assert tr.panel.entries[0][0][2] == "×4"                      # shown instead of the units, like "*4"
+    assert tr.panel.entries[0][0][-1] == "×4"                      # shown instead of the units, like "*4"
     st = v.state()
     assert st["cpp"] == n and st["scale"] == "pixel"
     v2 = WaveformView(win.engine, win.engine.config, state=st)
@@ -478,6 +478,7 @@ def test_selection_menu_and_filter_design_spectra(win, qapp):
 
 def test_shift_drag_selects_a_time_range(win):
     v = win.view
+    v.set_drag_selects(False)          # the other mode: a plain drag pans, Shift+drag selects
     got = []
     v.selectionMade.disconnect(win.show_selection_menu)   # the menu would wait for a click
     v.selectionMade.connect(lambda a, b, sid, pos: got.append((a, b, sid)))
@@ -557,6 +558,8 @@ class RowDrag:
 
 
 def drag(view, i, j, a, b, mods=Qt.ShiftModifier):
+    if mods == Qt.ShiftModifier:
+        view.set_drag_selects(False)   # Shift+drag selects in that mode
     vb, to = view._traces[i].vb, view._traces[j].vb
     view._on_drag(RowDrag(vb, a, a + 10, vb, mods, start=True), vb)
     view._on_drag(RowDrag(vb, a, b, to, mods), vb)
@@ -875,8 +878,64 @@ def test_overlay_traces_share_the_y_range(win):
     v.reset_scales()
 
 
+def test_plain_drag_selects_like_the_earlier_viewer(win):
+    v = win.view
+    assert v.drag_selects() and v.state()["drag_selects"]     # the default
+    got = []
+    v.selectionMade.disconnect(win.show_selection_menu)
+    v.selectionMade.connect(lambda a, b, sid, pos: got.append((a, b, sid)))
+    try:
+        t0, _t1 = v.visible_range()
+        ev = drag(v, 0, 1, t0 + 100, t0 + 200, mods=Qt.NoModifier)
+        assert ev.accepted and got and got[0][2] == v._sids[0] and v.selected_channels() == v._sids[:2]
+        v.clear_selection()
+        # Shift+drag pans now: not taken by the selection
+        vb = v._traces[0].vb
+        assert not v._on_drag(RowDrag(vb, t0 + 100, t0 + 110, vb, Qt.ShiftModifier, start=True), vb)
+        win._sync_checks()
+        assert win.a_drag.isChecked()
+        win.a_drag.trigger()
+        assert not v.drag_selects() and not v.state()["drag_selects"]
+    finally:
+        v.set_drag_selects(True)
+
+
+def test_eye_hides_the_captions_and_the_site_is_in_the_box(win, engine):
+    v = win.view
+    sta = ".".join(v._sids[0].split(".")[:2])
+    old = engine.hub.descriptions.get(sta)
+    engine.hub.descriptions[sta] = "Nagdhaniba"
+    try:
+        _eye_and_site(win, v)
+    finally:
+        if old is None:
+            engine.hub.descriptions.pop(sta, None)
+        else:
+            engine.hub.descriptions[sta] = old
+        v.set_captions(True)
+        v._update_panels()
+
+
+def _eye_and_site(win, v):
+    v._update_panels()
+    v.redraw()
+    lines = v._traces[0].panel.entries[0][0]
+    assert lines[2] == "Nagdhaniba" and len(lines) == 4
+    assert "Nagdhaniba" not in (v._traces[0].text or "")     # not repeated in the caption
+    assert v.eye_button.isChecked() and v.captions()
+    v.eye_button.click()                                       # the eye: hide the details
+    assert not v.captions() and not v.state()["captions"]
+    assert all(not tr.label.isVisible() for tr in v._traces)
+    assert not v.eye_button.isChecked()
+    win.a_eye.trigger()                                        # I: show them again
+    assert v.captions() and v.eye_button.isChecked()
+    assert all(tr.label.isVisible() for tr in v._traces if tr.sid)
+    assert WaveformView.panel_lines("XX.STA.00.HHZ", "counts") == ("XX.STA", "00.HHZ", "counts")
+
+
 def test_selection_survives_letting_go_of_shift_first(win):
     v = win.view
+    v.set_drag_selects(False)
     got = []
     v.selectionMade.disconnect(win.show_selection_menu)
     v.selectionMade.connect(lambda a, b, sid, pos: got.append((a, b)))
@@ -1017,10 +1076,10 @@ def test_label_panel_on_the_left_with_component_colours(win):
     v = win.view
     tr = {t.sid: t for t in v._traces}
     entries = tr[SIDS[0]].panel.entries
-    assert entries == [(("WB.KUM", "0J.HNZ", "counts"), theme.COMPONENTS_DARK["Z"], False)]
+    assert entries == [(("WB.KUM", "0J.HNZ", "KUMARI", "counts"), theme.COMPONENTS_DARK["Z"], False)]
     assert tr[SIDS[1]].panel.entries[0][1] == theme.COMPONENTS_DARK["N"]      # north: red
     assert tr[SIDS[2]].panel.entries[0][1] == theme.COMPONENTS_DARK["E"]      # east: sky blue
-    assert tr[SIDS[3]].panel.entries[0][0] == ("SS.SMR03", "HHZ", "counts")
+    assert tr[SIDS[3]].panel.entries[0][0] == ("SS.SMR03", "HHZ", "SMR03 - Kelunji Gecko", "counts")
     v._active = SIDS[2]
     v._color_traces()
     assert tr[SIDS[2]].panel.entries[0][2] is True                             # under the mouse: full colour
@@ -1044,7 +1103,7 @@ def test_label_panel_on_the_left_with_component_colours(win):
     engine.config.set_value("calibration", {SIDS[3]: {"sensitivity": 4e5, "units": "M/S**2"}})
     v.calibration_changed()
     v.set_units("physical_g")
-    assert tr[SIDS[3]].panel.entries[0][0][2] == "g"
+    assert tr[SIDS[3]].panel.entries[0][0][-1] == "g"
     v.set_units("counts")
     engine.config.set_value("calibration", {})
     v.calibration_changed()

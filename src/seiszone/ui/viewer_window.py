@@ -6,8 +6,9 @@ be open; MainWindow saves them (config "viewers") and opens them again at the ne
 The right-click menu has two parts, like the keyboard: the channel under the mouse (colour,
 scale, details, filter, offset, spectrogram, calibration, remove) and the whole window
 (background, lane lines, overlay, spectrogram size, sorting, channels, label, clear, no caption,
-duplicate). Shift+drag selects a time range on the channels from the one where the drag starts
-to the one where it ends (Ctrl+drag: exactly those two, in the order picked) and offers save,
+duplicate). A drag (Shift+drag when "Drag selects a time range" is off) selects a time range on
+the channels from the one where the drag starts to the one where it ends (Ctrl+drag: exactly
+those two, in the order picked) and offers save,
 zoom, save on selection, spectrum, PSD, peaks, orientation, strong motion, the calibrations,
 external tools and the filter design - each on the selected channels only. The status bar shows
 the time and value under the mouse.
@@ -17,7 +18,7 @@ Ctrl+Left/Right scroll, Home amplitude x1 (Per pixel: fit the zoom), Pause/Space
 Ctrl+F filter design, N null offsets, Z zero offset, P spectrogram (Ctrl+P all), +/- spectrogram
 contrast (Ctrl: all), S scale, Ctrl+S scale others to match, 1 scale x1 (Ctrl+1 all), D details,
 C colour, Del remove channel, Ctrl+Del clear, L lane lines, O overlay, K clean display, Shift+O
-traces may overlap, F5 redraw, F11 no caption (full screen), Ctrl+D duplicate, Ctrl+Shift+P print,
+traces may overlap, I details above the traces (the eye button), F5 redraw, F11 no caption (full screen), Ctrl+D duplicate, Ctrl+Shift+P print,
 Ctrl+W close the viewer.
 """
 
@@ -187,6 +188,12 @@ class ViewerWindow(QMainWindow):
                          tip="No amplitude axis, caption, frame or gap per row: the traces packed tightly")
         self.a_overlap = A("Traces may overlap", lambda: v.set_overlap(not v.overlap()), "Shift+O",
                            checkable=True, tip="A loud trace draws over the rows next to it instead of being cut")
+        self.a_eye = A("Show details above the traces", lambda: v.set_captions(not v.captions()), "I",
+                       checkable=True, tip="The eye button: the line above each trace with the channel, "
+                                           "min / max, units and filter")
+        self.a_drag = A("Drag selects a time range", lambda: v.set_drag_selects(not v.drag_selects()),
+                        checkable=True, tip="On: drag over the traces to select a time range and get its menu "
+                                            "(Shift+drag pans). Off: a drag pans, Shift+drag selects")
         self.a_redraw = A("Redraw", v.redraw, "F5")
         self.a_caption = A("No caption (full screen)", self.toggle_caption, "F11", checkable=True)
         self.a_duplicate = A("Duplicate", self.duplicate, "Ctrl+D")
@@ -211,7 +218,7 @@ class ViewerWindow(QMainWindow):
         m.addSeparator()
         m.addActions([self.a_time_in, self.a_time_out, self.a_back, self.a_fwd])
         m.addSeparator()
-        m.addActions([self.a_null, self.a_lanes, self.a_overlay, self.a_clean, self.a_overlap, self.a_background,
+        m.addActions([self.a_null, self.a_lanes, self.a_overlay, self.a_clean, self.a_overlap, self.a_eye, self.a_drag, self.a_background,
                       self.a_spec_all])
         self.size_menu = m.addMenu("Spectrogram size")
         self.size_menu.aboutToShow.connect(lambda: self._fill_size_menu(self.size_menu))
@@ -237,6 +244,8 @@ class ViewerWindow(QMainWindow):
         self.a_overlay.setChecked(self.view.overlay())
         self.a_clean.setChecked(self.view.clean())
         self.a_overlap.setChecked(self.view.overlap())
+        self.a_eye.setChecked(self.view.captions())
+        self.a_drag.setChecked(self.view.drag_selects())
         self.a_caption.setChecked(not self._caption)
 
     def _fill_window_filter_menu(self, menu):
@@ -315,6 +324,8 @@ class ViewerWindow(QMainWindow):
         m.addAction(self.a_overlay)
         m.addAction(self.a_clean)
         m.addAction(self.a_overlap)
+        m.addAction(self.a_eye)
+        m.addAction(self.a_drag)
         size = m.addMenu("Spectrogram size")
         self._fill_size_menu(size)
         m.addAction(self.a_spec_all)
@@ -716,8 +727,9 @@ class ViewerWindow(QMainWindow):
     def show_keys(self):
         QMessageBox.information(self, "Viewer keys and mouse", (__doc__ or "").split("Keys:", 1)[-1].strip()
                                 + "\n\nMouse: wheel = amplitude, Shift+wheel = window length, Ctrl+wheel = "
-                                  "scroll in time, drag = pan (pauses), Shift+drag = select a time range on the channels "
-                                  "dragged over, Ctrl+drag = on exactly two channels (first picked first), "
+                                  "scroll in time, drag = select a time range on the channels dragged over (its menu "
+                                  "has save, zoom, PSD, calibrations, orientation...), Shift+drag = pan (pauses) - "
+                                  "swapped when View > Drag selects a time range is off, Ctrl+drag = on exactly two channels (first picked first), "
                                   "double-click = live, right-click = menu. Drag channels here from the "
                                   "Channels table of the main window.")
 

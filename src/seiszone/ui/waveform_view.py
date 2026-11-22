@@ -3,9 +3,10 @@
 each with its own settings, and the same channel can be in several of them.
 
 One plot row per channel, stacked vertically, X axes linked, UTC time axis under the bottom row,
-a caption per trace (channel, site, filter, min/max of what is visible). Above the plots a tool
-bar: window length (time zoom), amplitude zoom, filter on/off with its choice, units, scale mode,
-mean removal, null offsets, time / amplitude cursors and Live/Pause.
+a label box left of each row (station, location.channel, site name, units) and a caption per
+trace (channel, min/max of what is visible, filter). Above the plots a tool bar: window length
+(time zoom), amplitude zoom, filter on/off with its choice, units, scale mode, mean removal,
+null offsets, the eye (captions shown / hidden), time / amplitude cursors and Live/Pause.
 
 Whole-window settings: time window, filter (switched with F, chosen from filter_dialog's list or
 designed), units (counts, physical, physical with acceleration in g), scale mode (each trace
@@ -19,9 +20,9 @@ Per-channel settings (the viewer window's right-click menu): colour, scale facto
 locked offset (Null offsets leaves it), spectrogram on/off and its contrast.
 
 Mouse: the wheel zooms the amplitude, Shift+wheel steps the window length (both stay live),
-Ctrl+wheel scrolls in time and dragging pans (both pause); Shift+drag selects a time range on
-the rows from the one where the drag starts to the one under the mouse, Ctrl+drag on exactly two
-rows in the order picked (selectionMade; selected_channels(); the selection stays drawn - hatched
+Ctrl+wheel scrolls in time and Shift+drag pans (both pause); a drag selects a time range on
+the rows from the one where the drag starts to the one under the mouse (with "Drag selects" off:
+a drag pans and Shift+drag selects), Ctrl+drag on exactly two rows in the order picked (selectionMade; selected_channels(); the selection stays drawn - hatched
 over a gap - until clear_selection(), which the viewer calls when its menu closes); a double-click goes
 live again. Channels dragged from the Channels table are added (CHANNEL_MIME).
 
@@ -62,7 +63,7 @@ import weakref
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import QEvent, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QActionGroup, QBrush, QColor, QCursor, QDoubleValidator, QFont, QIcon
+from PySide6.QtGui import QActionGroup, QBrush, QColor, QCursor, QDoubleValidator, QFont, QFontMetrics, QIcon
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QGraphicsGridLayout, QGraphicsWidget,
                                QLabel, QLineEdit, QMenu, QScrollArea, QSizePolicy, QStackedWidget, QToolBar, QToolButton,
                                QVBoxLayout, QWidget)
@@ -232,11 +233,11 @@ class _TraceLabel(pg.LabelItem):
 
 class _LanePanel(QGraphicsWidget):
     """The label panel left of a trace, like the user's earlier viewer: a box in the trace's
-    colour with the station, the channel and the units ("g", "m/s²", "counts") - pale, and in
-    full colour for the channel under the mouse. In overlay mode the first row's panel shows a
-    box for every channel."""
+    colour with the station, the channel, the site name and the units ("g", "m/s²", "counts") -
+    pale, and in full colour for the channel under the mouse. In overlay mode the first row's
+    panel shows a box for every channel."""
 
-    BOX_LINES = 3
+    BOX_LINES = 4
 
     def __init__(self, font):
         super().__init__()
@@ -277,9 +278,11 @@ class _LanePanel(QGraphicsWidget):
             for k, text in enumerate(lines[:self.BOX_LINES]):
                 if (k + 1) * line_h > h:
                     break
-                p.setFont(self.bold if k < 2 else self.font)
-                p.drawText(QRectF(5, y + 2 + k * line_h, r.width() - 9, line_h), Qt.AlignLeft | Qt.AlignVCenter,
-                           text)
+                font = self.bold if k < 2 else self.font
+                p.setFont(font)
+                width = r.width() - 9
+                text = QFontMetrics(font).elidedText(text, Qt.ElideRight, int(width))
+                p.drawText(QRectF(5, y + 2 + k * line_h, width, line_h), Qt.AlignLeft | Qt.AlignVCenter, text)
             y += box_h + 3
 
 
@@ -407,6 +410,8 @@ class WaveformView(QWidget):
         self._cpp = clamp_cpp(st.get("cpp"))   # "pixel" zoom (None: picked from the data when first used)
         self._clean = bool(st.get("clean", False))       # no row axes, captions, frames or gaps
         self._overlap = bool(st.get("overlap", False))   # a loud trace may draw over its neighbours
+        self._captions = bool(st.get("captions", True))  # the eye: the details line above each trace
+        self._drag_selects = bool(st.get("drag_selects", True))   # a plain drag selects (Shift+drag pans)
         self._row_px = 100.0       # data height of one row in pixels (_fit_rows)
         self._demean = bool(st.get("demean", v.get("demean", True)))
         self._gain = self._clamp_gain(st.get("gain", 1.0))
@@ -645,6 +650,9 @@ class WaveformView(QWidget):
                                               "sits centred in its row (channels with a locked offset keep "
                                               "theirs)")
         self.null_button.clicked.connect(lambda: self.null_offsets())
+        self.eye_button = self._tool("", "", checkable=True)
+        self.eye_button.setChecked(self._captions)
+        self.eye_button.toggled.connect(self.set_captions)
         self.tcur_button = self._tool("Time cursors", "Two time cursors: drag them; the time between them and "
                                                       "its frequency are shown here", checkable=True)
         self.tcur_button.toggled.connect(self.set_time_cursors)
@@ -668,7 +676,8 @@ class WaveformView(QWidget):
         for w in (self.channels_button, sep, caption("Time"), self.time_in, self.pps_button, self.time_out,
                   sep, caption("Amplitude"), self.amp_out, self.gain_label, self.amp_in, sep,
                   self.filter_button, caption("Units"), self.units_box, caption("Scale"), self.scale_box,
-                  self.fixed_edit, self.demean_box, self.null_button, sep, self.tcur_button, self.acur_button,
+                  self.fixed_edit, self.demean_box, self.null_button, self.eye_button, sep, self.tcur_button,
+                  self.acur_button,
                   sep, self.live_button):
             if w is None:
                 bar.addSeparator()
@@ -684,6 +693,7 @@ class WaveformView(QWidget):
         self._update_filter_button()
         self._update_live_button()
         self._update_pps_button()
+        self._update_eye_button()
         return bar
 
     def _new_trace(self, row):
@@ -778,7 +788,7 @@ class WaveformView(QWidget):
                 item.setVisible(visible)
             tr.left.setVisible(visible and not self._clean)      # clean: no amplitude axis, no caption
             tr.left.setWidth(1 if self._clean else AXIS_WIDTH)
-            tr.label.setVisible(not self._clean)
+            tr.label.setVisible(not self._clean and self._captions)
             tr.vb.setFlag(tr.vb.GraphicsItemFlag.ItemClipsChildrenToShape, not self._overlap)
             tr.vb.setZValue(i if self._overlap else 0)          # overlap: a lower row draws over the upper
             spec = self._spec_on(sid)
@@ -862,6 +872,7 @@ class WaveformView(QWidget):
         """Colours from the current theme (called again when the application palette changes)."""
         c = theme.COLORS
         self._colors = dict(c)
+        self._update_eye_button()   # its icon follows the theme
         self.glw.setBackground(self._background())
         self.empty.setStyleSheet(f"color: {c['muted']}; font-size: 11pt; background: {c['plot_bg']};")
         self.bar.setStyleSheet(
@@ -900,17 +911,21 @@ class WaveformView(QWidget):
         self._update_panels()
 
     @staticmethod
-    def panel_lines(sid, units, label="", scale=1.0):
-        """The three lines of a channel's label box: its label (else the station),
-        location.channel, and its units - or its scale factor ("×3067") when it has one, as the
-        earlier viewer shows it."""
+    def panel_lines(sid, units, label="", scale=1.0, site=""):
+        """The lines of a channel's label box: its label (else the station), location.channel,
+        the site name (when the station has one) and its units - or its scale factor ("×3067")
+        when it has one, as the earlier viewer shows it."""
         parts = sid.split(".")
         loc_cha = f"{parts[2]}.{parts[3]}" if len(parts) == 4 and parts[2] else parts[-1]
         try:
             scale = float(scale)
         except (TypeError, ValueError):
             scale = 1.0
-        return (label or ".".join(parts[:2])), loc_cha, (units if scale == 1.0 else fmt_gain(scale))
+        last = units if scale == 1.0 else fmt_gain(scale)
+        site = str(site or "").strip()
+        if site:
+            return (label or ".".join(parts[:2])), loc_cha, site, last
+        return (label or ".".join(parts[:2])), loc_cha, last
 
     def set_trace_label(self, sid, text):
         """A name for the channel, shown in its box on the left and in its caption."""
@@ -921,7 +936,9 @@ class WaveformView(QWidget):
         """The label boxes left of the traces (all channels in the first row's panel when
         overlaid)."""
         bg = theme.COLORS["panel2"]
-        entries = [(self.panel_lines(tr.sid, tr.units, self._ts(tr.sid)["label"], self._ts(tr.sid)["scale"]),
+        sites = self.engine.hub.descriptions
+        entries = [(self.panel_lines(tr.sid, tr.units, self._ts(tr.sid)["label"], self._ts(tr.sid)["scale"],
+                                     sites.get(".".join(tr.sid.split(".")[:2]), "")),
                     self.trace_color(i, tr.sid), tr.sid == self._active)
                    for i, tr in enumerate(self._traces) if tr.sid]
         overlay = self._overlay and len(self._traces) > 1
@@ -1049,7 +1066,8 @@ class WaveformView(QWidget):
                 "filter": self._filter_key, "custom": self._custom, "units": self._units, "scale": self._scale,
                 "fixed": self._fixed, "demean": self._demean, "gain": self._gain, "lanes": self._lanes,
                 "overlay": self._overlay, "background": self._bg, "spec_size": self._spec_size,
-                "cpp": self._cpp, "clean": self._clean, "overlap": self._overlap, "traces": traces}
+                "cpp": self._cpp, "clean": self._clean, "overlap": self._overlap, "captions": self._captions,
+                "drag_selects": self._drag_selects, "traces": traces}
 
     # ------------------------------------------------------------------------------------
     # whole-window settings
@@ -1424,6 +1442,40 @@ class WaveformView(QWidget):
 
     def clean(self):
         return self._clean
+
+    def set_captions(self, on):
+        """The eye button: show or hide the details line above each trace (channel, min / max,
+        units, filter). The label boxes on the left stay."""
+        on = bool(on)
+        if on != self._captions:
+            self._captions = on
+            for tr in self._traces:
+                tr.label.setVisible(not self._clean and on)
+            self.changed.emit()
+        self._update_eye_button()
+
+    def captions(self):
+        return self._captions
+
+    def set_drag_selects(self, on):
+        """On: a plain drag selects a time range (and opens the selection menu), Shift+drag pans.
+        Off: a plain drag pans, Shift+drag selects."""
+        if bool(on) != self._drag_selects:
+            self._drag_selects = bool(on)
+            self.changed.emit()
+
+    def drag_selects(self):
+        return self._drag_selects
+
+    def _update_eye_button(self):
+        b = self.eye_button
+        if b.isChecked() != self._captions:
+            b.blockSignals(True)
+            b.setChecked(self._captions)
+            b.blockSignals(False)
+        b.setIcon(theme.icon("eye" if self._captions else "eye-off"))
+        b.setToolTip(("Details above each trace are shown - click to hide them" if self._captions else
+                      "Details above each trace are hidden - click to show them") + " (I)")
 
     def set_overlap(self, on):
         """Let a loud trace draw over the rows next to it instead of being cut at its row."""
@@ -1962,14 +2014,17 @@ class WaveformView(QWidget):
         return start > lo + 1.0 / rate or start + len(y) / rate < hi - 1.0 / rate
 
     def _on_drag(self, ev, vb):
-        """Shift+drag with the left button selects a time range on the rows from the one where
-        the drag started to the one under the mouse; Ctrl+drag selects it on exactly two rows
-        (the first and the one where the drag ends). Returns True when the drag was taken."""
+        """Dragging with the left button selects a time range on the rows from the one where
+        the drag started to the one under the mouse - a plain drag when "Drag selects" is on (as
+        in the earlier viewer; Shift+drag then pans), else Shift+drag (a plain drag pans).
+        Ctrl+drag selects it on exactly two rows (the first and the one where the drag ends).
+        Returns True when the drag was taken."""
         if ev.isStart():   # the modifier at the start decides; letting it go changes nothing
             mods = ev.modifiers() if hasattr(ev, "modifiers") else Qt.NoModifier
             left = ev.button() == Qt.LeftButton
-            self._sel_pair = left and bool(mods & Qt.ControlModifier) and not bool(mods & Qt.ShiftModifier)
-            self._selecting = left and (bool(mods & Qt.ShiftModifier) or self._sel_pair)
+            shift, ctrl = bool(mods & Qt.ShiftModifier), bool(mods & Qt.ControlModifier)
+            self._sel_pair = left and ctrl and not shift
+            self._selecting = left and (self._sel_pair or (shift != self._drag_selects and not ctrl))
         if not self._selecting:
             return False
         self._touched = time.monotonic()
@@ -2422,8 +2477,6 @@ class WaveformView(QWidget):
     def _update_label(self, tr):
         c = theme.COLORS
         i = self._traces.index(tr)
-        sta = ".".join(tr.sid.split(".")[:2])
-        desc = self.engine.hub.descriptions.get(sta, "")
         physical = tr.units != "counts"
         ts = self._ts(tr.sid)
         if tr.lo is None:
@@ -2442,7 +2495,6 @@ class WaveformView(QWidget):
             extra.append("offset locked")
         name = html.escape(ts["label"]) + f" ({tr.sid})" if ts["label"] else tr.sid
         text = (f"<span style='color:{self.trace_color(i, tr.sid)}; font-weight:600'>{name}</span>"
-                + (f" &nbsp;<span style='color:{c['text']}'>{desc}</span>" if desc else "")
                 + f" &nbsp;<span style='color:{c['muted']}'>{values}</span>"
                 + (f" &nbsp;<span style='color:{c['accent2']}'>{' · '.join(extra)}</span>" if extra else ""))
         if text != tr.text:
