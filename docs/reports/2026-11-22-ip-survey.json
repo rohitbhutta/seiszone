@@ -1,0 +1,1420 @@
+[
+ {
+  "ip": "10.8.0.2",
+  "site": "TG Hali",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINP-2162 TG HALI) :: SLPROTO:3.0",
+   "KS.TGH"
+  ],
+  "stations": [
+   "KS.TGH (TG HALI)"
+  ],
+  "newest": "2026-11-22 09:51:44",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BHE",
+   "1.BHN",
+   "1.BHZ",
+   "1.BNE",
+   "1.BNN",
+   "1.BNZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.3",
+  "site": "Hemavathi",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINP-7461 HEM) :: SLPROTO:3.0",
+   "KS.HEM"
+  ],
+  "stations": [
+   "KS.HEM (HEM)"
+  ],
+  "newest": "2026-11-22 09:51:39",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BHE",
+   "1.BHN",
+   "1.BHZ",
+   "1.BNN",
+   "1.BNZ",
+   "1.HNE"
+  ],
+  "raw_loc": [
+   "'1'",
+   "'2J'",
+   "'2K'",
+   "'2Q'",
+   "'3J'",
+   "'3K'"
+  ]
+ },
+ {
+  "ip": "10.8.0.4",
+  "site": "Hidkal",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINP-8161 HIDKAL) :: SLPROTO:3.0",
+   "KS.HID"
+  ],
+  "stations": [
+   "KS.HID (HID)"
+  ],
+  "newest": "2026-11-22 09:51:42",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BHE",
+   "1.BHN",
+   "1.BHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'",
+   "'2J'",
+   "'2K'",
+   "'2Q'",
+   "'3J'"
+  ]
+ },
+ {
+  "ip": "10.8.0.29",
+  "site": "Aimil Goutam",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.5",
+  "site": "Almatti",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINP-2062 ALM) :: SLPROTO:3.0",
+   "KS.ALM"
+  ],
+  "stations": [
+   "KS.ALM (ALM)"
+  ],
+  "newest": "2026-11-22 09:51:43",
+  "gcfping": "GCFACKN",
+  "active": [
+   "0J.HHE",
+   "0J.HHN",
+   "0J.HHZ"
+  ],
+  "raw_loc": [
+   "'0J'",
+   "'2J'",
+   "'2K'",
+   "'2Q'",
+   "'3J'",
+   "'3K'"
+  ]
+ },
+ {
+  "ip": "10.8.0.6",
+  "site": "Raichur",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINP-2462 RAI) :: SLPROTO:3.0",
+   "KS.RAI"
+  ],
+  "stations": [
+   "KS.RAI (RAI)"
+  ],
+  "newest": "2026-11-22 09:51:41",
+  "gcfping": "GCFACKN",
+  "active": [
+   "0J.HHE",
+   "0J.HHN",
+   "0J.HHZ"
+  ],
+  "raw_loc": [
+   "'0J'",
+   "'2J'",
+   "'2K'",
+   "'2Q'",
+   "'3J'",
+   "'3K'"
+  ]
+ },
+ {
+  "ip": "10.8.0.7",
+  "site": "Linganmakkhi",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINP-2262 THA) :: SLPROTO:3.0",
+   "KS.THA"
+  ],
+  "info_error": "timed out",
+  "gcfping": null,
+  "active": [
+   "0J.HHE",
+   "0J.HHN",
+   "0J.HHZ"
+  ],
+  "raw_loc": [
+   "'0J'",
+   "'2J'",
+   "'2K'",
+   "'2Q'",
+   "'3J'",
+   "'3K'"
+  ]
+ },
+ {
+  "ip": "10.8.0.16",
+  "site": "Santosh",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.19",
+  "site": "Ramesh",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINP-2362 KALAK) :: SLPROTO:3.0",
+   "IS.KLK"
+  ],
+  "stations": [
+   "IS.KLK (KALAK)"
+  ],
+  "newest": "2026-11-22 09:51:43",
+  "gcfping": "GCFACKN",
+  "active": [
+   "0J.BHZ",
+   "0J.BNE",
+   "0J.BNN",
+   "1J.AHN",
+   "1J.ANZ",
+   "1J.HNE"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'0J'",
+   "'1J'"
+  ]
+ },
+ {
+  "ip": "10.8.0.17",
+  "site": "Abhinay",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.10",
+  "site": "Jagadeesh",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINP-1D62 KADODARA) :: SLPROTO:3.0",
+   "IS.KDR"
+  ],
+  "stations": [
+   "IS.KDR (KDR)"
+  ],
+  "newest": "2026-11-22 09:51:43",
+  "gcfping": "GCFACKN",
+  "active": [
+   "0J.BHE",
+   "0J.BHN",
+   "0J.BHZ",
+   "1J.AHE",
+   "1J.AHN",
+   "1J.AHZ"
+  ],
+  "raw_loc": [
+   "'0J'",
+   "'1J'",
+   "'30'"
+  ]
+ },
+ {
+  "ip": "10.8.0.22",
+  "site": "Arnab",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.25",
+  "site": "Kaushikda / Bubun",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.9",
+  "site": "ISR Ralej",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINP-2662 RLJ) :: SLPROTO:3.0",
+   "IS.RLJ"
+  ],
+  "stations": [
+   "IS.RLJ (Ralej)"
+  ],
+  "newest": "2026-11-22 09:51:44",
+  "gcfping": "GCFACKN",
+  "active": [
+   "0J.BHE",
+   "0J.BHN",
+   "0J.BHZ",
+   "1J.AHE",
+   "1J.AHN",
+   "1J.AHZ"
+  ],
+  "raw_loc": [
+   "'0J'",
+   "'1J'",
+   "'20'",
+   "'2J'",
+   "'2K'",
+   "'2Q'"
+  ]
+ },
+ {
+  "ip": "10.8.0.11",
+  "site": "ISR Nagdhaniba",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINP-1F62 NAGDHANIBA) :: SLPROTO:3.0",
+   "IS.NDH"
+  ],
+  "stations": [
+   "IS.NDH (Nagdhaniba)"
+  ],
+  "newest": "2026-11-22 09:51:44",
+  "gcfping": "GCFACKN",
+  "active": [
+   "0J.BHE",
+   "0J.BHN",
+   "0J.BHZ",
+   "1J.AHE",
+   "1J.AHN",
+   "1J.AHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'0J'",
+   "'1J'",
+   "'2J'",
+   "'2K'",
+   "'2Q'"
+  ]
+ },
+ {
+  "ip": "10.8.0.15",
+  "site": "ISR Panchavada",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINP-1C62 PAN) :: SLPROTO:3.0",
+   "IS.PAN"
+  ],
+  "stations": [
+   "IS.PAN (Panchavada)"
+  ],
+  "newest": "2026-11-22 09:51:43",
+  "gcfping": "GCFACKN",
+  "active": [
+   "0J.BHE",
+   "0J.BHN",
+   "0J.BHZ",
+   "1J.AHE",
+   "1J.AHN",
+   "1J.AHZ"
+  ],
+  "raw_loc": [
+   "'0J'",
+   "'1J'",
+   "'2J'",
+   "'2K'",
+   "'2Q'",
+   "'30'"
+  ]
+ },
+ {
+  "ip": "10.8.0.21",
+  "site": "ISR CRS",
+  "tcp18000": "timeout",
+  "tcp1567": "open",
+  "hello": null,
+  "gcfping": "GCFACKN\u0000"
+ },
+ {
+  "ip": "10.8.0.27",
+  "site": "Aimil Hari",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.23",
+  "site": "Aimil Basha",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.28",
+  "site": "Guralp",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.26",
+  "site": "LDM Sir",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.42",
+  "site": "ISR Jambuda",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINP-7761 JAMBUDA) :: SLPROTO:3.0",
+   "IS.JAB"
+  ],
+  "stations": [
+   "IS.JAB (JAMBUDA)"
+  ],
+  "newest": "2026-11-22 09:51:45",
+  "gcfping": "GCFACKN",
+  "active": [
+   "0J.BHE",
+   "0J.BHN",
+   "0J.BHZ",
+   "1J.AHE",
+   "1J.AHN",
+   "1J.AHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'0J'",
+   "'1J'",
+   "'2J'",
+   "'2K'",
+   "'2Q'"
+  ]
+ },
+ {
+  "ip": "10.8.0.46",
+  "site": "IIT Roorkee Modem",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.48",
+  "site": "ISR 40 BBS CRS",
+  "tcp18000": "timeout",
+  "tcp1567": "open",
+  "hello": null,
+  "gcfping": "GCFACKN\u0000"
+ },
+ {
+  "ip": "10.8.0.60",
+  "site": "ISR Bela",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.58",
+  "site": "ISR Kakarva",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINL-7965 KAK) :: SLPROTO:3.0",
+   "IS.KAK"
+  ],
+  "stations": [
+   "IS.KAK (KAKRAVA)"
+  ],
+  "newest": "2026-11-22 09:51:49",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BHE",
+   "1.BHN",
+   "1.BHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.59",
+  "site": "ISR RP",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.62",
+  "site": "ISR Bachau",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINL-FE64 BHACHAU) :: SLPROTO:3.0",
+   "IS.BHA"
+  ],
+  "stations": [
+   "IS.BHA (BHACHAU)"
+  ],
+  "newest": "2026-11-22 09:51:48",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BHE",
+   "1.BHN",
+   "1.BHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.63",
+  "site": "ISR SUVAI",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINL-F564 SUVAI) :: SLPROTO:3.0",
+   "IS.SUV"
+  ],
+  "stations": [
+   "IS.SUV (SUVAI)"
+  ],
+  "newest": "2026-11-22 09:51:49",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BHE",
+   "1.BHN",
+   "1.BHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.64",
+  "site": "ISR Bharudiya",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.65",
+  "site": "ISR Dholavira",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINL-9165 VIGHAKOT) :: SLPROTO:3.0",
+   "IS.VGO"
+  ],
+  "stations": [
+   "IS.VGO (VIGHAKOT)"
+  ],
+  "newest": "2026-11-22 09:51:50",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BHE",
+   "1.BHN",
+   "1.BHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.66",
+  "site": "ISR Gadhda",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINL-2B64 GADHDA) :: SLPROTO:3.0",
+   "IS.GDD"
+  ],
+  "stations": [
+   "IS.GDD (GADHDA)"
+  ],
+  "newest": "2026-11-22 09:51:52",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BHE",
+   "1.BHN",
+   "1.BHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.67",
+  "site": "ISR Khwada",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.68",
+  "site": "ISR Mandvi",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.69",
+  "site": "ISR Rudramata",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.70",
+  "site": "ISR PRAGNATH",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.71",
+  "site": "ISR SHIVLAKHA",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINL-4765 SHIVLAKHA) :: SLPROTO:3.0",
+   "IS.SIV"
+  ],
+  "stations": [
+   "IS.SIV (SHIVLAKHA)"
+  ],
+  "newest": "2026-11-22 09:51:52",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BHE",
+   "1.BHN",
+   "1.BHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.72",
+  "site": "ISR (row 51)",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.73",
+  "site": "ISR (row 52)",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.82",
+  "site": "ISR CHADAVADA",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.81",
+  "site": "SRTM CRS",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.79",
+  "site": "SRTM Renapur",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINL-5B65 RENP) :: SLPROTO:3.0",
+   "MU.RENP"
+  ],
+  "stations": [
+   "MU.RENP (Renapur)"
+  ],
+  "newest": "2026-11-22 09:52:03",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.HHE",
+   "1.HHN",
+   "1.HHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.78",
+  "site": "SRTM Tuljapur",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINL-7465 Tuljapur) :: SLPROTO:3.0",
+   "MU.TLJP"
+  ],
+  "stations": [
+   "MU.TLJP (Tuljapur)"
+  ],
+  "newest": "2026-11-22 09:52:06",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.HHE",
+   "1.HHN",
+   "1.HHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.77",
+  "site": "SRTM Gunjoti",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.76",
+  "site": "SRTM Deoni",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINL-7765 Deoni) :: SLPROTO:3.0",
+   "MU.DEON"
+  ],
+  "stations": [
+   "MU.DEON (Deoni)"
+  ],
+  "newest": "2026-11-22 09:52:10",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.HHE",
+   "1.HHN",
+   "1.HHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.75",
+  "site": "SRTM Arjapur",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.86",
+  "site": "ISR Radhanpur",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MIN-845A RADHANPUR) :: SLPROTO:3.0",
+   "IS.RAD"
+  ],
+  "stations": [
+   "IS.RAD (RADHANPUR)"
+  ],
+  "newest": "2026-11-22 09:52:02",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BHE",
+   "1.BHN",
+   "1.BHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.88",
+  "site": "ISR Lodhonar",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.89",
+  "site": "ISR Dharoi",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.90",
+  "site": "ISR Panam",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.91",
+  "site": "ISR Vatrak",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.92",
+  "site": "ISR Pardi Zankhari",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINP-2762 PARDI ZANKHARI) :: SLPROTO:3.0",
+   "IS.PAZ"
+  ],
+  "stations": [
+   "IS.PAZ (PARDI ZANKHARI)"
+  ],
+  "newest": "2026-11-22 09:52:13",
+  "gcfping": "GCFACKN",
+  "active": [
+   "0J.BHE",
+   "0J.BHN",
+   "0J.BHZ",
+   "1J.AHE",
+   "1J.AHN",
+   "1J.AHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'0J'",
+   "'1J'",
+   "'2J'",
+   "'2K'",
+   "'2Q'"
+  ]
+ },
+ {
+  "ip": "10.8.0.95",
+  "site": "ISR Jagadiya",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.96",
+  "site": "ISR UKAI",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.97",
+  "site": "ISR GODHVANI",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINL-2C65 GODHVANI) :: SLPROTO:3.0",
+   "IS.GOD"
+  ],
+  "stations": [
+   "IS.GOD (GODHVANI)"
+  ],
+  "newest": "2026-11-22 09:52:08",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BHE",
+   "1.BHN",
+   "1.BHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.98",
+  "site": "ISR Kavdej",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINL-2F65 KAVDEJ) :: SLPROTO:3.0",
+   "IS.KVJ"
+  ],
+  "stations": [
+   "IS.KVJ (KAVDEJ)"
+  ],
+  "newest": "2026-11-22 09:52:08",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BHE",
+   "1.BHN",
+   "1.BHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.99",
+  "site": "ISR Valsad",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.100",
+  "site": "ISR UMRVAVDUR",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINL-7165 UMRVAVDUR) :: SLPROTO:3.0",
+   "IS.UVD"
+  ],
+  "stations": [
+   "IS.UVD (UMRVAVDUR)"
+  ],
+  "newest": "2026-11-22 09:52:12",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BHE",
+   "1.BHN",
+   "1.BHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.101",
+  "site": "ISR Saputara",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINL-6365 SAPUTARA) :: SLPROTO:3.0",
+   "IS.SPT"
+  ],
+  "stations": [
+   "IS.SPT (SAPUTARA)"
+  ],
+  "newest": "2026-11-22 09:52:13",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BHE",
+   "1.BHN",
+   "1.BHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.103",
+  "site": "ISR Shetrunji dam",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.104",
+  "site": "ISR Manavadar Dam",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.105",
+  "site": "ISR Anand",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.106",
+  "site": "ISR Surendranagar",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.107",
+  "site": "ISR Junagadh",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.108",
+  "site": "ISR UNA",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.109",
+  "site": "ISR Amreli",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.110",
+  "site": "ISR Bhadar Dam",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINL-4165 Bhadar Dam) :: SLPROTO:3.0",
+   "IS.BHD"
+  ],
+  "stations": [
+   "IS.BHD (Bhadar Dam)"
+  ],
+  "newest": "2026-11-22 09:52:21",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BHE",
+   "1.BHN",
+   "1.BHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.112",
+  "site": "ISR Sorthi Dam",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MIN-6B5A SURAJWADI DAM) :: SLPROTO:3.0",
+   "SR.SRJ"
+  ],
+  "stations": [
+   "SR.SRJ (SRJ)"
+  ],
+  "newest": "2026-11-22 09:52:20",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BNE",
+   "1.BNN",
+   "1.BNZ"
+  ],
+  "raw_loc": [
+   "'01'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.117",
+  "site": "ISR Sukhi Dam",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.118",
+  "site": "ISR Vigakot",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINL-4A65 DHOLAVIRA) :: SLPROTO:3.0",
+   "IS.DOL"
+  ],
+  "stations": [
+   "IS.DOL (DHOLAVIRA)"
+  ],
+  "newest": "2026-11-22 09:52:27",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BHE",
+   "1.BHN",
+   "1.BHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.102",
+  "site": "ISR Sipu",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINL-6B65 SIPU) :: SLPROTO:3.0",
+   "IS.SIP"
+  ],
+  "stations": [
+   "IS.SIP (SIPU)"
+  ],
+  "newest": "2026-11-22 09:52:17",
+  "gcfping": "GCFACKN",
+  "active": [
+   "1.BHE",
+   "1.BHN",
+   "1.BHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'1'"
+  ]
+ },
+ {
+  "ip": "10.8.0.116",
+  "site": "ISR Paneli",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.114",
+  "site": "ISR Kotda Roha",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.115",
+  "site": "ISR Hatmati",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.119",
+  "site": "IIT Roorkee 1",
+  "tcp18000": "open",
+  "tcp1567": "refused",
+  "hello": [
+   "SEEDLINK v3.1 (Nanometrics on centaur-3 4.9.2)",
+   "SerialNumber: 220"
+  ],
+  "info_error": "timed out",
+  "gcfping": null,
+  "active": "INFO failed: timed out"
+ },
+ {
+  "ip": "10.8.0.120",
+  "site": "IIT Roorkee 2",
+  "tcp18000": "refused",
+  "tcp1567": "refused",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.121",
+  "site": "IIT Roorkee 3",
+  "tcp18000": "refused",
+  "tcp1567": "open",
+  "hello": null,
+  "gcfping": "GCFACKN\u0000"
+ },
+ {
+  "ip": "10.8.0.123",
+  "site": "APGCL Site",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.124",
+  "site": "APGCL Site 2",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.127",
+  "site": "Demo Modem",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.137",
+  "site": "Telengiri Dam",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.1 (SeisZone v1.5.0) :: SLPROTO:3.1 CAP EXTREPLY NSWILDCARD BATCH WS:13",
+   "SeisZone"
+  ],
+  "stations": [
+   "DG.PATSI (PATSIO)",
+   "IS.NDH (Nagdhaniba)",
+   "IS.PAN (Panchavada)",
+   "KA.KAND (KANGSABATI DOWN)",
+   "MU.TLJP (Tuljapur)",
+   "SS.SMR03 (SMR03 - Kelunji Gecko 02000143)"
+  ],
+  "newest": "2026/11/22 09:52:40.7990",
+  "gcfping": "GCFACKN\u0000"
+ },
+ {
+  "ip": "10.8.0.139",
+  "site": "Telengiri Dam Office",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.140",
+  "site": "Guralp GDC",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.144",
+  "site": "ISR Dholera",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MINP-2562 Sarangpur) :: SLPROTO:3.0",
+   "IS.SRG"
+  ],
+  "stations": [
+   "IS.SRG (Sarangpur)"
+  ],
+  "newest": "2026-11-22 09:52:41",
+  "gcfping": "GCFACKN",
+  "active": [
+   "0J.BHE",
+   "0J.BHN",
+   "0J.BHZ",
+   "1J.AHE",
+   "1J.AHN",
+   "1J.AHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'0J'",
+   "'1J'",
+   "'2J'",
+   "'2K'",
+   "'2Q'"
+  ]
+ },
+ {
+  "ip": "10.8.0.148",
+  "site": "ISR GDC",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.150",
+  "site": "IITR Test",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.156",
+  "site": "SRTM Extra",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.160",
+  "site": "IITR",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.157",
+  "site": "SJVNL",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.161",
+  "site": "Aimil Delhi",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.163",
+  "site": "IIT R",
+  "tcp18000": "refused",
+  "tcp1567": "open",
+  "hello": null,
+  "gcfping": "GCFACKN\u0000"
+ },
+ {
+  "ip": "10.8.0.170",
+  "site": "Mumbai GDC",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.171",
+  "site": "Kagsabati1",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.198",
+  "site": "UJVNL",
+  "tcp18000": "timeout",
+  "tcp1567": "timeout",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.203",
+  "site": "Simcon Site Gaya",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (FMUS-A46D Tetar Dam Top) :: SLPROTO:3.0",
+   "CI.TEDT"
+  ],
+  "stations": [
+   "CI.TEDT (Tetar Dam Top CH1050)"
+  ],
+  "newest": "2026-11-22 09:52:54",
+  "gcfping": "GCFACKN",
+  "active": [
+   "0J.HNE",
+   "0J.HNN",
+   "0J.HNZ",
+   "9J.BNE",
+   "9J.BNN",
+   "9J.BNZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'0J'",
+   "'9J'"
+  ]
+ },
+ {
+  "ip": "10.8.0.206",
+  "site": "Simcon PC",
+  "tcp18000": "refused",
+  "tcp1567": "refused",
+  "hello": null,
+  "gcfping": null
+ },
+ {
+  "ip": "10.8.0.210",
+  "site": "DRDO_DGRE",
+  "tcp18000": "open",
+  "tcp1567": "open",
+  "hello": [
+   "SeedLink v3.0 (MIN-1C6E PATSIO) :: SLPROTO:3.0",
+   "DG.PATSI"
+  ],
+  "stations": [
+   "DG.PATSI (PATSIO)"
+  ],
+  "newest": "2026-11-22 09:52:57",
+  "gcfping": "GCFACKN",
+  "active": [
+   "0J.CHE",
+   "0J.CHN",
+   "0J.CHZ"
+  ],
+  "raw_loc": [
+   "'00'",
+   "'0J'",
+   "'1J'",
+   "'1K'",
+   "'1Q'",
+   "'2J'"
+  ]
+ }
+]

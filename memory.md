@@ -48,6 +48,12 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
 
 ## Status (2026-11-22, version 1.5.0)
 
+* **2026-11-22 afternoon - multi-instrument check (report only, nothing changed yet):** see
+  docs/reports/2026-11-22-multi-instrument-check.md and docs/history.md (the running work log -
+  add an entry there after every piece of work). The "band-pass only on the last instrument"
+  complaint is the Common amplitude scale (one range for all instruments), not the filter. 97
+  sheet IPs surveyed read-only: 34 SeedLink units, 1 Centaur, 4 GCF-only, 10.8.0.137 = this PC.
+  Selector bug: location "1" gives refused selector "1HH?". Waiting for the user's OK to fix.
 * Project at `C:\D Drive\Only Coding\seiszone` (git repository). Since 2026-11-21 it is pushed to
   the PRIVATE GitHub repository https://github.com/rohitbhutta/seiszone (remote `origin`, branch
   `main`; gh CLI logged in as rohitbhutta and set as git's GitHub credential helper). From
@@ -141,6 +147,11 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
 * Built 2026-11-22: `build/dist/SeisZoneSetup.exe` (68.8 MB), exe reports 1.5.0 and contains
   `core/utc_clock` and `ui/trace_cache`. A headless run of the built exe was not possible:
   the user's SeisZone 1.4.0 was running (single instance). The user runs the installer.
+* Installed 2026-11-22 00:25 (the user chose "you start it for me": no recording was running;
+  `taskkill /PID` ended 1.4.0 cleanly, Claude started SeisZoneSetup.exe, the user clicked through).
+  The log shows "PC clock checked against time.google.com: PC clock 19.0 s fast". Newest samples
+  read from SeisZone's own SeedLink server (127.0.0.1:18000, INFO STREAMS): 200 sps channels of
+  KA.KAND and DG.PATSI 2.3-4.2 s behind UTC (21.3-23.2 s by the PC clock).
 * The version bump is the commit "SeisZone 1.5.0" on main, pushed 2026-11-22 at the user's OK.
 
 ### True UTC for latency, Channels panel without Open viewer (2026-11-21, in 1.5.0)
@@ -466,3 +477,6 @@ User files: `%APPDATA%\SeisZone` (config.json, state.json, stationxml\), `%LOCAL
 4. User syncs the PC clock (Windows Settings > Time > Sync now; 19.0 s fast on 2026-11-21).
    Since the UTC clock work the Latency column is right anyway; the status bar shows the error.
 5. User acceptance; then decide whether the old Gecko add-on folder is retired.
+6. WAITING for the user's OK (2026-11-22 report): per-instrument Common scale; selector for a
+   one-character location; Centaur without INFO; offer only live streams; local server TIME with
+   end time; which sheet instruments to add (never 10.8.0.137 = this PC).
