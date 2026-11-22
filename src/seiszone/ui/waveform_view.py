@@ -9,7 +9,7 @@ mean removal, null offsets, time / amplitude cursors and Live/Pause.
 
 Whole-window settings: time window, filter (switched with F, chosen from filter_dialog's list or
 designed), units (counts, physical, physical with acceleration in g), scale mode (each trace
-fills its row / one common range / fixed ±), amplitude zoom (x2 steps), mean removal, lane
+fills its row / one range per instrument / one range for all / fixed ±), amplitude zoom (x2 steps), mean removal, lane
 lines, overlay (all traces in one row), background colour, spectrogram height.
 Per-channel settings (the viewer window's right-click menu): colour, scale factor, own filter
 (or none), offset (follow the mean removal / fixed: null = the mean now, zero = absolute values),
@@ -81,7 +81,12 @@ MIN_WINDOW = 2.0
 MAX_WINDOW = 24 * 3600.0   # 1440 minutes (history.HISTORY_SECONDS)
 SUMMARY_PX = 2.0           # seconds per pixel from which a trace is drawn from per-second summaries
 UNITS = [("counts", "Counts"), ("physical", "Physical"), ("physical_g", "Physical, g")]
-SCALES = [("auto", "Auto"), ("common", "Common"), ("fixed", "Fixed ±")]
+# "common" is shared per instrument (sensor): instruments of different types and gains (an
+# accelerometer next to a broadband seismometer) differ by orders of magnitude, so one range for all
+# channels showed only the largest instrument and flattened the rest - with a band-pass on it looked
+# as if only that instrument was filtered (2026-11-22). "common_all" keeps the old behaviour.
+SCALES = [("auto", "Auto"), ("common", "Common per instrument"), ("common_all", "Common, all channels"),
+          ("fixed", "Fixed ±")]
 SPEC_SIZES = [32, 64, 128, 256]
 GAIN_RANGE = (1.0 / 64, 4096.0)   # amplitude zoom of the whole window, in x2 steps
 G = 9.80665                      # m/s² per g
@@ -140,6 +145,15 @@ def pre_roll(spec, rate=0.0):
 def component(sid):
     """Z, N, E, 1, 2, ... (the last letter of the channel code) for sorting."""
     return sid.rsplit(".", 1)[-1][-1:] if sid else ""
+
+
+def instrument(sid):
+    """The sensor a channel belongs to: NET.STA.LOC plus band and instrument code
+    ("IS.PAN.0J.BH" for IS.PAN.0J.BHZ) - its components share the "common" amplitude range."""
+    if not sid:
+        return ""
+    head, _dot, cha = sid.rpartition(".")
+    return f"{head}.{cha[:2]}" if head else sid
 
 
 SORTS = {
@@ -562,8 +576,10 @@ class WaveformView(QWidget):
                                      "Counts, or physical units from the station's StationXML response (or the "
                                      "calibration you entered for a channel)")
         self.scale_box = self._combo(SCALES, self._scale,
-                                     "Auto: each trace fills its row. Common: the same amplitude range for all "
-                                     "traces. Fixed: ± the value given. The amplitude zoom applies to all three")
+                                     "Auto: each trace fills its row. Common per instrument: the components of "
+                                     "one sensor share one amplitude range, every instrument has its own. Common, "
+                                     "all channels: one range for every trace (the largest one sets it). Fixed: ± "
+                                     "the value given. The amplitude zoom applies to all of them")
         # bound methods only (no lambdas holding self: they would keep the widget alive forever)
         self.units_box.currentIndexChanged.connect(self._set_units)
         self.scale_box.currentIndexChanged.connect(self._set_scale)
@@ -2229,6 +2245,11 @@ class WaveformView(QWidget):
         mode = self._scale
         spans = [tr.hi - tr.lo for tr in self._traces if tr.lo is not None]
         half_common = max(spans) / 2 if spans else 1.0
+        half_inst = {}                     # instrument -> half of its largest component's range
+        for tr in self._traces:
+            if tr.lo is not None:
+                k = instrument(tr.sid)
+                half_inst[k] = max(half_inst.get(k, 0.0), (tr.hi - tr.lo) / 2)
         overlay = self._overlay and len(self._traces) > 1
         for tr in self._traces:
             if overlay and tr is not self._traces[0]:
@@ -2249,9 +2270,10 @@ class WaveformView(QWidget):
             elif mode == "fixed":
                 mid = 0.0 if centred else (lo_ + hi_) / 2
                 lo, hi = mid - self._fixed / magnify, mid + self._fixed / magnify
-            elif mode == "common":
+            elif mode in ("common", "common_all"):
                 mid = (lo_ + hi_) / 2
-                half = (half_common if not overlay else (hi_ - lo_) / 2) / magnify
+                shared = half_common if mode == "common_all" else half_inst.get(instrument(tr.sid), half_common)
+                half = (shared if not overlay else (hi_ - lo_) / 2) / magnify
                 lo, hi = mid - half, mid + half
             else:
                 mid, half = (lo_ + hi_) / 2, (hi_ - lo_) / 2 / magnify

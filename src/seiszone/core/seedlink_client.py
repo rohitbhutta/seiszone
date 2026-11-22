@@ -73,6 +73,20 @@ def _ok(reply, command):
     raise SeedLinkError(f"unexpected answer {reply!r} to {command}")
 
 
+def wire_selector(sel):
+    """A selector as sent to the server. SeedLink selectors are [LL]CCC[.T]: a two-character
+    location or none. Units whose location code is one character ("1", padded "1 " in the data:
+    Minimus Lite and older Minimus) were given "1HH?", which they refuse ("refused selector 1HH?",
+    every reconnect of Tuljapur until 1.6.0). The location's second character becomes "?", which
+    matches the padding: "1HH?" -> "1?HH?" (checked read-only on Tuljapur: OK, its HH? channels)."""
+    sel = str(sel).strip()
+    neg = "!" if sel.startswith("!") else ""
+    base, dot, typ = sel[len(neg):].partition(".")
+    if len(base) == 4:
+        base = base[0] + "?" + base[1:]
+    return neg + base + dot + typ
+
+
 def _span(seconds):
     s = max(0, int(seconds))
     if s >= 3600:
@@ -311,7 +325,7 @@ class SeedLinkClient(Link):
                 if not _ok(await self._command(reader, writer, cmd), cmd):
                     continue
                 for sel in st.get("selectors") or []:
-                    await self._command(reader, writer, f"SELECT {sel}")
+                    await self._command(reader, writer, f"SELECT {wire_selector(sel)}")
                 stamp = time.strftime("%Y,%m,%d,%H,%M,%S", time.gmtime(int(gaps[key])))
                 cmd = f"TIME {stamp}"
                 if _ok(await self._command(reader, writer, cmd), cmd):
@@ -415,9 +429,10 @@ class SeedLinkClient(Link):
                 self.missing.append(key)
                 continue
             for sel in st.get("selectors") or []:
-                cmd = f"SELECT {sel}"
+                cmd = f"SELECT {wire_selector(sel)}"
                 if not _ok(await self._command(reader, writer, cmd), cmd):
-                    log.warning("SeedLink %s: %s refused selector %s for %s", self.name, self.address, sel, key)
+                    log.warning("SeedLink %s: %s refused selector %s for %s", self.name, self.address,
+                                wire_selector(sel), key)
             accepted = False
             for cmd in self._data_commands(key):
                 if accepted:
@@ -439,9 +454,9 @@ class SeedLinkClient(Link):
 
     async def _negotiate_uni(self, reader, writer):
         for sel in self.src.get("selectors") or []:
-            cmd = f"SELECT {sel}"
+            cmd = f"SELECT {wire_selector(sel)}"
             if not _ok(await self._command(reader, writer, cmd), cmd):
-                log.warning("SeedLink %s: %s refused selector %s", self.name, self.address, sel)
+                log.warning("SeedLink %s: %s refused selector %s", self.name, self.address, wire_selector(sel))
         cmd, *self._uni_retry = self._data_commands(UNI)
         writer.write(cmd.encode("ascii") + b"\r\n")   # no answer: the data follows at once
         await writer.drain()

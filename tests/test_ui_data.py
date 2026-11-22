@@ -386,9 +386,12 @@ def test_filters_units_scale(view, engine):
     assert view.note.text() == ""
 
     # scale modes
-    view.scale_box.setCurrentIndex(view.scale_box.findData("common"))
+    view.scale_box.setCurrentIndex(view.scale_box.findData("common"))     # per instrument
+    spans = {round(tr.yrange[1] - tr.yrange[0], 3) for tr in view._traces if tr.sid.startswith("WB.KUM.")}
+    assert len(spans) == 1                                                  # one sensor: one range
+    view.scale_box.setCurrentIndex(view.scale_box.findData("common_all"))
     spans = {round(tr.yrange[1] - tr.yrange[0], 3) for tr in view._traces}
-    assert len(spans) == 1
+    assert len(spans) == 1                                                  # one range for all
     view.scale_box.setCurrentIndex(view.scale_box.findData("fixed"))
     assert view._fixed_action.isVisible()     # (in the bar, or in its » menu when narrow)
     view.fixed_edit.setText("5000")
@@ -895,3 +898,48 @@ def test_screenshots(view, engine, qapp):
     pump(qapp, 0.1)
     assert dlg.grab().save(os.path.join(SCREENS, "spectrum.png"))
     dlg.close()
+
+
+def test_common_scale_is_per_instrument_so_every_filtered_trace_stays_visible(qapp, tmp_path):
+    """The field complaint of 2026-11-22: with several instruments in one viewer and a band-pass
+    on, only one instrument seemed filtered. The filter reached every channel; the Common scale
+    gave every row the range of the largest instrument, so the others were flat lines. Common is
+    now per instrument (the components of one sensor share a range); "common_all" is the old way."""
+    from seiszone.core import mseed
+    eng = FakeEngine(config=Config(str(tmp_path / "config.json")), seconds=600)
+    rng = np.random.default_rng(3)
+    t0 = time.time() - 600
+    quiet = ["IS.PAN.0J.BHZ", "IS.PAN.0J.BHN", "IS.PAN.0J.BHE"]       # a quiet broadband at 50 sps
+    for sid in quiet:
+        n = 600 * 50
+        t = np.arange(n) / 50.0
+        y = (30000 + 8000 * np.sin(2 * np.pi * 0.01 * t) + 20 * np.sin(2 * np.pi * 3 * t)
+             + rng.normal(0, 2, n)).astype(int)                        # offset + drift + a 3 Hz signal
+        net, sta, loc, cha = sid.split(".")
+        for rec in mseed.encode_records(net, sta, loc, cha, 50, t0, y):
+            eng.hub.add_record(rec, "pan")
+    sids = SIDS + quiet
+    v = WaveformView(eng, eng.config, state={"scale": "common"})
+    v.resize(1400, 900)
+    v.show()
+    pump(qapp)
+    v.set_channels(sids)
+    pump(qapp, 0.1)
+    v.set_window(600)
+    v.set_filter("bp1-10")
+    v.refresh()
+    pump(qapp, 0.1)
+
+    def used(tr):          # the part of its row a trace fills
+        return (tr.hi - tr.lo) / (tr.yrange[1] - tr.yrange[0])
+
+    try:
+        assert all(tr.filter_text == "Band-pass 1-10 Hz" for tr in v._traces)   # every channel is filtered
+        for group in (SIDS[:3], [SIDS[3]], quiet):       # the largest component of each sensor fills its row
+            assert max(used(v._trace(s)) for s in group) > 0.8, group
+        v.scale_box.setCurrentIndex(v.scale_box.findData("common_all"))
+        assert max(used(v._trace(s)) for s in quiet) < 0.01      # the old way: the quiet one is a flat line
+    finally:
+        v.close()
+        v.deleteLater()
+        pump(qapp)

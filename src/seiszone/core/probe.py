@@ -746,7 +746,8 @@ def selectors_for(chosen, available):
     out = []
     for loc, cha in chosen_k:
         group = [k for k in avail_k if k[0] == loc and k[1][:2] == cha[:2]]
-        sel = f"{loc}{cha[:2]}?" if all(k in chosen_k for k in group) else f"{loc}{cha}"
+        ll = loc + "?" if len(loc) == 1 else loc     # a one-character location: "1?" (see wire_selector)
+        sel = f"{ll}{cha[:2]}?" if all(k in chosen_k for k in group) else f"{ll}{cha}"
         if sel not in out:
             out.append(sel)
     return ",".join(out)

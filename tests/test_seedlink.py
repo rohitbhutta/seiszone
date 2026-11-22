@@ -105,6 +105,21 @@ def new_state(tmp_path):
 
 # ---------------------------------------------------------------------- units
 
+def test_selectors_sent_to_the_server():
+    """A one-character location ("1HH?", refused by the units) is sent as "1?HH?"; valid selectors
+    are sent as they are."""
+    from seiszone.core.seedlink_client import wire_selector
+    assert wire_selector("1HH?") == "1?HH?"
+    assert wire_selector("1HHZ.D") == "1?HHZ.D"
+    assert wire_selector("!1HHE") == "!1?HHE"
+    assert wire_selector("!HNE") == "!HNE"            # a negated channel stays as it is
+    for ok in ("0JHN?", "HHZ", "00BH?", "1?HH?", "0J", "HH?.D", "--HHZ"):
+        assert wire_selector(ok) == ok
+    class Rec:
+        loc, cha = "1", "HHZ"
+    assert Selector("1?HH?").match(Rec())       # SeisZone's own server matches the padded "1"
+
+
 def test_selectors_and_station_requests():
     rec = make_records(T0, 5, chans=("HNZ",))[0]
     assert Selector("HNZ").match(rec)

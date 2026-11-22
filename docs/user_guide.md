@@ -209,8 +209,11 @@ before SeisZone was started:
   Filters change only the display, never recorded data.
 * **Units**: Counts, Physical units (m/s, m/s² from StationXML or your calibration), or Physical
   with acceleration in **g**.
-* **Scale**: Common (all traces the same amplitude scale, so a quiet channel looks quiet - the
-  choice of a new viewer), Auto (each trace fills its row), Fixed ± a value you type.
+* **Scale**: Common per instrument (the components of one sensor share one amplitude scale, so a
+  quiet component looks quiet next to the others; every instrument has its own scale - the choice
+  of a new viewer), Common, all channels (one scale for every trace: the largest one sets it, so
+  with different instruments the quiet ones look flat), Auto (each trace fills its row), Fixed ± a
+  value you type.
 * **Remove mean**: centres each trace on zero. **Null** (key **N**): fixes each trace's offset
   at its mean now.
 * **Time cursors**: two vertical lines to drag; the button shows the time between them and the

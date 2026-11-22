@@ -4,6 +4,20 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-22 (evening) - fixes for many instruments; sources prepared; selection plan
+
+* Fixed (not built yet): Common scale per instrument (`waveform_view.instrument`; old behaviour
+  as "Common, all channels"); one-character location selectors ("1HH?" -> "1?HH?",
+  `seedlink_client.wire_selector`, `probe.selectors_for`; "1?HH?" checked read-only on
+  Tuljapur). Tests added; suite 321+ passed (2 failures from negated selectors fixed after).
+* tools/add_from_survey.py: probed the answering units read-only; 33 sources ready (skipped
+  10.8.0.137 = this PC, and 10.8.0.21 / .48 = GCF relays of Ralej and Kavdej, which are added
+  directly). Writing them needs SeisZone quit (config would be overwritten) - quitting it from
+  here was not allowed, the user is asked to quit it from the tray. Config backup:
+  %APPDATA%\SeisZone\config.backup-2026-11-22-before-adding.json.
+* Selection menu plan (Shift+drag over several channels): docs/reports/2026-11-22-selection-menu-plan.md
+  - waiting for the user's OK.
+
 ## 2026-11-22 (afternoon, 2) - side-by-side behaviour check (report only)
 
 * Behaviour only (no code of the third-party viewer read): its windows, its User's Guide and its

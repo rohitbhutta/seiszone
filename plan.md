@@ -357,7 +357,8 @@ Ctrl+1, Pause/Space, F, Ctrl+F, N, Z, +/-, Ctrl +/-, F5, Ctrl+Shift+P print, Ctr
 `WaveformView(engine, config, parent=None, state=None)` settings: window (`WINDOWS` 10 s - 60
 min), `filter_on` / `filter` (a `filter_dialog.filter_catalogue` key: "default", the FILTERS
 names, "saved:<name>", "custom" with `custom` spec), units counts / physical / physical_g
-(acceleration in g), scale auto / common / fixed + `fixed`, `demean`, `gain` (x2 steps, 1/64 -
+(acceleration in g), scale auto / common (per instrument: NET.STA.LOC + band/instrument code, `waveform_view.instrument`) /
+common_all (one range for all) / fixed + `fixed`, `demean`, `gain` (x2 steps, 1/64 -
 4096), `lanes`, `overlay`, `background`, `spec_size` (32-256), per channel `traces[sid]` =
 `TRACE_DEFAULTS` keys that differ: color, scale, filter (None = window's, "off", a key,
 "custom") + custom, offset (None = follow demean, else counts subtracted), locked, spectrogram,

@@ -1,0 +1,1157 @@
+[
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.2",
+  "port": 18000,
+  "name": "TG HALI",
+  "stations": [
+   {
+    "net": "KS",
+    "sta": "TGH",
+    "desc": "TG HALI",
+    "selectors": [
+     "1?BH?",
+     "1?BN?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINP-2162 TG HALI) :: SLPROTO:3.0",
+   "organization": "KS.TGH",
+   "hostname": "MINP-2162",
+   "label": "TG HALI",
+   "system_type": "Minimus Plus",
+   "product": "Minimus Plus",
+   "serial": "02162",
+   "firmware": "2.1-21249",
+   "ip": "192.168.2.11 (Static)",
+   "lat": "12.96428",
+   "lon": "77.3411",
+   "alt": "798.6",
+   "gnss": "3D locked",
+   "sensors": "2",
+   "net": "KS",
+   "sta": "TGH",
+   "site": "TG HALI",
+   "stationxml_name": "sd/Sensor0.xml"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.3",
+  "port": 18000,
+  "name": "HEM",
+  "stations": [
+   {
+    "net": "KS",
+    "sta": "HEM",
+    "desc": "HEM",
+    "selectors": [
+     "1?BH?",
+     "1?BN?",
+     "1?HN?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINP-7461 HEM) :: SLPROTO:3.0",
+   "organization": "KS.HEM",
+   "hostname": "MINP-7461",
+   "label": "HEM",
+   "system_type": "Minimus Plus",
+   "product": "Minimus Plus",
+   "serial": "07461",
+   "firmware": "2.1-28997",
+   "ip": "192.168.2.11 (Static)",
+   "lat": "12.82714",
+   "lon": "76.062",
+   "alt": "887.8",
+   "gnss": "3D locked",
+   "sensors": "2",
+   "net": "KS",
+   "sta": "HEM",
+   "site": "HEM",
+   "stationxml_name": "sd/Sensor0.xml"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.4",
+  "port": 18000,
+  "name": "HID",
+  "stations": [
+   {
+    "net": "KS",
+    "sta": "HID",
+    "desc": "HID",
+    "selectors": [
+     "1?BH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINP-8161 HIDKAL) :: SLPROTO:3.0",
+   "organization": "KS.HID",
+   "hostname": "MINP-8161",
+   "label": "HIDKAL",
+   "system_type": "Minimus Plus",
+   "product": "Minimus Plus",
+   "serial": "08161",
+   "firmware": "2.1-28997",
+   "ip": "192.168.2.11 (Static)",
+   "lat": "16.12461",
+   "lon": "74.652",
+   "alt": "667.7",
+   "gnss": "3D locked",
+   "sensors": "2",
+   "net": "KS",
+   "sta": "HID",
+   "site": "HID",
+   "stationxml_name": "sd/Sensor0.xml"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.5",
+  "port": 18000,
+  "name": "ALM",
+  "stations": [
+   {
+    "net": "KS",
+    "sta": "ALM",
+    "desc": "ALM",
+    "selectors": [
+     "0JHH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINP-2062 ALM) :: SLPROTO:3.0",
+   "organization": "KS.ALM",
+   "hostname": "MINP-2062",
+   "label": "ALM",
+   "system_type": "Minimus Plus",
+   "product": "Minimus Plus",
+   "serial": "02062",
+   "firmware": "2.1-28997",
+   "ip": "192.168.2.11 (Static)",
+   "lat": "16.33937",
+   "lon": "75.8941",
+   "alt": "552.1",
+   "gnss": "3D locked",
+   "sensors": "2",
+   "net": "KS",
+   "sta": "ALM",
+   "site": "ALM",
+   "stationxml_name": "sd/Sensor0.xml"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.6",
+  "port": 18000,
+  "name": "RAI",
+  "stations": [
+   {
+    "net": "KS",
+    "sta": "RAI",
+    "desc": "RAI",
+    "selectors": [
+     "0JHH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINP-2462 RAI) :: SLPROTO:3.0",
+   "organization": "KS.RAI",
+   "hostname": "MINP-2462",
+   "label": "RAI",
+   "system_type": "Minimus Plus",
+   "product": "Minimus Plus",
+   "serial": "02462",
+   "firmware": "2.1-28997",
+   "ip": "192.168.2.11 (Static)",
+   "lat": "16.18708",
+   "lon": "77.3726",
+   "alt": "435.3",
+   "gnss": "3D locked",
+   "sensors": "2",
+   "net": "KS",
+   "sta": "RAI",
+   "site": "RAI",
+   "stationxml_name": "sd/Sensor0.xml"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.7",
+  "port": 18000,
+  "name": "THA",
+  "stations": [
+   {
+    "net": "KS",
+    "sta": "THA",
+    "desc": "THA",
+    "selectors": []
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINP-2262 THA) :: SLPROTO:3.0",
+   "organization": "KS.THA",
+   "hostname": "MINP-2262",
+   "label": "THA",
+   "system_type": "Minimus Plus",
+   "product": "Minimus Plus",
+   "serial": "02262",
+   "firmware": "2.1-28997",
+   "ip": "192.168.2.11 (Static)",
+   "lat": "14.19421",
+   "lon": "74.784",
+   "alt": "510.7",
+   "gnss": "3D locked",
+   "sensors": "2",
+   "net": "KS",
+   "sta": "THA",
+   "site": "THA"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.19",
+  "port": 18000,
+  "name": "KALAK",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "KLK",
+    "desc": "KALAK",
+    "selectors": [
+     "0JBH?",
+     "0JBN?",
+     "1JAN?",
+     "1JAH?",
+     "1JHN?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINP-2362 KALAK) :: SLPROTO:3.0",
+   "organization": "IS.KLK",
+   "hostname": "MINP-2362",
+   "label": "KALAK",
+   "system_type": "Minimus Plus",
+   "product": "Minimus Plus",
+   "serial": "02362",
+   "firmware": "2.1-17870",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "22.000221",
+   "lon": "72.744003",
+   "alt": "24.5",
+   "gnss": "3D locked",
+   "sensors": "2",
+   "net": "IS",
+   "sta": "KLK",
+   "site": "KALAK"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.10",
+  "port": 18000,
+  "name": "KDR",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "KDR",
+    "desc": "KDR",
+    "selectors": [
+     "0JBH?",
+     "1JAH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINP-1D62 KADODARA) :: SLPROTO:3.0",
+   "organization": "IS.KDR",
+   "hostname": "MINP-1D62",
+   "label": "KADODARA",
+   "system_type": "Minimus Plus",
+   "product": "Minimus Plus",
+   "serial": "01D62",
+   "firmware": "2.1-12933",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "21.764246",
+   "lon": "72.641212",
+   "alt": "10.2",
+   "gnss": "3D locked",
+   "sensors": "2",
+   "net": "IS",
+   "sta": "KDR",
+   "site": "KDR",
+   "stationxml_name": "sd/Sensor0.xml"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.9",
+  "port": 18000,
+  "name": "Ralej",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "RLJ",
+    "desc": "Ralej",
+    "selectors": [
+     "0JBH?",
+     "1JAH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINP-2662 RLJ) :: SLPROTO:3.0",
+   "organization": "IS.RLJ",
+   "hostname": "MINP-2662",
+   "label": "RLJ",
+   "system_type": "Minimus Plus",
+   "product": "Minimus Plus",
+   "serial": "02662",
+   "firmware": "2.1-28997",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "22.28682",
+   "lon": "72.678",
+   "alt": "23.3",
+   "gnss": "3D locked",
+   "sensors": "2",
+   "net": "IS",
+   "sta": "RLJ",
+   "site": "Ralej",
+   "stationxml_name": "sd/Sensor0.xml"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.42",
+  "port": 18000,
+  "name": "JAMBUDA",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "JAB",
+    "desc": "JAMBUDA",
+    "selectors": [
+     "0JBH?",
+     "1JAH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINP-7761 JAMBUDA) :: SLPROTO:3.0",
+   "organization": "IS.JAB",
+   "hostname": "MINP-7761",
+   "label": "JAMBUDA",
+   "system_type": "Minimus Plus",
+   "product": "Minimus Plus",
+   "serial": "07761",
+   "firmware": "2.1-28997",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "21.24809",
+   "lon": "71.8045",
+   "alt": "111.1",
+   "gnss": "3D locked",
+   "sensors": "2",
+   "net": "IS",
+   "sta": "JAB",
+   "site": "JAMBUDA",
+   "stationxml_name": "sd/Sensor0.xml"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.58",
+  "port": 18000,
+  "name": "KAKRAVA",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "KAK",
+    "desc": "KAKRAVA",
+    "selectors": [
+     "1?BH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINL-7965 KAK) :: SLPROTO:3.0",
+   "organization": "IS.KAK",
+   "hostname": "MINL-7965",
+   "label": "KAK",
+   "system_type": "Minimus Lite",
+   "product": "",
+   "serial": "07965",
+   "firmware": "2.1-14470",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "23.48893",
+   "lon": "70.4149",
+   "alt": "88.9",
+   "gnss": "3D locked",
+   "sensors": "",
+   "net": "IS",
+   "sta": "KAK",
+   "site": "KAKRAVA"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.62",
+  "port": 18000,
+  "name": "BHACHAU",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "BHA",
+    "desc": "BHACHAU",
+    "selectors": [
+     "1?BH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINL-FE64 BHACHAU) :: SLPROTO:3.0",
+   "organization": "IS.BHA",
+   "hostname": "MINL-FE64",
+   "label": "BHACHAU",
+   "system_type": "Minimus Lite",
+   "product": "",
+   "serial": "0FE64",
+   "firmware": "2.1-14470",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "23.2965",
+   "lon": "70.3479",
+   "alt": "72.2",
+   "gnss": "3D locked",
+   "sensors": "",
+   "net": "IS",
+   "sta": "BHA",
+   "site": "BHACHAU"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.63",
+  "port": 18000,
+  "name": "SUVAI",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "SUV",
+    "desc": "SUVAI",
+    "selectors": [
+     "1?BH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINL-F564 SUVAI) :: SLPROTO:3.0",
+   "organization": "IS.SUV",
+   "hostname": "MINL-F564",
+   "label": "SUVAI",
+   "system_type": "Minimus Lite",
+   "product": "",
+   "serial": "0F564",
+   "firmware": "2.1-14470",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "23.6104",
+   "lon": "70.4912",
+   "alt": "36.9",
+   "gnss": "3D locked",
+   "sensors": "",
+   "net": "IS",
+   "sta": "SUV",
+   "site": "SUVAI"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.65",
+  "port": 18000,
+  "name": "VIGHAKOT",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "VGO",
+    "desc": "VIGHAKOT",
+    "selectors": [
+     "1?BH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINL-9165 VIGHAKOT) :: SLPROTO:3.0",
+   "organization": "IS.VGO",
+   "hostname": "MINL-9165",
+   "label": "VIGHAKOT",
+   "system_type": "Minimus Lite",
+   "product": "",
+   "serial": "09165",
+   "firmware": "2.1-14470",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "24.21518",
+   "lon": "69.1962",
+   "alt": "13.9",
+   "gnss": "3D locked",
+   "sensors": "",
+   "net": "IS",
+   "sta": "VGO",
+   "site": "VIGHAKOT"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.66",
+  "port": 18000,
+  "name": "GADHDA",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "GDD",
+    "desc": "GADHDA",
+    "selectors": [
+     "1?BH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINL-2B64 GADHDA) :: SLPROTO:3.0",
+   "organization": "IS.GDD",
+   "hostname": "MINL-2B64",
+   "label": "GADHDA",
+   "system_type": "Minimus Lite",
+   "product": "",
+   "serial": "02B64",
+   "firmware": "2.1-14470",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "23.86628",
+   "lon": "70.3747",
+   "alt": "39.8",
+   "gnss": "3D locked",
+   "sensors": "",
+   "net": "IS",
+   "sta": "GDD",
+   "site": "GADHDA"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.71",
+  "port": 18000,
+  "name": "SHIVLAKHA",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "SIV",
+    "desc": "SHIVLAKHA",
+    "selectors": [
+     "1?BH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINL-4765 SHIVLAKHA) :: SLPROTO:3.0",
+   "organization": "IS.SIV",
+   "hostname": "MINL-4765",
+   "label": "SHIVLAKHA",
+   "system_type": "Minimus Lite",
+   "product": "",
+   "serial": "04765",
+   "firmware": "2.1-14470",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "23.38414",
+   "lon": "70.600",
+   "alt": "90.3",
+   "gnss": "3D locked",
+   "sensors": "",
+   "net": "IS",
+   "sta": "SIV",
+   "site": "SHIVLAKHA"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.79",
+  "port": 18000,
+  "name": "Renapur",
+  "stations": [
+   {
+    "net": "MU",
+    "sta": "RENP",
+    "desc": "Renapur",
+    "selectors": [
+     "1?HH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINL-5B65 RENP) :: SLPROTO:3.0",
+   "organization": "MU.RENP",
+   "hostname": "MINL-5B65",
+   "label": "RENP",
+   "system_type": "Minimus Lite",
+   "product": "",
+   "serial": "05B65",
+   "firmware": "2.1-19484",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "18.51759",
+   "lon": "76.5754",
+   "alt": "629.3",
+   "gnss": "3D locked",
+   "sensors": "",
+   "net": "MU",
+   "sta": "RENP",
+   "site": "Renapur"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.76",
+  "port": 18000,
+  "name": "Deoni",
+  "stations": [
+   {
+    "net": "MU",
+    "sta": "DEON",
+    "desc": "Deoni",
+    "selectors": [
+     "1?HH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINL-7765 Deoni) :: SLPROTO:3.0",
+   "organization": "MU.DEON",
+   "hostname": "MINL-7765",
+   "label": "Deoni",
+   "system_type": "Minimus Lite",
+   "product": "",
+   "serial": "07765",
+   "firmware": "2.1-19484",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "18.25958",
+   "lon": "77.081",
+   "alt": "592.8",
+   "gnss": "3D locked",
+   "sensors": "",
+   "net": "MU",
+   "sta": "DEON",
+   "site": "Deoni"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.86",
+  "port": 18000,
+  "name": "RADHANPUR",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "RAD",
+    "desc": "RADHANPUR",
+    "selectors": [
+     "1?BH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MIN-845A RADHANPUR) :: SLPROTO:3.0",
+   "organization": "IS.RAD",
+   "hostname": "MIN-845A",
+   "label": "RADHANPUR",
+   "system_type": "Minimus",
+   "product": "Minimus",
+   "serial": "0845A",
+   "firmware": "2.1-21249",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "0",
+   "lon": "0",
+   "alt": "0",
+   "gnss": "No lock",
+   "sensors": "1",
+   "net": "IS",
+   "sta": "RAD",
+   "site": "RADHANPUR",
+   "stationxml_name": "sd/Sensor0.xml"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.92",
+  "port": 18000,
+  "name": "PARDI ZANKHARI",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "PAZ",
+    "desc": "PARDI ZANKHARI",
+    "selectors": [
+     "0JBH?",
+     "1JAH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINP-2762 PARDI ZANKHARI) :: SLPROTO:3.0",
+   "organization": "IS.PAZ",
+   "hostname": "MINP-2762",
+   "label": "PARDI ZANKHARI",
+   "system_type": "Minimus Plus",
+   "product": "Minimus Plus",
+   "serial": "02762",
+   "firmware": "2.1-28997",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "21.43002",
+   "lon": "72.695",
+   "alt": "6.6",
+   "gnss": "3D locked",
+   "sensors": "2",
+   "net": "IS",
+   "sta": "PAZ",
+   "site": "PARDI ZANKHARI",
+   "stationxml_name": "sd/Sensor0.xml"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.97",
+  "port": 18000,
+  "name": "GODHVANI",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "GOD",
+    "desc": "GODHVANI",
+    "selectors": [
+     "1?BH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINL-2C65 GODHVANI) :: SLPROTO:3.0",
+   "organization": "IS.GOD",
+   "hostname": "MINL-2C65",
+   "label": "GODHVANI",
+   "system_type": "Minimus Lite",
+   "product": "",
+   "serial": "02C65",
+   "firmware": "2.1-19484",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "20.66665",
+   "lon": "73.2291",
+   "alt": "96.2",
+   "gnss": "3D locked",
+   "sensors": "",
+   "net": "IS",
+   "sta": "GOD",
+   "site": "GODHVANI"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.98",
+  "port": 18000,
+  "name": "KAVDEJ",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "KVJ",
+    "desc": "KAVDEJ",
+    "selectors": [
+     "1?BH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINL-2F65 KAVDEJ) :: SLPROTO:3.0",
+   "organization": "IS.KVJ",
+   "hostname": "MINL-2F65",
+   "label": "KAVDEJ",
+   "system_type": "Minimus Lite",
+   "product": "",
+   "serial": "02F65",
+   "firmware": "2.1-19484",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "20.69657",
+   "lon": "73.3041",
+   "alt": "150.3",
+   "gnss": "3D locked",
+   "sensors": "",
+   "net": "IS",
+   "sta": "KVJ",
+   "site": "KAVDEJ"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.100",
+  "port": 18000,
+  "name": "UMRVAVDUR",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "UVD",
+    "desc": "UMRVAVDUR",
+    "selectors": [
+     "1?BH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINL-7165 UMRVAVDUR) :: SLPROTO:3.0",
+   "organization": "IS.UVD",
+   "hostname": "MINL-7165",
+   "label": "UMRVAVDUR",
+   "system_type": "Minimus Lite",
+   "product": "",
+   "serial": "07165",
+   "firmware": "2.1-19484",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "20.86717",
+   "lon": "73.3682",
+   "alt": "91.2",
+   "gnss": "3D locked",
+   "sensors": "",
+   "net": "IS",
+   "sta": "UVD",
+   "site": "UMRVAVDUR"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.101",
+  "port": 18000,
+  "name": "SAPUTARA",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "SPT",
+    "desc": "SAPUTARA",
+    "selectors": [
+     "1?BH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINL-6365 SAPUTARA) :: SLPROTO:3.0",
+   "organization": "IS.SPT",
+   "hostname": "MINL-6365",
+   "label": "SAPUTARA",
+   "system_type": "Minimus Lite",
+   "product": "",
+   "serial": "06365",
+   "firmware": "2.1-19484",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "20.57363",
+   "lon": "73.7577",
+   "alt": "822.8",
+   "gnss": "3D locked",
+   "sensors": "",
+   "net": "IS",
+   "sta": "SPT",
+   "site": "SAPUTARA"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.110",
+  "port": 18000,
+  "name": "Bhadar Dam",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "BHD",
+    "desc": "Bhadar Dam",
+    "selectors": [
+     "1?BH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINL-4165 Bhadar Dam) :: SLPROTO:3.0",
+   "organization": "IS.BHD",
+   "hostname": "MINL-4165",
+   "label": "Bhadar Dam",
+   "system_type": "Minimus Lite",
+   "product": "",
+   "serial": "04165",
+   "firmware": "2.1-19484",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "21.82581",
+   "lon": "70.7627",
+   "alt": "110.5",
+   "gnss": "3D locked",
+   "sensors": "",
+   "net": "IS",
+   "sta": "BHD",
+   "site": "Bhadar Dam"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.112",
+  "port": 18000,
+  "name": "SRJ",
+  "stations": [
+   {
+    "net": "SR",
+    "sta": "SRJ",
+    "desc": "SRJ",
+    "selectors": [
+     "1?BN?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MIN-6B5A SURAJWADI DAM) :: SLPROTO:3.0",
+   "organization": "SR.SRJ",
+   "hostname": "MIN-6B5A",
+   "label": "SURAJWADI DAM",
+   "system_type": "Minimus",
+   "product": "Minimus",
+   "serial": "06B5A",
+   "firmware": "2.1-21249",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "21.20419",
+   "lon": "71.3721",
+   "alt": "137.3",
+   "gnss": "3D locked",
+   "sensors": "1",
+   "net": "SR",
+   "sta": "SRJ",
+   "site": "SRJ",
+   "stationxml_name": "sd/Sensor0.xml"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.118",
+  "port": 18000,
+  "name": "DHOLAVIRA",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "DOL",
+    "desc": "DHOLAVIRA",
+    "selectors": [
+     "1?BH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINL-4A65 DHOLAVIRA) :: SLPROTO:3.0",
+   "organization": "IS.DOL",
+   "hostname": "MINL-4A65",
+   "label": "DHOLAVIRA",
+   "system_type": "Minimus Lite",
+   "product": "",
+   "serial": "04A65",
+   "firmware": "2.1-14470",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "23.87592",
+   "lon": "70.2166",
+   "alt": "26.1",
+   "gnss": "3D locked",
+   "sensors": "",
+   "net": "IS",
+   "sta": "DOL",
+   "site": "DHOLAVIRA"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.102",
+  "port": 18000,
+  "name": "SIPU",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "SIP",
+    "desc": "SIPU",
+    "selectors": [
+     "1?BH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINL-6B65 SIPU) :: SLPROTO:3.0",
+   "organization": "IS.SIP",
+   "hostname": "MINL-6B65",
+   "label": "SIPU",
+   "system_type": "Minimus Lite",
+   "product": "",
+   "serial": "06B65",
+   "firmware": "2.1-14470",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "24.3892",
+   "lon": "72.2996",
+   "alt": "181.7",
+   "gnss": "3D locked",
+   "sensors": "",
+   "net": "IS",
+   "sta": "SIP",
+   "site": "SIPU"
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.119",
+  "port": 18000,
+  "name": "IIT Roorkee 1 (CHAU)",
+  "stations": [
+   {
+    "net": "KH",
+    "sta": "CHAU",
+    "desc": "CHAU",
+    "selectors": []
+   }
+  ],
+  "details": {
+   "software": "SEEDLINK v3.1 (Nanometrics on centaur-3 4.9.2)",
+   "organization": "SerialNumber: 220",
+   "hostname": "Nanometrics on centaur-3 4.9.2"
+  }
+ },
+ {
+  "kind": "gcf-udp",
+  "host": "10.8.0.121",
+  "port": 1567,
+  "name": "IIT Roorkee 3",
+  "gcf": {
+   "net": "XX",
+   "sta": "PRAT",
+   "desc": "IIT Roorkee 3",
+   "map": {
+    "PRATE4": [
+     "04",
+     "HHE"
+    ],
+    "PRATZ4": [
+     "04",
+     "HHZ"
+    ],
+    "PRATN4": [
+     "04",
+     "HHN"
+    ]
+   },
+   "system_id": "PRAT"
+  },
+  "details": {
+   "gcf_status": [],
+   "system_id": "PRAT",
+   "standard_names": true
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.144",
+  "port": 18000,
+  "name": "Sarangpur",
+  "stations": [
+   {
+    "net": "IS",
+    "sta": "SRG",
+    "desc": "Sarangpur",
+    "selectors": [
+     "0JBH?",
+     "1JAH?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (MINP-2562 Sarangpur) :: SLPROTO:3.0",
+   "organization": "IS.SRG",
+   "hostname": "MINP-2562",
+   "label": "Sarangpur",
+   "system_type": "Minimus Plus",
+   "product": "Minimus Plus",
+   "serial": "02562",
+   "firmware": "2.1-29604",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "22.18937",
+   "lon": "71.7952",
+   "alt": "55.1",
+   "gnss": "3D locked",
+   "sensors": "2",
+   "net": "IS",
+   "sta": "SRG",
+   "site": "Sarangpur",
+   "stationxml_name": "sd/Sensor0.xml"
+  }
+ },
+ {
+  "kind": "gcf-udp",
+  "host": "10.8.0.163",
+  "port": 1567,
+  "name": "IIT R",
+  "gcf": {
+   "net": "XX",
+   "sta": "SIRA",
+   "desc": "IIT R",
+   "map": {
+    "SIRAN4": [
+     "04",
+     "HHN"
+    ],
+    "SIRAZ4": [
+     "04",
+     "HHZ"
+    ],
+    "SIRAE4": [
+     "04",
+     "HHE"
+    ]
+   },
+   "system_id": "SIRA"
+  },
+  "details": {
+   "gcf_status": [],
+   "system_id": "SIRA",
+   "standard_names": true
+  }
+ },
+ {
+  "kind": "seedlink",
+  "host": "10.8.0.203",
+  "port": 18000,
+  "name": "Tetar Dam Top CH1050",
+  "stations": [
+   {
+    "net": "CI",
+    "sta": "TEDT",
+    "desc": "Tetar Dam Top CH1050",
+    "selectors": [
+     "0JHN?",
+     "9JBN?"
+    ]
+   }
+  ],
+  "details": {
+   "software": "SeedLink v3.0 (FMUS-A46D Tetar Dam Top) :: SLPROTO:3.0",
+   "organization": "CI.TEDT",
+   "hostname": "FMUS-A46D",
+   "label": "Tetar Dam Top",
+   "system_type": "Fortimus",
+   "product": "Fortimus",
+   "serial": "0A46D",
+   "firmware": "2.1-29184",
+   "ip": "192.168.2.21 (Static)",
+   "lat": "24.92005",
+   "lon": "85.2879",
+   "alt": "130.3",
+   "gnss": "3D locked",
+   "sensors": "1",
+   "net": "CI",
+   "sta": "TEDT",
+   "site": "Tetar Dam Top CH1050",
+   "stationxml_name": "sd/Sensor0.xml"
+  }
+ }
+]

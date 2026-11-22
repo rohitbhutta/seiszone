@@ -191,6 +191,10 @@ def test_parse_target_and_selectors():
     assert ip.selectors_for(av[:6], av) == "0JHN?,9JBN?"  # whole groups -> wildcards, SOH left out
     assert ip.selectors_for(av[:2], av) == "0JHNZ,0JHNN"  # part of a group -> single channels
     assert ip.selectors_for(av, av) == ""                 # everything -> no selector
+    # a one-character location (Minimus Lite, older Minimus: "1"): "1?" matches its padding
+    one = [{"loc": "1", "cha": c} for c in ("BHZ", "BHN", "BHE")] + [{"loc": "00", "cha": "SOH"}]
+    assert ip.selectors_for(one[:3], one) == "1?BH?"
+    assert ip.selectors_for(one[:1], one) == "1?BHZ"
 
 
 def test_bad_text_raises_but_dead_address_does_not(fast):
