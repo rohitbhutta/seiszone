@@ -10,7 +10,9 @@ VERSION = "2.1.1"
 ORGANIZATION = "SeismoVerse"
 AUTHOR = "Arnab Kole"
 SUPPORTED_BY = "Rohit Santra"
-# The per-user folders keep the old name, so settings, sources, recordings, logs and the
-# SeedLink server's buffer of earlier versions stay where they are:
-# %APPDATA%\SeisZone, %LOCALAPPDATA%\SeisZone, Documents\SeisZone.
-DATA_FOLDER = "SeisZone"
+# The per-user folders: %APPDATA%\SeismoVerse, %LOCALAPPDATA%\SeismoVerse, Documents\SeismoVerse.
+# A PC that ran SeisZone 1.9.0 or older keeps its folders of the old name (LEGACY_DATA_FOLDER)
+# as long as it has them, so its settings, sources, recordings, logs and server buffer stay
+# where they are; nothing is moved or deleted (paths.py).
+DATA_FOLDER = "SeismoVerse"
+LEGACY_DATA_FOLDER = "SeisZone"

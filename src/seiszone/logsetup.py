@@ -19,6 +19,7 @@ LOG_LINES = collections.deque(maxlen=5000)
 _lock = threading.Lock()
 _count = 0
 FORMAT = "%(asctime)s %(levelname)s %(message)s"
+LOG_FILE = "seismoverse.log"   # (seiszone.log up to 2.1.0: older files stay in the log folder)
 
 
 class MemoryHandler(logging.Handler):
@@ -59,7 +60,7 @@ def setup(verbose=False, console=False, folder=None):
     folder = folder or paths.log_dir()
     try:
         os.makedirs(folder, exist_ok=True)
-        fh = logging.handlers.RotatingFileHandler(os.path.join(folder, "seiszone.log"),
+        fh = logging.handlers.RotatingFileHandler(os.path.join(folder, LOG_FILE),
                                                   maxBytes=5_000_000, backupCount=5, encoding="utf-8")
         fh.setFormatter(logging.Formatter(FORMAT))
         log.addHandler(fh)

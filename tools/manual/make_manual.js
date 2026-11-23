@@ -125,7 +125,6 @@ BULLETS([
   "Buttons, menus and boxes on the screen are written in **bold**, for example **Add source**.",
   "Text you type and file names are written like `10.8.0.182`.",
   "All times in SeismoVerse are **UTC**.",
-  "SeismoVerse was called **SeisZone** up to version 1.9.0. Your sources, settings, recordings and logs from that version stay where they are and are used as before.",
   "Inside the program, press **F1** (or **Help > User guide**) for the detailed technical guide.",
 ]);
 
@@ -139,13 +138,13 @@ STEPS([
   "At the end leave **Launch SeismoVerse** ticked and click **Finish**.",
 ]);
 P("The firewall rule is called **SeismoVerse**. It lets Gecko recorders (port 58772) and other programs (the SeedLink server, port 18000) connect to this PC.");
-H2("Update (also from SeisZone)");
+H2("Update to a new version");
 STEPS([
   "Run the new **SeismoVerseSetup.exe**. You do not need to uninstall the old version first.",
-  "If SeismoVerse (or SeisZone) is running, setup says it will be closed. Click **OK**. Recordings that were running continue by themselves when SeismoVerse starts again.",
+  "If SeismoVerse is running, setup says it will be closed. Click **OK**. Recordings that were running continue by themselves when SeismoVerse starts again.",
   "Finish the setup as above.",
 ]);
-NOTE("An update of SeisZone stays in its folder `C:\\Program Files\\SeisZone`. The old SeisZone program file and its shortcuts are removed; the new Start menu entry is **SeismoVerse**. Your instruments, settings and recordings are kept.");
+NOTE("An update installs into the same program folder as before and keeps your instruments, settings and recordings.");
 H2("Uninstall");
 P("Open **Windows Settings > Apps**, choose **SeismoVerse** and click **Uninstall**. This removes the program and the firewall rule. Your recordings, exports, settings and log files are **not** deleted.");
 
@@ -316,7 +315,7 @@ P("Click **Record** (or **Ctrl+R**). The Recordings window lists all recordings 
 IMG("05_record.png", "The Recordings window: running recordings (top) and a new recording (bottom).", 540);
 STEPS([
   "**Name**: any name, for example \"Kumari March 2026\".",
-  "**Folder**: where the files go. Default: `Documents\\SeisZone\\Recordings`.",
+  "**Folder**: where the files go. Default: `Documents\\SeismoVerse\\Recordings`.",
   "**Channels**: all channels (also channels that appear later), or only the channels you tick.",
   "**File length**: 15, 30 or 60 minutes. Files start on the clock (UTC), for example 10:00, 11:00.",
   "**Files**: one file per channel, or one file per station with all its channels.",
@@ -343,7 +342,7 @@ STEPS([
   "Tick the channels.",
   "Choose the start and end time (UTC), or use **Last 10 min**, **Last 1 h** or **The view's range**.",
   "Choose **One file per channel** or **One file with all channels**.",
-  "Choose the folder (default `Documents\\SeisZone\\Exports`) and click **Export**.",
+  "Choose the folder (default `Documents\\SeismoVerse\\Exports`) and click **Export**.",
 ]);
 P("SeismoVerse takes the data from your recordings first and, for anything not recorded, from the live data in memory and the disk buffer. It writes miniSEED files plus a report with the number of samples and any gaps per channel.");
 
@@ -407,23 +406,24 @@ TABLE(["Problem", "What to do"], [
   ["A port is in use by another program", "Close that program, or choose another port in Settings (and change it in the W610 or other programs too). SeismoVerse tries again every few seconds; the log names the program's process id."],
   ["Physical units are not offered", "SeismoVerse has no StationXML for that station. Remove the source and add it again with **Detect**, and wait until detection finishes."],
   ["Low disk space warning", "SeismoVerse never deletes anything. Copy old recording folders to another disk, then delete them yourself, or record to a folder on a bigger disk."],
-  ["Something else", "Look in the **Log** panel, or open **Help > Log folder** and send the file `seiszone.log` with your question."],
+  ["Something else", "Look in the **Log** panel, or open **Help > Log folder** and send the newest log file (`seismoverse.log`) with your question."],
 ], [1.3, 3]);
 
 // ---------------------------------------------------------------------------------------------
 H1("14. Files and folders");
-P("The folders keep the program's earlier name **SeisZone**, so nothing moved when the program was renamed.");
+P("SeismoVerse keeps its files in these folders of your Windows user:");
 TABLE(["What", "Where"], [
-  ["Recordings (default)", "`Documents\\SeisZone\\Recordings`"],
-  ["Exports (default)", "`Documents\\SeisZone\\Exports`"],
-  ["Program log", "`%LOCALAPPDATA%\\SeisZone\\logs\\seiszone.log` (Help > Log folder)"],
-  ["Settings and sources", "`%APPDATA%\\SeisZone\\config.json`"],
-  ["Running recordings, SeedLink positions", "`%APPDATA%\\SeisZone\\state.json`"],
-  ["StationXML (instrument responses)", "`%APPDATA%\\SeisZone\\stationxml`"],
-  ["SeedLink server disk buffer", "`%LOCALAPPDATA%\\SeisZone\\ServerBuffer`"],
-  ["The program", "`C:\\Program Files\\SeismoVerse` (updated from SeisZone: `C:\\Program Files\\SeisZone`)"],
+  ["Recordings (default)", "`Documents\\SeismoVerse\\Recordings`"],
+  ["Exports (default)", "`Documents\\SeismoVerse\\Exports`"],
+  ["Program log", "`%LOCALAPPDATA%\\SeismoVerse\\logs\\seismoverse.log` (Help > Log folder)"],
+  ["Settings and sources", "`%APPDATA%\\SeismoVerse\\config.json`"],
+  ["Running recordings, SeedLink positions", "`%APPDATA%\\SeismoVerse\\state.json`"],
+  ["StationXML (instrument responses)", "`%APPDATA%\\SeismoVerse\\stationxml`"],
+  ["SeedLink server disk buffer", "`%LOCALAPPDATA%\\SeismoVerse\\ServerBuffer`"],
+  ["The program", "`C:\\Program Files\\SeismoVerse`"],
 ], [1.3, 3]);
-P("To open a folder like `%APPDATA%\\SeisZone`, type it into the Explorer address bar. Neither SeismoVerse nor its uninstaller deletes recordings, exports, settings or logs.");
+P("To open a folder like `%APPDATA%\\SeismoVerse`, type it into the Explorer address bar. Neither SeismoVerse nor its uninstaller deletes recordings, exports, settings or logs.");
+NOTE("On a PC that ran an earlier version of the program, the folders it used before stay in use, so nothing had to be moved. **Help > Log folder** and the **Open folder** buttons of the Recordings and Export windows always open the right folder.");
 
 // ---------------------------------------------------------------------------------------------
 H1("Appendix: keyboard shortcuts");

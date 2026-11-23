@@ -3,7 +3,7 @@
 SeismoVerse shows, records and shares live seismic data. This guide is for the person who runs
 the station PC. Press **F1** in SeismoVerse (or Help > User guide) to open it again.
 
-Up to version 1.9.0 the program was called **SeisZone**. Its folders keep that name, so
+On a PC that ran an earlier version of the program, the folders it used before stay in use, so
 your sources, settings, recordings and logs stay where they were (section 14).
 
 Contents
@@ -28,8 +28,8 @@ Contents
 ## 1. Install
 
 1. Run **SeismoVerseSetup.exe**. Windows asks for administrator permission: answer **Yes**.
-   Setup needs it only to copy the program to `C:\Program Files\SeismoVerse` (an update of SeisZone stays in
-   `C:\Program Files\SeisZone`) and to add one
+   Setup needs it only to copy the program to `C:\Program Files\SeismoVerse` (an update stays in
+   the folder of the first installation) and to add one
    Windows Firewall rule. SeismoVerse itself always runs with your normal user rights.
 2. Choose whether you want a desktop icon. A Start menu icon is always made. If the old Gecko
    SeedLink service is installed, leave **"Stop and disable the old Gecko SeedLink service, so
@@ -256,7 +256,7 @@ before SeismoVerse was started:
   channels only:
   * **Save... (miniSEED)** - export the selection; **Zoom In** - show only the selection;
   * **Save on selection** - when ticked, every new selection of this viewer is saved at once
-    (one miniSEED file per channel in Documents\SeisZone\Exports; the status bar says so);
+    (one miniSEED file per channel in Documents\SeismoVerse\Exports; the status bar says so);
   * **Spectrum...**, **PSD in Acceleration Units**, **PSD in Velocity Units** - the power
     spectral density of every channel (needs StationXML or a Calibration; else counts);
   * **Peak values** - peak, peak-to-peak, RMS, and for acceleration channels the peak in g and
@@ -366,7 +366,7 @@ channels** opens it with that viewer's channels ticked.
 Start a recording:
 
 1. Name: any name, for example "Kumari March 2026".
-2. Folder: where the files go. Default: `Documents\SeisZone\Recordings`.
+2. Folder: where the files go. Default: `Documents\SeismoVerse\Recordings`.
 3. Channels: **all channels** (also channels that appear later, e.g. a Gecko that connects
    tomorrow), or a list you choose.
 4. File length: 15, 30 or 60 minutes. Files start on the clock (UTC), e.g. 10:00, 11:00.
@@ -421,7 +421,7 @@ Click **Export** (or Ctrl+E).
 1. Choose the channels.
 2. Choose the start and end time (UTC).
 3. Choose **One file per channel** or **One file with all channels**.
-4. Choose the output folder (default `Documents\SeisZone\Exports`) and click Export.
+4. Choose the output folder (default `Documents\SeismoVerse\Exports`) and click Export.
 
 SeismoVerse takes the data from your recordings first and, for anything not recorded, from the
 live data in memory (the last 60 minutes by default). It cuts exactly the chosen window and
@@ -457,7 +457,7 @@ earlier viewer's "My Server" page. It has two tabs, one per server:
   type another port, and press **Apply**. Listen on and Organization stay in Settings >
   SeedLink server.
 * **Keep on disk** (SeedLink tab, default **2 days**): every packet is also written to
-  `%LOCALAPPDATA%\SeisZone\ServerBuffer`, like the earlier viewer's "Server Buffer". A computer
+  `%LOCALAPPDATA%\SeismoVerse\ServerBuffer`, like the earlier viewer's "Server Buffer". A computer
   that reads this PC and was switched off for hours - even while SeismoVerse itself restarted -
   gets everything it missed when it connects again, and the viewers show data that old. The tab
   shows the space used (about 1.5 GB per day with 38 instruments) and how far back it reaches.
@@ -586,21 +586,24 @@ delete them yourself, or choose a folder on a bigger disk for new recordings.
 
 **Something else**
 
-Look in the Log panel, or open the log file (Help > Log folder). Send the file
-`seiszone.log` with your question.
+Look in the Log panel, or open the log file (Help > Log folder). Send the newest log file
+(`seismoverse.log`) with your question.
 
 ## 14. Where SeismoVerse keeps its files
 
 | What | Where |
 |------|-------|
-| Recordings (default) | `Documents\SeisZone\Recordings` |
-| Exports (default) | `Documents\SeisZone\Exports` |
-| Program log | `%LOCALAPPDATA%\SeisZone\logs\seiszone.log` (Help > Log folder) |
-| Settings and sources | `%APPDATA%\SeisZone\config.json` |
-| Running recordings, SeedLink positions | `%APPDATA%\SeisZone\state.json` |
-| StationXML (instrument responses) | `%APPDATA%\SeisZone\stationxml` |
-| The program | `C:\Program Files\SeismoVerse` (updated from SeisZone: `C:\Program Files\SeisZone`) |
+| Recordings (default) | `Documents\SeismoVerse\Recordings` |
+| Exports (default) | `Documents\SeismoVerse\Exports` |
+| Program log | `%LOCALAPPDATA%\SeismoVerse\logs\seismoverse.log` (Help > Log folder) |
+| Settings and sources | `%APPDATA%\SeismoVerse\config.json` |
+| Running recordings, SeedLink positions | `%APPDATA%\SeismoVerse\state.json` |
+| StationXML (instrument responses) | `%APPDATA%\SeismoVerse\stationxml` |
+| SeedLink server disk buffer | `%LOCALAPPDATA%\SeismoVerse\ServerBuffer` |
+| The program | `C:\Program Files\SeismoVerse` |
 
-To open a folder like `%APPDATA%\SeisZone`, type it into the Explorer address bar. These files
+On a PC that ran an earlier version of the program, the folders it used before stay in use
+(nothing is moved); Help > Log folder and the Open folder buttons always open the right one.
+To open a folder like `%APPDATA%\SeismoVerse`, type it into the Explorer address bar. These files
 belong to your Windows user. Neither SeismoVerse nor its uninstaller deletes recordings, exports,
 settings or logs.

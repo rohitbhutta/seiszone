@@ -4,6 +4,23 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 13:35 - 2.1.1 (same branch): no SeisZone name in the manual; new PCs get SeismoVerse folders
+
+* The user: there are still SeisZone names in the user manual - remove them all and give the final
+  document; and asked for a plan to publish updates that computers anywhere can install
+  (no server, only the GitHub account).
+* Folders: DATA_FOLDER is now "SeismoVerse"; paths.data_folder() uses the old "SeisZone" folder
+  of a place (AppData Roaming / Local / Documents) as long as it exists and no SeismoVerse
+  folder is there. A new PC gets SeismoVerse folders; this PC keeps its SeisZone folders
+  (checked: config, logs, buffer and Documents still resolve to them; nothing moved). The log
+  file is now seismoverse.log (older seiszone.log files stay). The uninstall message names the
+  SeismoVerse folders.
+* Manual and user guide: no "SeisZone" left (the PDF's text and metadata and the Word file's XML
+  were searched); folders shown as SeismoVerse with a note that a PC of an earlier version keeps
+  the folders it used. Screenshots retaken (paths show SeismoVerse). Manual 27 pages, 2.1.1.
+* Update plan: docs/reports/2026-11-23-update-plan.md (GitHub Releases in a public
+  releases-only repository, an in-app "Check for updates"); not built, waiting for the user.
+
 ## 2026-11-23 13:25 - 2.1.1: windows always fit the screen (Data server title bar was hidden)
 
 * 2.1.0 installed by the user and running (13:15:40, C:\Program Files\SeisZone\SeismoVerse.exe

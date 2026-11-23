@@ -128,7 +128,7 @@ class FakeEngine:
     @staticmethod
     def buffer_status(s):
         days = float(s.get("buffer_days", 2))
-        return {"enabled": days > 0, "days": days, "folder": r"C:\Users\me\AppData\Local\SeisZone\ServerBuffer",
+        return {"enabled": days > 0, "days": days, "folder": r"C:\Users\me\AppData\Local\SeismoVerse\ServerBuffer",
                 "bytes": int(2.6 * 1024 ** 3) if days > 0 else None, "oldest": 1795300000.0 if days > 0 else None,
                 "paused": False, "error": ""}
 

@@ -45,7 +45,7 @@ def tidy_paths(widget):
         txt = e.text()
         if "seismoverse_manual" in txt:
             last = txt.replace("/", "\\").rstrip("\\").split("\\")[-1]
-            e.setText(r"C:\Users\Station\Documents\SeisZone" + "\\" + last)
+            e.setText(r"C:\Users\Station\Documents\SeismoVerse" + "\\" + last)
             e.setCursorPosition(0)
 
 

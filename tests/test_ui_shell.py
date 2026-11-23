@@ -825,16 +825,33 @@ def test_about_shows_the_name_author_and_supporter_only(window, qapp):
     about.reject()
 
 
-def test_the_folders_keep_the_old_name(monkeypatch, tmp_path):
-    from seiszone import DATA_FOLDER, paths
+def test_new_pcs_get_seismoverse_folders_and_old_ones_keep_theirs(monkeypatch, tmp_path):
+    """A new PC: SeismoVerse folders. A PC that ran SeisZone keeps each folder of the old name
+    it has (nothing moved); once a SeismoVerse folder exists it is used."""
+    from seiszone import DATA_FOLDER, LEGACY_DATA_FOLDER, logsetup, paths
     monkeypatch.delenv("SEISZONE_HOME", raising=False)
     monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
-    assert DATA_FOLDER == "SeisZone"
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    (tmp_path / "home" / "Documents").mkdir(parents=True)
+    assert (DATA_FOLDER, LEGACY_DATA_FOLDER) == ("SeismoVerse", "SeisZone")
+    assert logsetup.LOG_FILE == "seismoverse.log"
+    # a new PC
+    assert paths.config_dir() == str(tmp_path / "Roaming" / "SeismoVerse")
+    assert paths.log_dir() == str(tmp_path / "Local" / "SeismoVerse" / "logs")
+    assert paths.server_buffer_dir() == str(tmp_path / "Local" / "SeismoVerse" / "ServerBuffer")
+    assert paths.documents_dir() == str(tmp_path / "home" / "Documents" / "SeismoVerse")
+    # a PC of an earlier version: its folders stay in use
+    for parent in (tmp_path / "Roaming", tmp_path / "Local", tmp_path / "home" / "Documents"):
+        (parent / "SeisZone").mkdir(parents=True)
     assert paths.config_dir() == str(tmp_path / "Roaming" / "SeisZone")
     assert paths.log_dir() == str(tmp_path / "Local" / "SeisZone" / "logs")
-    assert paths.server_buffer_dir() == str(tmp_path / "Local" / "SeisZone" / "ServerBuffer")
-    assert os.path.basename(paths.documents_dir()) == "SeisZone"
+    assert paths.documents_dir() == str(tmp_path / "home" / "Documents" / "SeisZone")
+    # a SeismoVerse folder that exists wins
+    (tmp_path / "Roaming" / "SeismoVerse").mkdir()
+    assert paths.config_dir() == str(tmp_path / "Roaming" / "SeismoVerse")
+    assert (tmp_path / "Roaming" / "SeisZone").is_dir()          # nothing removed
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows registry")

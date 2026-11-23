@@ -58,7 +58,7 @@ UsedUserAreasWarning=no
 
 [Messages]
 WelcomeLabel2=This installs [name/ver] on your computer.%n%nSeismoVerse shows, records and shares live seismic data from Guralp Fortimus, Kelunji Gecko and other SeedLink instruments.%n%nSetup also adds one Windows Firewall rule so that a Kelunji Gecko (port 58772) and other programs (SeismoVerse SeedLink server) can connect to this PC.
-ConfirmUninstall=Remove %1 from this computer?%n%nA running SeismoVerse is closed (recordings stop). Your recordings, exports, settings and log files are NOT deleted. They stay in Documents\SeisZone, AppData\Roaming\SeisZone and AppData\Local\SeisZone.
+ConfirmUninstall=Remove %1 from this computer?%n%nA running SeismoVerse is closed (recordings stop). Your recordings, exports, settings and log files are NOT deleted. They stay in Documents\SeismoVerse, AppData\Roaming\SeismoVerse and AppData\Local\SeismoVerse (on a PC updated from an earlier version: in the folders it used before).
 UninstalledAll=%1 was removed from your computer.%n%nYour recordings, exports, settings and log files were kept.
 
 [Tasks]
