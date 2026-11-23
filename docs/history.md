@@ -4,6 +4,18 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 14:41 - 2.2.0 installed and running
+
+* The user ran the installer (setup log #004 at 14:40:24). SeismoVerse.exe 2.2.0 runs as the
+  normal user from C:\Program Files\SeisZone (started 14:40:23; "starting" logged at 14:40:55 -
+  a slow start on a busy PC; two more starts at 14:40:36 and 14:40:57 found it still starting,
+  "did not answer", and closed - normal single-instance behaviour).
+* Uses the existing SeisZone folders (config, server buffer from 07:00 UTC, logs); the new log
+  file is seismoverse.log, the old seiszone.log is kept. Ready 14:41:01, 39 sources connecting;
+  status ? receiving, ? channels; no warnings.
+* The automatic update check ran 23 s after start (14:41:24): "SeismoVerse 2.2.0 is the newest
+  version", last_check saved - the installed program talks to the real releases repository.
+
 ## 2026-11-23 14:40 - 2.2.0 merged, built and published (the first signed release)
 
 * At the user's OK ("Merge, build, publish"): pull request #6 merged (a6903b5); main identical to
