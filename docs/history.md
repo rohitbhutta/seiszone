@@ -4,6 +4,38 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 midday - 2.0.0: renamed SeismoVerse; About, Add source, label box; user manual
+
+Branch feature/seismoverse-name. The user asked (with four screenshots):
+* "Change the application name as SeismoVerse": APP_NAME, window titles, tray, messages, the
+  SeedLink server's software string ("SeismoVerse v2.0.0"), GCF status text, probe user agent,
+  export report, installer (SeismoVerseSetup.exe, SeismoVerse.exe, Start menu, firewall rule),
+  version_info, README and user guide. Version 2.0.0.
+  * Kept on purpose: the per-user folders (DATA_FOLDER = "SeisZone": %APPDATA%\SeisZone,
+    %LOCALAPPDATA%\SeisZone, Documents\SeisZone), so the 38 sources, settings, recordings, logs
+    and the server buffer stay; the Python package "seiszone"; the single-instance mutex and
+    activate names; the Run value name "SeisZone" (an entry that starts the old SeisZone.exe is
+    taken over by SeismoVerse.exe); the installer's AppId (an update stays in
+    C:\Program Files\SeisZone and removes SeisZone.exe and its shortcuts; both exes are closed
+    before installing; the old "SeisZone" firewall rule is deleted).
+  * The saved SeedLink organization "SeisZone" (the old default) becomes "SeismoVerse"; a typed
+    one stays. Another computer's status blocks are recognised under both names.
+* About: the "Open standards" list and the Folders list removed; it shows the name, version,
+  "Author: Arnab Kole" and "Supported: Rohit Santra" (AUTHOR / SUPPORTED_BY in __init__.py).
+* Add source: the example addresses line and the Gecko note under it removed.
+* Viewer label box: the site name first (bold), then station, location.channel, units.
+* Bug found by the rename: probe.seedlink_info dropped trailing spaces of every 456-byte INFO
+  piece; when a piece ended on a space between two XML attributes the station list came back
+  empty (the 3 characters longer software name moved a boundary onto a space). Only NUL padding
+  is dropped now; regression test splits right after a space (fails on the old code).
+* User manual (the user: "Make a user manual of the application", format "Word and PDF file"):
+  docs/manual/SeismoVerse_User_Manual.docx and .pdf, 25 pages, 14 chapters + keyboard appendix,
+  8 screenshots made offscreen from the test data (tools/manual/shots.py). Built by
+  tools/manual (docx-js for Word, reportlab for the PDF from the same content). Word on this PC
+  is an unlicensed product (opens read-only, cannot save or export), so the PDF is not made by
+  Word and the Word file's contents is a clickable chapter list instead of a TOC field. The Word
+  file was checked for unique bookmark ids; it could not be opened in Word here.
+
 ## 2026-11-23 - 1.9.0 merged into main and built
 
 * At the user's OK ("Merge and build"): pull request #2 merged (merge commit 15e1f18), local

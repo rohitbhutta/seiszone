@@ -23,7 +23,7 @@ if sys.platform == "win32" and os.path.isdir(r"C:\Windows\Fonts"):
     os.environ.setdefault("QT_QPA_FONTDIR", r"C:\Windows\Fonts")
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QPushButton
 
 from seiszone import VERSION, logsetup, paths
 from seiszone.config import Config, State
@@ -104,7 +104,7 @@ def window(qapp, tmp_path):
 # --------------------------------------------------------------------------------------------
 
 def test_window_builds_and_timers_tick(qapp, window):
-    assert window.windowTitle() == f"SeisZone {VERSION}"
+    assert window.windowTitle() == f"SeismoVerse {VERSION}"
     texts = [a.text() for a in window.toolbar.actions() if a.text()]
     assert texts == ["Add source", "Remove", "Reconnect", "Open viewer", "Record", "Export", "Data server", "Settings", "About"]
     assert window.centralWidget() is window.channels           # the waveforms are in viewer windows
@@ -735,3 +735,63 @@ def test_data_server_window(qapp, window, tmp_path):
         assert dlg.apply()
     finally:
         dlg.close()
+
+
+# --------------------------------------------------------------------------------------------
+# 2.0.0: the program is named SeismoVerse
+# --------------------------------------------------------------------------------------------
+
+def test_about_shows_the_name_author_and_supporter_only(window, qapp):
+    from seiszone import APP_NAME, AUTHOR, SUPPORTED_BY
+    window.open_about()
+    about = window.dialogs["about"]
+    text = about.title.text()
+    assert APP_NAME == "SeismoVerse" and about.windowTitle() == "About SeismoVerse"
+    assert f"version {VERSION}" in text and "SeismoVerse" in text
+    assert f"<b>Author:</b> {AUTHOR}" in text and AUTHOR == "Arnab Kole"
+    assert f"<b>Supported:</b> {SUPPORTED_BY}" in text and SUPPORTED_BY == "Rohit Santra"
+    everything = " ".join(w.text() for w in about.findChildren(QLabel))
+    for gone in ("Open standards", "Folders", "Settings and state", "StationXML", "Guralp", "Kelunji"):
+        assert gone not in everything, gone
+    assert not [b for b in about.findChildren(QPushButton) if b.text() == "Open"]
+    about.reject()
+
+
+def test_the_folders_keep_the_old_name(monkeypatch, tmp_path):
+    from seiszone import DATA_FOLDER, paths
+    monkeypatch.delenv("SEISZONE_HOME", raising=False)
+    monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
+    assert DATA_FOLDER == "SeisZone"
+    assert paths.config_dir() == str(tmp_path / "Roaming" / "SeisZone")
+    assert paths.log_dir() == str(tmp_path / "Local" / "SeisZone" / "logs")
+    assert paths.server_buffer_dir() == str(tmp_path / "Local" / "SeisZone" / "ServerBuffer")
+    assert os.path.basename(paths.documents_dir()) == "SeisZone"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows registry")
+def test_autostart_entry_of_the_old_program_is_taken_over(monkeypatch, tmp_path):
+    """The installed SeismoVerse.exe replaces the "SeisZone" Run value that starts the old
+    SeisZone.exe, also while that file still exists."""
+    import winreg
+    parent = rf"Software\SeisZoneTest_{uuid.uuid4().hex[:8]}"
+    key = parent + r"\Run"
+    monkeypatch.setattr(app_mod, "RUN_KEY", key)
+    old = tmp_path / "SeisZone.exe"
+    old.write_bytes(b"")
+    new = tmp_path / "SeismoVerse.exe"
+    new.write_bytes(b"")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(new))
+    assert app_mod.RUN_VALUE == "SeisZone"
+    try:
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, key, 0, winreg.KEY_SET_VALUE) as k:
+            winreg.SetValueEx(k, app_mod.RUN_VALUE, 0, winreg.REG_SZ, f'"{old}" --minimized')
+        assert app_mod.refresh_autostart()
+        assert app_mod.current_autostart_command() == f'"{new}" --minimized'
+    finally:
+        for k in (key, parent):
+            try:
+                winreg.DeleteKey(winreg.HKEY_CURRENT_USER, k)
+            except OSError:
+                pass

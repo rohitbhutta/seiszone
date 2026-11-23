@@ -362,7 +362,7 @@ def test_probe_gcf_offline(fake, fast):
     # StationXML already in SeisZone -> not downloaded again (a minute over a slow VPN)
     assert quick.found and quick.stationxml is None and asked == [("CI", "TEDT")]
     assert "/sd/Sensor0.xml" not in fake.paths
-    assert "StationXML: already in SeisZone (not downloaded again)" in quick.summary_lines()
+    assert "StationXML: already in SeismoVerse (not downloaded again)" in quick.summary_lines()
 
     lines = []
     inst = ip.probe(f"127.0.0.1:{fake.udp_port}", log=lines.append)
@@ -376,7 +376,7 @@ def test_probe_gcf_offline(fake, fast):
     assert inst.stationxml is not None and b"TEDT" in inst.stationxml
     assert [c for c in fake.cmds if c != b"GCFSEND:B"][:1] == [b"GCFPING"]
     assert b"GCFSEND:B" in fake.cmds and fake.cmds[-1] == b"GCFSTOP"
-    assert fake.agents and all(a.startswith("SeisZone/") and a.endswith("instrument probe") for a in fake.agents)
+    assert fake.agents and all(a.startswith("SeismoVerse/") and a.endswith("instrument probe") for a in fake.agents)
     assert any("GCF instrument found" in m for m in lines)
 
     src = inst.to_source()
@@ -492,7 +492,7 @@ def test_probe_prefers_direct_seedlink(fake, fast):
     st = direct.stations[0]
     assert direct.method == "seedlink" and direct.port == port and (st["net"], st["sta"]) == ("CI", "TEDT")
     assert direct.details.get("typed") == f"127.0.0.1:{fake.udp_port}"
-    assert "SeisZone connects to the instrument's own SeedLink server" in direct.notes[0]
+    assert "SeismoVerse connects to the instrument's own SeedLink server" in direct.notes[0]
     assert via.method == "gcf-udp" and via.details.get("seedlink_port") == port
     # the web page and StationXML are read once, not again for the SeedLink port
     assert direct_paths.count("/") == 1 and direct_paths.count("/sd/Sensor0.xml") == 1
@@ -698,7 +698,7 @@ def test_probe_another_seiszone_uses_its_seedlink_server(fast):
     assert inst.method == "seedlink" and inst.port == pc["sl_port"]
     assert [(s["net"], s["sta"], s["desc"]) for s in inst.stations] == [("KA", "KAND", "KANGSABATI DOWN")]
     assert inst.details["typed"] == f"127.0.0.1:{pc['port']}"
-    assert "this is SeisZone on another computer" in inst.notes[0]
+    assert "this is SeismoVerse on another computer" in inst.notes[0]
 
 
 def test_probe_another_seiszone_without_seedlink_reads_gcf_with_its_names(fast):
@@ -715,3 +715,47 @@ def test_probe_another_seiszone_without_seedlink_reads_gcf_with_its_names(fast):
     assert status == {"seedlink": 18000, "sites": {"KA.KAND": "KANGSABATI DOWN"},
                       "names": {"KAND": {"HN0JZ0": "KA.KAND.0J.HNZ"}}}
     assert ip.seiszone_status(["Fortimus status: GPS locked"]) is None
+
+
+
+def test_status_blocks_of_seismoverse_and_of_the_old_seiszone():
+    for name in ("SeismoVerse 2.0.0", "SeisZone 1.9.0"):
+        status = ip.seiszone_status([f"{name} KA.KAND KANGSABATI DOWN seedlink=18000"])
+        assert status and status["seedlink"] == 18000 and status["sites"] == {"KA.KAND": "KANGSABATI DOWN"}
+
+
+def test_info_xml_split_right_after_a_space_is_joined_intact():
+    """A SeedLink server's INFO answer is cut into 456-byte pieces. When a piece ends on a space
+    (between two XML attributes), the space must stay, or the station list comes back empty."""
+    from seiszone.core.seedlink_server import build_info_records
+    head = '<?xml version="1.0"?><seedlink software="X" organization="Y">'
+    pad = 456 - len(head) - len('<station name="KUM" network="WB"') - 1
+    xml = (head + "<!--" + "x" * (pad - 7) + "-->" + '<station name="KUM" network="WB" description="Kumari">'
+           '<stream location="0J" seedname="HNZ" type="D"/></station></seedlink>')
+    payload = xml.encode()
+    assert payload[455:456] == b" "                         # the first piece ends on a space
+    records = build_info_records(xml)
+    assert len(records) == 2
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    port = srv.getsockname()[1]
+
+    def serve():
+        conn, _ = srv.accept()
+        with conn:
+            f = conn.makefile("rb")
+            f.readline()
+            conn.sendall(b"SeedLink v3.1 (test) :: SLPROTO:3.1\r\nTest\r\n")
+            f.readline()
+            conn.sendall(b"".join(records))
+    t = threading.Thread(target=serve, daemon=True)
+    t.start()
+    try:
+        got = ip.seedlink_info("127.0.0.1", port, "STREAMS", timeout=5)
+    finally:
+        t.join(5)
+        srv.close()
+    assert got == xml
+    assert ip.parse_seedlink_streams(got) == [{"net": "WB", "sta": "KUM", "desc": "Kumari",
+                                               "streams": [("0J", "HNZ")]}]

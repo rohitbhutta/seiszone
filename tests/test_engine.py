@@ -223,7 +223,7 @@ def test_busy_port_reported_and_apply_settings(make_engine):
             s.sendall(b"HELLO\r\n")
             f = s.makefile("rb")
             banner = f.readline() + f.readline()
-        assert b"SeisZone v" + VERSION.encode() in banner and b"Engine test" in banner
+        assert b"SeismoVerse v" + VERSION.encode() in banner and b"Engine test" in banner
     finally:
         busy.close()
 
@@ -243,7 +243,7 @@ def test_seedlink_source_reaches_hub_and_is_served_again(make_engine, remote):
 
     port = engine.status()["server"]["port"]
     banner, packets = read_packets(port, 6)
-    assert b"SeisZone" in banner
+    assert b"SeismoVerse" in banner
     for p in packets:
         assert p[:2] == b"SL" and len(p) == 520
         rec, _n = mseed.parse_record(p[8:], 0, check=True)
@@ -355,7 +355,7 @@ def quiet_log():
 def test_cli_version_and_main_dispatch(capsys, quiet_log):
     from seiszone.__main__ import main, wants_cli
     assert main(["--version"]) == 0
-    assert capsys.readouterr().out.strip() == f"SeisZone {VERSION}"
+    assert capsys.readouterr().out.strip() == f"SeismoVerse {VERSION}"
     assert wants_cli(["--probe=1.2.3.4"]) and not wants_cli(["--minimized"])
 
 
@@ -439,7 +439,7 @@ def test_cli_output_into_a_folder_that_does_not_exist_yet(tmp_path, capsys):
     assert cli.main(["--version", "--output", out]) == 0
     assert capsys.readouterr().out == ""
     text = open(out, encoding="utf-8").read()
-    assert "SeisZone" in text and text.rstrip().endswith("exit code 0")
+    assert "SeismoVerse" in text and text.rstrip().endswith("exit code 0")
 
 
 # ---------------------------------------------------------------------- review fixes
@@ -535,7 +535,7 @@ def test_busy_port_names_its_owner_and_is_taken_once_free(make_engine):
         assert st[part]["error"] == "" and st[part]["owner"] is None and st[part]["owner_pid"] is None
     with socket.create_connection(("127.0.0.1", server_port), timeout=5) as s:
         s.sendall(b"HELLO\r\n")
-        assert b"SeisZone v" in s.makefile("rb").readline()
+        assert b"SeismoVerse v" in s.makefile("rb").readline()
 
 
 def test_port_of_the_old_gecko_service_is_named(make_engine, monkeypatch):

@@ -1,4 +1,5 @@
-"""Where SeisZone keeps its files (per Windows user, no administrator rights needed).
+"""Where SeismoVerse keeps its files (per Windows user, no administrator rights needed). The folders
+keep the program's old name SeisZone (DATA_FOLDER), so nothing moves when the program is renamed.
 
     %APPDATA%\\SeisZone\\config.json        sources and settings
     %APPDATA%\\SeisZone\\state.json         SeedLink resume positions, recordings in progress
@@ -12,14 +13,14 @@ SEISZONE_HOME (environment) moves everything below one folder - used by the test
 
 import os
 
-from . import APP_NAME
+from . import DATA_FOLDER
 
 
 def _base(env, fallback):
     home = os.environ.get("SEISZONE_HOME")
     if home:
         return home
-    return os.path.join(os.environ.get(env) or os.path.expanduser(fallback), APP_NAME)
+    return os.path.join(os.environ.get(env) or os.path.expanduser(fallback), DATA_FOLDER)
 
 
 def config_dir():
@@ -55,7 +56,7 @@ def documents_dir():
     if home:
         return os.path.join(home, "Documents")
     docs = os.path.join(os.path.expanduser("~"), "Documents")
-    return os.path.join(docs if os.path.isdir(docs) else os.path.expanduser("~"), APP_NAME)
+    return os.path.join(docs if os.path.isdir(docs) else os.path.expanduser("~"), DATA_FOLDER)
 
 
 def recordings_dir():

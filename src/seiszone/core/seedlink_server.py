@@ -48,7 +48,7 @@ from . import mseed
 
 log = logging.getLogger("seiszone")
 
-SOFTWARE = f"SeisZone v{VERSION}"
+SOFTWARE = f"SeismoVerse v{VERSION}"
 MASK = 0xFFFFFF
 PACKET = 520                 # "SL" + 6 hex digits + 512-byte record
 BATCH_PACKETS = 500          # packets taken from the ring per step (then the loop gets a turn)
@@ -234,7 +234,7 @@ class _Conn:
 
 
 class SeedLinkServer:
-    def __init__(self, hub, organization="SeisZone"):
+    def __init__(self, hub, organization="SeismoVerse"):
         self.hub = hub
         self.organization = organization
         self.clients = 0

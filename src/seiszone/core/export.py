@@ -349,7 +349,7 @@ def export_window(sids, t0, t1, outdir, mode="separate", folders=None, hub=None,
     os.makedirs(outdir, exist_ok=True)
     stamp = dt.datetime.fromtimestamp(t0, UTC).strftime("%Y%m%dT%H%M%SZ")
     label = _duration_label(t1 - t0)
-    report = ["SeisZone export",
+    report = ["SeismoVerse export",
               f"Window : {mseed.fmt_time(t0, ms=True)}  ->  {mseed.fmt_time(t1, ms=True)}  ({label})",
               f"Local  : {mseed.fmt_time(t0, local=True, ms=True)}  ->  {mseed.fmt_time(t1, local=True, ms=True)}",
               "Mode   : " + ("one file per channel" if mode == "separate" else "one file with all channels"),

@@ -726,7 +726,7 @@ def test_state_round_trip_and_window_functions(win, engine, qapp, tmp_path):
     v.set_lanes(False)
     win._label = "North array"
     win._changed()
-    assert win.windowTitle() == "North array - SeisZone"
+    assert win.windowTitle() == "North array - SeismoVerse"
     st = win.state()
     assert st["title"] == "North array" and st["gain"] == 4.0 and st["lanes"] is False
     assert st["traces"][SIDS[0]] == {"color": "#ff00ff"} and st["traces"][SIDS[2]] == {"spectrogram": True}
@@ -920,7 +920,7 @@ def _eye_and_site(win, v):
     v._update_panels()
     v.redraw()
     lines = v._traces[0].panel.entries[0][0]
-    assert lines[2] == "Nagdhaniba" and len(lines) == 4
+    assert lines[0] == "Nagdhaniba" and len(lines) == 4         # the site name on top
     assert "Nagdhaniba" not in (v._traces[0].text or "")     # not repeated in the caption
     assert v.eye_button.isChecked() and v.captions()
     v.eye_button.click()                                       # the eye: hide the details
@@ -931,6 +931,8 @@ def _eye_and_site(win, v):
     assert v.captions() and v.eye_button.isChecked()
     assert all(tr.label.isVisible() for tr in v._traces if tr.sid)
     assert WaveformView.panel_lines("XX.STA.00.HHZ", "counts") == ("XX.STA", "00.HHZ", "counts")
+    assert WaveformView.panel_lines("DG.PATSI.0J.CHN", "m/s", site="PATSIO") == (
+        "PATSIO", "DG.PATSI", "0J.CHN", "m/s")
 
 
 def test_selection_survives_letting_go_of_shift_first(win):
@@ -1076,20 +1078,20 @@ def test_label_panel_on_the_left_with_component_colours(win):
     v = win.view
     tr = {t.sid: t for t in v._traces}
     entries = tr[SIDS[0]].panel.entries
-    assert entries == [(("WB.KUM", "0J.HNZ", "KUMARI", "counts"), theme.COMPONENTS_DARK["Z"], False)]
+    assert entries == [(("KUMARI", "WB.KUM", "0J.HNZ", "counts"), theme.COMPONENTS_DARK["Z"], False)]
     assert tr[SIDS[1]].panel.entries[0][1] == theme.COMPONENTS_DARK["N"]      # north: red
     assert tr[SIDS[2]].panel.entries[0][1] == theme.COMPONENTS_DARK["E"]      # east: sky blue
-    assert tr[SIDS[3]].panel.entries[0][0] == ("SS.SMR03", "HHZ", "SMR03 - Kelunji Gecko", "counts")
+    assert tr[SIDS[3]].panel.entries[0][0] == ("SMR03 - Kelunji Gecko", "SS.SMR03", "HHZ", "counts")
     v._active = SIDS[2]
     v._color_traces()
     assert tr[SIDS[2]].panel.entries[0][2] is True                             # under the mouse: full colour
     v._active = None
-    # a channel's own label is its box's first line and in its caption
+    # a channel's own label replaces the station in its box (under the site name) and is in its caption
     m = win.build_context_menu(SIDS[0])
     channel = [a.text() for a in m.actions()][:[a.text() for a in m.actions()].index("")]
     assert "Label..." in channel
     v.set_trace_label(SIDS[0], "Kumari vertical")
-    assert tr[SIDS[0]].panel.entries[0][0][0] == "Kumari vertical"
+    assert tr[SIDS[0]].panel.entries[0][0][:2] == ("KUMARI", "Kumari vertical")
     v.redraw()
     assert "Kumari vertical" in tr[SIDS[0]].label.text
     assert win.state()["traces"][SIDS[0]]["label"] == "Kumari vertical"

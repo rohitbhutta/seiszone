@@ -97,13 +97,13 @@ def buffer_text(b):
         return f"Disk buffer not available: {b['error']}. Packets are kept in memory only (about the last 1-2 hours)."
     if not b.get("enabled"):
         return ("Disk buffer off: only the packets in memory (about the last 1-2 hours) can be sent again, "
-                "and none after SeisZone restarts.")
+                "and none after SeismoVerse restarts.")
     days = float(b.get("days") or 0)
     text = f"Disk buffer: {_size(b.get('bytes'))} in {b.get('folder', '')}"
     if b.get("oldest"):
         text += time.strftime(", from %d-%m-%Y %H:%M UTC", time.gmtime(b["oldest"]))
     text += (f". Kept {days:g} day{'s' if days != 1 else ''}: other computers catch up on that much, "
-             "also after SeisZone restarts, and the viewers show it. Older files are removed "
+             "also after SeismoVerse restarts, and the viewers show it. Older files are removed "
              "(recordings are never touched).")
     if b.get("paused"):
         text += " Paused: less than 2 GB free on the disk."
@@ -202,7 +202,7 @@ class DataServerWindow(QDialog):
         except (TypeError, ValueError):
             self.sl_days.setValue(2)
         self.sl_days.setToolTip("Every packet is also kept on disk this long, so other computers can catch up "
-                                "after an outage (also after SeisZone restarts) and the viewers show older data. "
+                                "after an outage (also after SeismoVerse restarts) and the viewers show older data. "
                                 "About 1.5 GB per day with the current stations.")
         form = QFormLayout()
         form.addRow("", self.sl_enabled)
@@ -255,7 +255,7 @@ class DataServerWindow(QDialog):
         sl_old.update({"enabled": self.sl_enabled.isChecked(), "port": sl_port,
                        "buffer_days": self.sl_days.value()})
         sl_old.setdefault("bind", "0.0.0.0")
-        sl_old.setdefault("organization", "SeisZone")
+        sl_old.setdefault("organization", "SeismoVerse")
         return {"gcf_server": {"enabled": self.enabled.isChecked(), "bind": old.get("bind") or "0.0.0.0",
                                "port": port, "max_rate": self.max_rate.value()},
                 "seedlink_server": sl_old}
@@ -296,7 +296,7 @@ class DataServerWindow(QDialog):
         self.how.setText(
             f"On the other computer (same network) add this PC as a UDP server: {_ip_list(self._ips, port)}."
             "<br>Earlier viewer: Network Control &gt; right-click &gt; Add UDP Server. "
-            "SeisZone: Add source (it then reads this PC's SeedLink server too, with the exact "
+            "SeismoVerse: Add source (it then reads this PC's SeedLink server too, with the exact "
             "channel names and the data missed during an outage).<br>"
             "Only one program on a PC can use a port: if the earlier viewer runs on this PC with "
             "port 1567, choose another port here (for example 1568) and type that on the other computer.")
@@ -320,7 +320,7 @@ class DataServerWindow(QDialog):
         self.sl_how.setText(
             f"On the other computer (same network) add this PC as a SeedLink server: "
             f"{_ip_list(self._ips, port)}.<br>"
-            "SeisZone: Add source. SeisComP, Swarm, ObsPy and other SeedLink programs: server "
+            "SeismoVerse: Add source. SeisComP, Swarm, ObsPy and other SeedLink programs: server "
             "address and port as above. Each client asks again for what it missed, so its data are "
             "backfilled after a network outage.<br>Listen on and Organization: Settings &gt; SeedLink server.")
         if st.get("error"):

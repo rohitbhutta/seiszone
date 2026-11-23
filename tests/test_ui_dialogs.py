@@ -20,7 +20,7 @@ if sys.platform == "win32" and os.path.isdir(r"C:\Windows\Fonts"):
 
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox
 
 from seiszone import paths
 from seiszone.config import Config, State
@@ -498,7 +498,7 @@ def test_add_dialog_replaces_an_existing_source(make_engine, qapp, monkeypatch):
     monkeypatch.setattr(QMessageBox, "question",
                         staticmethod(lambda *a, **k: asked.append(a[2]) or QMessageBox.No))
     dlg.add()
-    assert asked and "already in SeisZone as 'KUMARI'" in asked[0]
+    assert asked and "already in SeismoVerse as 'KUMARI'" in asked[0]
     assert dlg.result() != QDialog.Accepted and dlg.isVisible()
     assert not any(c[0] in ("add_source", "update_source") for c in engine.calls)
 
@@ -553,8 +553,9 @@ def test_add_dialog_validation_and_retyping(make_engine, qapp, monkeypatch):
     assert dlg.state == "found" and not dlg.error.isVisible()
     QTest.keyClicks(dlg.edit, "1")               # a changed address: the old result is dropped
     assert dlg.state == "idle" and not dlg.add_button.isEnabled() and dlg.card.isHidden()
-    dlg._use_example("rtserve.iris.washington.edu:18000")
-    assert dlg.edit.text() == "rtserve.iris.washington.edu:18000"
+    # no example addresses and no Gecko note in the window (only the title, the intro and the fields)
+    texts = " ".join(w.text() for w in dlg.findChildren(QLabel))
+    assert "Examples" not in texts and "Gecko" not in texts and "rtserve" not in texts
     dlg.reject()
 
 

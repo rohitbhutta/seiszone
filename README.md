@@ -1,18 +1,18 @@
-# SeisZone
+# SeismoVerse
 
-SeisZone is a Windows desktop program for **live seismic data**. You type an instrument's
-IP address and port, and SeisZone finds its stations and channels, shows every channel live,
+SeismoVerse is a Windows desktop program for **live seismic data**. You type an instrument's
+IP address and port, and SeismoVerse finds its stations and channels, shows every channel live,
 records continuously to miniSEED, exports any time window, and shares all data again over
 SeedLink so other programs can read it.
 
 It is built only on open standards: SeedLink 3, Guralp GCF / Scream protocol, Kelunji Gecko
 telemetry framing, miniSEED 2 and FDSN StationXML.
 
-Version 1.9.0. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
+Version 2.0.0 (named SeisZone up to 1.9.0). User manual (Word and PDF): `docs/manual/`. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
 
 ## Features
 
-* **Add an instrument with only IP:port.** SeisZone detects SeedLink servers, Guralp GCF
+* **Add an instrument with only IP:port.** SeismoVerse detects SeedLink servers, Guralp GCF
   (Scream UDP and TCP) and the Guralp web page, and reads the station, site, channels and
   StationXML by itself. Examples: Guralp Fortimus `10.8.0.182:18000` (SeedLink) or
   `10.8.0.182:1567` (GCF), or any public SeedLink server.
@@ -22,7 +22,7 @@ Version 1.9.0. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
   reopened at the next start if wanted). Many channels stacked or overlaid with a label box per
   channel (station, channel, units; colours by component), a time scale in pixels per second up
   to one day with the **history of the last day** (per-second summaries kept and saved by
-  SeisZone, the user's recordings read in the background, a new SeedLink station's last day
+  SeismoVerse, the user's recordings read in the background, a new SeedLink station's last day
   fetched at its first connection), amplitude zoom, the window filter switched on and off (F) and every channel's own
   filter (default band-pass, high-pass, low-pass, band-pass, own designs in a filter design
   window, saved filters), counts or physical units (StationXML or a calibration you enter,
@@ -34,13 +34,13 @@ Version 1.9.0. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
   green / amber / red status colour.
 * **Continuous recording** to miniSEED (lossless: the received records are written unchanged),
   files of 15, 30 or 60 minutes aligned to the clock, one file per channel or per station.
-  Only the user starts and stops a recording. **SeisZone never deletes recorded data**; low
-  disk space only gives a warning. Recordings continue by themselves when SeisZone is started again (after a
+  Only the user starts and stops a recording. **SeismoVerse never deletes recorded data**; low
+  disk space only gives a warning. Recordings continue by themselves when SeismoVerse is started again (after a
   restart of the PC, for example), and
   data that the instrument sends late (backfill after a VPN drop) goes into the right file.
 * **Export** a time window of chosen channels (one file per channel or one combined file),
   with a report of samples and gaps.
-* **SeedLink server** (port 18000, the standard SeedLink port) that offers every channel SeisZone receives to other
+* **SeedLink server** (port 18000, the standard SeedLink port) that offers every channel SeismoVerse receives to other
   programs, on this PC (`127.0.0.1:18000`) or on the network.
 * **Recordings window** of its own (minimize, maximize, a divider to size the recordings list).
 * **Spectrum** of the visible data, tray icon, start with Windows, dark and light colours,
@@ -61,13 +61,13 @@ seiszone/
   assets/                application icon
   docs/user_guide.md     user guide for the station operator
   installer/             build.py, SeisZone.iss (Inno Setup 6), version_info.txt, launcher
-  build/                 build output (PyInstaller work folder, dist/SeisZone, SeisZoneSetup.exe)
+  build/                 build output (PyInstaller work folder, dist/SeismoVerse, SeismoVerseSetup.exe)
 ```
 
 plan.md describes the architecture and the contract of every module; memory.md is the
 project handover (status, decisions, real equipment).
 
-Files SeisZone writes on a user's PC:
+Files SeismoVerse writes on a user's PC:
 
 | What | Where |
 |------|-------|
@@ -95,13 +95,13 @@ python run_seiszone.py --list                    # the configured sources
 python run_seiszone.py --version
 ```
 
-(*) Only while SeisZone itself is not running: quit it from the tray icon (Quit) first -
+(*) Only while SeismoVerse itself is not running: quit it from the tray icon (Quit) first -
 closing the window only hides it. Otherwise these commands stop with exit code 3.
 
 `python -m seiszone` (with `src` on `PYTHONPATH`) does the same as `run_seiszone.py`. The
-installed `SeisZone.exe` takes the same options; started from cmd or PowerShell it prints into
+installed `SeismoVerse.exe` takes the same options; started from cmd or PowerShell it prints into
 that console, and `--output PATH` writes everything into a file instead (for example
-`SeisZone.exe --engine --seconds 10 --output C:\Temp\seiszone.txt`).
+`SeismoVerse.exe --engine --seconds 10 --output C:\Temp\seiszone.txt`).
 
 ## Tests
 
@@ -113,48 +113,49 @@ python -m pytest tests -q
 The tests use only local fake servers on `127.0.0.1` with random ports, real captured data in
 `tests/data`, a temporary `SEISZONE_HOME`, and Qt in offscreen mode. They never contact real
 instruments and never listen on the real ports 58772, 18000 or 18010. ObsPy is used only by the tests,
-to cross-check the miniSEED files SeisZone writes.
+to cross-check the miniSEED files SeismoVerse writes.
 
 ## Build the installer
 
 Needs PyInstaller, Pillow (both in requirements-dev.txt) and Inno Setup 6.
 
 ```
-python installer/build.py                 # icon -> build/dist/SeisZone -> build/dist/SeisZoneSetup.exe
-python installer/build.py --no-installer  # only the program folder build/dist/SeisZone
+python installer/build.py                 # icon -> build/dist/SeismoVerse -> build/dist/SeismoVerseSetup.exe
+python installer/build.py --no-installer  # only the program folder build/dist/SeismoVerse
 python installer/build.py --clean         # rebuild from an empty PyInstaller work folder
 ```
 
-`build.py` runs `tools/make_icon.py`, then PyInstaller (one folder, windowed, `SeisZone.exe`
-with icon and version information), checks that the new exe starts (`SeisZone.exe --version --output ...`),
+`build.py` runs `tools/make_icon.py`, then PyInstaller (one folder, windowed, `SeismoVerse.exe`
+with icon and version information), checks that the new exe starts (`SeismoVerse.exe --version --output ...`),
 and compiles `installer/SeisZone.iss` with ISCC.exe (found in `%LOCALAPPDATA%\Programs\Inno
 Setup 6`, `Program Files (x86)\Inno Setup 6`, or the `ISCC` environment variable).
 
-The installer (`SeisZoneSetup.exe`, 64-bit Windows 10/11):
+The installer (`SeismoVerseSetup.exe`, 64-bit Windows 10/11):
 
-* installs to `C:\Program Files\SeisZone`, adds a Start menu icon and, if chosen, a desktop icon;
-* adds one inbound Windows Firewall rule "SeisZone" for `SeisZone.exe` (covers the Gecko port
+* installs to `C:\Program Files\SeismoVerse` (an update of SeisZone 1.9.0 or older stays in its folder and
+  loses the old `SeisZone.exe` and its shortcuts), adds a Start menu icon and, if chosen, a desktop icon;
+* adds one inbound Windows Firewall rule "SeismoVerse" for `SeismoVerse.exe` (covers the Gecko port
   58772 and the SeedLink server port);
-* closes a running SeisZone first (it tells the user);
+* closes a running SeismoVerse first (it tells the user);
 * task `stopoldservice` (ticked by default, shown only when the Windows service
   `GeckoSeedLink` exists): stops and disables the old Gecko SeedLink service (`sc stop`,
-  `sc config ... start= disabled`), which holds ports 58772 and 18010 (SeisZone's own SeedLink server uses 18000); it is not removed;
-* starts SeisZone as the normal user at the end.
+  `sc config ... start= disabled`), which holds ports 58772 and 18010 (SeismoVerse's own SeedLink server uses 18000); it is not removed;
+* starts SeismoVerse as the normal user at the end.
 
 Uninstalling removes the program and the firewall rule. **Recordings, exports, settings and
-logs are never deleted.** "Start with Windows" is switched on and off in SeisZone's Settings.
+logs are never deleted.** "Start with Windows" is switched on and off in SeismoVerse's Settings.
 
-Silent install: `SeisZoneSetup.exe /VERYSILENT /SUPPRESSMSGBOXES [/MERGETASKS="desktopicon"]`
+Silent install: `SeismoVerseSetup.exe /VERYSILENT /SUPPRESSMSGBOXES [/MERGETASKS="desktopicon"]`
 (`/MERGETASKS` keeps the default tasks; `/TASKS=` would switch off `stopoldservice`).
 
 ## Gecko recorder does not appear / port in use
 
 The Gecko connects to whatever listens on port 58772 of this PC. While the old Gecko SeedLink
 service (Windows service `GeckoSeedLink` of the earlier Gecko setup) runs, it holds 58772 (and its
-own SeedLink port 18010): the Gecko stays connected to it and SeisZone shows `port 58772 is used
+own SeedLink port 18010): the Gecko stays connected to it and SeismoVerse shows `port 58772 is used
 by the old Gecko SeedLink service` on the Gecko receiver row (`engine.status()` gives
 `"owner": "old-service"`; `core/ports.py` finds the listening process with
-`GetExtendedTcpTable` and compares it with the service's process id, read-only). SeisZone asks
+`GetExtendedTcpTable` and compares it with the service's process id, read-only). SeismoVerse asks
 once per run, and offers **Free the port – stop the old Gecko SeedLink service** above the
 sources list and in the rows' context menu: one Windows administrator prompt runs
 `sc stop GeckoSeedLink & sc config GeckoSeedLink start= disabled`, the rows show "Waiting for

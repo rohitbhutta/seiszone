@@ -121,7 +121,7 @@ def test_protocol_blocks_status_and_backfill(tmp_path):
         blocks = [gcf.parse_datagram(d) for d in data]
         assert all(b is not None for b in blocks)
         status = [b.status_text for b in blocks if b.is_status]
-        assert len(status) == 1 and status[0].startswith("SeisZone ") and "KA.KAND KANGSABATI DOWN" in status[0]
+        assert len(status) == 1 and status[0].startswith("SeismoVerse ") and "KA.KAND KANGSABATI DOWN" in status[0]
         assert "seedlink=18000" in status[0] and "KAND HN0JZ0 = KA.KAND.0J.HNZ" in status[0]
         assert any("KA.KAND.0J.HHZ not sent: 2000 sps is above the limit" in c for c in srv.control)
         data_blocks = [b for b in blocks if not b.is_status]

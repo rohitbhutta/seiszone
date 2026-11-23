@@ -211,7 +211,7 @@ class SettingsDialog(QDialog):
         self.server_bind.addItem("127.0.0.1")
         self.server_bind.setCurrentText(str(s.get("bind") or "0.0.0.0"))
         self.server_port = QLineEdit(str(s.get("port") or 18000))
-        self.server_org = QLineEdit(str(s.get("organization") or "SeisZone"))
+        self.server_org = QLineEdit(str(s.get("organization") or "SeismoVerse"))
         form = QFormLayout()
         form.addRow("", self.server_enabled)
         form.addRow("Listen on", self.server_bind)
@@ -250,7 +250,7 @@ class SettingsDialog(QDialog):
         lay = QVBoxLayout(w)
         lay.addLayout(form)
         lay.addWidget(self._hint("These are the defaults for new recordings. Running recordings keep their "
-                                 "own settings. SeisZone never deletes recordings."))
+                                 "own settings. SeismoVerse never deletes recordings."))
         lay.addStretch(1)
         return w
 
@@ -292,18 +292,18 @@ class SettingsDialog(QDialog):
     def _program_tab(self):
         u = self.config.get("ui") or {}
         w = QWidget()
-        self.tray = QCheckBox("Closing the window keeps SeisZone running in the tray")
+        self.tray = QCheckBox("Closing the window keeps SeismoVerse running in the tray")
         self.tray.setChecked(bool(u.get("minimize_to_tray", True)))
         self.start_min = QCheckBox("Start minimized in the tray")
         self.start_min.setChecked(bool(u.get("start_minimized", False)))
-        self.autostart = QCheckBox("Start SeisZone when I log in to Windows")
+        self.autostart = QCheckBox("Start SeismoVerse when I log in to Windows")
         self.autostart.setChecked(bool(u.get("start_with_windows", False)))
-        self.reopen = QCheckBox("Open the viewer windows again that were open when SeisZone was closed")
+        self.reopen = QCheckBox("Open the viewer windows again that were open when SeismoVerse was closed")
         self.reopen.setChecked(bool(u.get("reopen_viewers", False)))
         lay = QVBoxLayout(w)
         for cb in (self.tray, self.start_min, self.autostart, self.reopen):
             lay.addWidget(cb)
-        lay.addWidget(self._hint("Data is received, served and recorded only while SeisZone runs: keep it in the "
+        lay.addWidget(self._hint("Data is received, served and recorded only while SeismoVerse runs: keep it in the "
                                  "tray and let it start with Windows on a station PC."))
         lay.addStretch(1)
         return w
@@ -340,7 +340,7 @@ class SettingsDialog(QDialog):
         return {
             "gecko": {"enabled": self.gecko_enabled.isChecked(), "ports": gecko_ports, "rename": rename},
             "seedlink_server": {"enabled": self.server_enabled.isChecked(), "bind": bind, "port": server_port,
-                                "organization": self.server_org.text().strip() or "SeisZone"},
+                                "organization": self.server_org.text().strip() or "SeismoVerse"},
             "recording": {"folder": os.path.normpath(folder), "file_minutes": self.rec_minutes.currentData(),
                           "layout": self.rec_layout.currentData()},
             "view": {"window_seconds": self.window_box.currentData()},

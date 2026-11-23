@@ -354,7 +354,7 @@ def test_server_raw_protocol():
             # HELLO banner, errors
             r, w = await asyncio.open_connection("127.0.0.1", port)
             banner = await cmd(r, w, "HELLO", lines=2)
-            assert banner == [f"SeedLink v3.1 (SeisZone v{VERSION}) :: SLPROTO:3.1 CAP EXTREPLY "
+            assert banner == [f"SeedLink v3.1 (SeismoVerse v{VERSION}) :: SLPROTO:3.1 CAP EXTREPLY "
                               "NSWILDCARD BATCH WS:13", "Test Org"]
             assert await cmd(r, w, "STATION") == "ERROR"
             assert await cmd(r, w, "FOO") == "ERROR"
@@ -363,7 +363,7 @@ def test_server_raw_protocol():
             # INFO
             w.write(b"INFO ID\r\n")
             root = await read_info(r)
-            assert root.get("software") == f"SeisZone v{VERSION}" and root.get("organization") == "Test Org"
+            assert root.get("software") == f"SeismoVerse v{VERSION}" and root.get("organization") == "Test Org"
             w.write(b"INFO STREAMS\r\n")
             root = await read_info(r)
             st = {s.get("name"): s for s in root.iter("station")}
@@ -621,7 +621,7 @@ def test_server_commands_ending_in_bare_cr():
             assert await read_packets(r, len(hnz)) == hnz
             w.write(b"INFO ID\r")                      # keep-alive while streaming
             root = await read_info(r)
-            assert root.get("software") == f"SeisZone v{VERSION}"
+            assert root.get("software") == f"SeismoVerse v{VERSION}"
             w.write(b"BYE\r")
             assert await read_to_end(r) == b""
             w.close()

@@ -48,7 +48,7 @@ def test_task_stops_and_disables_the_old_gecko_service():
     assert len(tasks) == 1
     task = tasks[0]
     assert ('Description: "Stop and disable the old Gecko SeedLink service, so your Gecko recorder connects '
-            'to SeisZone (frees ports 58772 and 18010; the SeisZone SeedLink server uses port 18000)"') in task
+            'to SeismoVerse (frees ports 58772 and 18010; the SeismoVerse SeedLink server uses port 18000)"') in task
     assert "Check: OldServiceInstalled" in task
     assert "unchecked" not in task                     # on by default
     code = code_section()
@@ -63,7 +63,8 @@ def test_task_stops_and_disables_the_old_gecko_service():
     assert "WizardIsTaskSelected('stopoldservice')" in post and "StopOldService" in post
     # the firewall rule and the close-SeisZone logic are still there
     run = section("Run")
-    assert 'add rule name=""SeisZone""' in run and 'delete rule name=""SeisZone""' in run
+    assert 'add rule name=""{#AppName}""' in run and 'delete rule name=""{#AppName}""' in run
+    assert 'delete rule name=""{#OldName}""' in run     # the rule of the old name goes
     assert "CloseSeisZone" in body(code, "PrepareToInstall")
 
 

@@ -48,6 +48,14 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
 
 ## Status (2026-11-22, version 1.7.0 installed 19:48)
 
+* **2026-11-23 midday - 2.0.0 "SeismoVerse" on branch feature/seismoverse-name (pull request):**
+  the program is now named **SeismoVerse** (the user's request); the folders keep the old name
+  SeisZone (DATA_FOLDER) and so do the package, mutex, Run value and installer AppId - see
+  docs/history.md before renaming anything else. About shows only name, version, Author: Arnab
+  Kole, Supported: Rohit Santra. Add source has no example line / Gecko note. Viewer label box:
+  site name on top. User manual: docs/manual (Word + PDF), rebuilt with tools/manual. Word on
+  this PC is unlicensed (cannot save/export via COM - do not use it for builds).
+
 * **2026-11-23 - 1.9.0 merged (pull request #2, 15e1f18) and built** (build/dist/SeisZoneSetup.exe
   68.9 MB; not installed yet): SeedLink tab in the Data server window; SeedLink server disk
   buffer (core/packet_store.py, 2 days in %LOCALAPPDATA%\SeisZone\ServerBuffer): clients of this
