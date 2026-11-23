@@ -23,9 +23,9 @@ import socket
 import time
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
-                               QHeaderView, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QSpinBox, QTableWidget,
-                               QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QDialog, QDialogButtonBox, QFormLayout, QFrame,
+                               QHBoxLayout, QHeaderView, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QScrollArea,
+                               QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
 
 from ..core.gcf_server import DEFAULT_PORT, client_list, parse_client
 from . import theme
@@ -49,6 +49,16 @@ def local_addresses():
     except OSError:
         pass
     return out
+
+
+def _scrolling(page):
+    """A tab page in a scroll area: on a small screen the window stays on the screen and the tab
+    scrolls instead of the window growing past the screen's edge."""
+    area = QScrollArea()
+    area.setWidgetResizable(True)
+    area.setFrameShape(QFrame.NoFrame)
+    area.setWidget(page)
+    return area
 
 
 def _table(columns):
@@ -135,8 +145,8 @@ class DataServerWindow(QDialog):
         self.error.setStyleSheet(f"color: {c['danger']}; font-weight: 600;")
         self.error.hide()
         self.tabs = QTabWidget()
-        self.tabs.addTab(self._gcf_tab(), "GCF over UDP (earlier viewer)")
-        self.tabs.addTab(self._seedlink_tab(), "SeedLink over TCP")
+        self.tabs.addTab(_scrolling(self._gcf_tab()), "GCF over UDP (earlier viewer)")
+        self.tabs.addTab(_scrolling(self._seedlink_tab()), "SeedLink over TCP")
 
         self.apply_button = QPushButton("Apply")
         self.apply_button.clicked.connect(self.apply)
@@ -150,6 +160,7 @@ class DataServerWindow(QDialog):
         for w in (self.port, self.sl_port):
             w.textEdited.connect(self.error.hide)
 
+        self.setMinimumSize(480, 360)      # the tabs scroll below this; the window fits any screen
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh)
         self.timer.start(1000)

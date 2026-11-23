@@ -38,6 +38,7 @@ RUN_VALUE = "SeisZone"     # the old program name: the entry of 1.9.0 and older 
 OLD_EXE = "seiszone.exe"   # the program file of 1.9.0 and older (now SeismoVerse.exe)
 SOURCE_SCRIPT = Path(__file__).resolve().parents[3] / "run_seiszone.py"   # the source folder's starter
 PROBE_QUIT_WAIT = 5.0      # s Quit waits for an instrument detection that is still running
+UPDATE_CHECK_DELAY_MS = 20000   # the daily update check waits until the sources are connecting
 
 
 # --------------------------------------------------------------------------------------------
@@ -466,6 +467,7 @@ def main(argv=None):
             + ("\n\nRecordings in progress and SeedLink resume positions were not restored."
                if state.load_error else "")))
     QTimer.singleShot(0, lambda: log.info("%s ready", APP_NAME))
+    QTimer.singleShot(UPDATE_CHECK_DELAY_MS, window.check_updates_at_start)   # once a day, if switched on
     try:
         code = app.exec()
     finally:

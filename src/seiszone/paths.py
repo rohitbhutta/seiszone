@@ -1,5 +1,8 @@
 """Where SeismoVerse keeps its files (per Windows user, no administrator rights needed). The folders
-keep the program's old name SeisZone (DATA_FOLDER), so nothing moves when the program is renamed.
+are named SeismoVerse (DATA_FOLDER). On a PC that ran the program under its old name SeisZone
+(LEGACY_DATA_FOLDER) the old folder of a place is used as long as it exists and no SeismoVerse
+folder is there, so nothing moves and nothing is lost; a new PC gets SeismoVerse folders.
+The listing below shows the old name, as on the first PC.
 
     %APPDATA%\\SeisZone\\config.json        sources and settings
     %APPDATA%\\SeisZone\\state.json         SeedLink resume positions, recordings in progress
@@ -13,14 +16,24 @@ SEISZONE_HOME (environment) moves everything below one folder - used by the test
 
 import os
 
-from . import DATA_FOLDER
+from . import DATA_FOLDER, LEGACY_DATA_FOLDER
 
 
 def _base(env, fallback):
     home = os.environ.get("SEISZONE_HOME")
     if home:
         return home
-    return os.path.join(os.environ.get(env) or os.path.expanduser(fallback), DATA_FOLDER)
+    return data_folder(os.environ.get(env) or os.path.expanduser(fallback))
+
+
+def data_folder(parent):
+    """<parent>\\SeismoVerse, or <parent>\\SeisZone on a PC that has that folder of an earlier
+    version and no SeismoVerse folder yet (its files stay where they are)."""
+    new = os.path.join(parent, DATA_FOLDER)
+    old = os.path.join(parent, LEGACY_DATA_FOLDER)
+    if not os.path.isdir(new) and os.path.isdir(old):
+        return old
+    return new
 
 
 def config_dir():
@@ -56,7 +69,7 @@ def documents_dir():
     if home:
         return os.path.join(home, "Documents")
     docs = os.path.join(os.path.expanduser("~"), "Documents")
-    return os.path.join(docs if os.path.isdir(docs) else os.path.expanduser("~"), DATA_FOLDER)
+    return data_folder(docs if os.path.isdir(docs) else os.path.expanduser("~"))
 
 
 def recordings_dir():

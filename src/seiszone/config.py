@@ -79,6 +79,9 @@ DEFAULTS = {
     "tools": [],
     "ui": {"theme": "dark", "minimize_to_tray": True, "start_minimized": False,
            "start_with_windows": False, "reopen_viewers": False, "geometry": "", "state": ""},
+    # core/updater.py: check once a day (installed program only), time of the last check, a
+    # version the user chose not to be offered again
+    "updates": {"check": True, "last_check": 0, "skip": ""},
 }
 
 

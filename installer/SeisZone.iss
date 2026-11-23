@@ -15,7 +15,7 @@
 ; by setup or uninstall (they keep the folder name SeisZone).
 
 #ifndef AppVer
-  #define AppVer "2.1.0"
+  #define AppVer "2.2.0"
 #endif
 #define AppName "SeismoVerse"
 #define Exe "SeismoVerse.exe"
@@ -58,7 +58,7 @@ UsedUserAreasWarning=no
 
 [Messages]
 WelcomeLabel2=This installs [name/ver] on your computer.%n%nSeismoVerse shows, records and shares live seismic data from Guralp Fortimus, Kelunji Gecko and other SeedLink instruments.%n%nSetup also adds one Windows Firewall rule so that a Kelunji Gecko (port 58772) and other programs (SeismoVerse SeedLink server) can connect to this PC.
-ConfirmUninstall=Remove %1 from this computer?%n%nA running SeismoVerse is closed (recordings stop). Your recordings, exports, settings and log files are NOT deleted. They stay in Documents\SeisZone, AppData\Roaming\SeisZone and AppData\Local\SeisZone.
+ConfirmUninstall=Remove %1 from this computer?%n%nA running SeismoVerse is closed (recordings stop). Your recordings, exports, settings and log files are NOT deleted. They stay in Documents\SeismoVerse, AppData\Roaming\SeismoVerse and AppData\Local\SeismoVerse (on a PC updated from an earlier version: in the folders it used before).
 UninstalledAll=%1 was removed from your computer.%n%nYour recordings, exports, settings and log files were kept.
 
 [Tasks]
@@ -182,8 +182,14 @@ var
 begin
   if (CurStep = ssPostInstall) and WizardIsTaskSelected('stopoldservice') then
     StopOldService;
+  { /SHOWAPP=1 (an update started from SeismoVerse's own update window): open it in its window }
   if (CurStep = ssPostInstall) and ClosedBySetup and WizardSilent then
-    ExecAsOriginalUser(ExpandConstant('{app}\{#Exe}'), '--minimized', '', SW_SHOWNORMAL, ewNoWait, Code);
+  begin
+    if ExpandConstant('{param:showapp|0}') = '1' then
+      ExecAsOriginalUser(ExpandConstant('{app}\{#Exe}'), '', '', SW_SHOWNORMAL, ewNoWait, Code)
+    else
+      ExecAsOriginalUser(ExpandConstant('{app}\{#Exe}'), '--minimized', '', SW_SHOWNORMAL, ewNoWait, Code);
+  end;
 end;
 
 { After "Remove SeismoVerse from this computer?" was answered Yes (the question says it closes). }

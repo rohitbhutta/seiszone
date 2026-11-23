@@ -8,7 +8,7 @@ const {
 } = require("docx");
 
 const [SHOTS, ICON, OUT] = process.argv.slice(2);
-const VERSION = "2.1.0";
+const VERSION = "2.2.0";
 const TEAL = "1F8A7E";
 const DARK = "1B2A33";
 const MUTED = "5B6B73";
@@ -125,27 +125,28 @@ BULLETS([
   "Buttons, menus and boxes on the screen are written in **bold**, for example **Add source**.",
   "Text you type and file names are written like `10.8.0.182`.",
   "All times in SeismoVerse are **UTC**.",
-  "SeismoVerse was called **SeisZone** up to version 1.9.0. Your sources, settings, recordings and logs from that version stay where they are and are used as before.",
   "Inside the program, press **F1** (or **Help > User guide**) for the detailed technical guide.",
 ]);
 
 // ---------------------------------------------------------------------------------------------
 H1("2. Installing and updating");
 H2("Install");
+P("Download **SeismoVerseSetup.exe** from **github.com/rohitbhutta/seismoverse-releases** (**Releases**, the newest version is at the top). It works on any Windows 10 or 11 computer (64-bit).");
 STEPS([
-  "Run **SeismoVerseSetup.exe**. Windows asks for administrator permission: click **Yes**. Setup needs it only to copy the program to `C:\\Program Files\\SeismoVerse` and to add one Windows Firewall rule. SeismoVerse itself always runs with your normal user rights.",
+  "Run **SeismoVerseSetup.exe**. If Windows shows **Windows protected your PC**, click **More info** and then **Run anyway** (the installer is not signed with a certificate).",
+  "Windows asks for administrator permission: click **Yes**. Setup needs it only to copy the program to `C:\\Program Files\\SeismoVerse` and to add one Windows Firewall rule. SeismoVerse itself always runs with your normal user rights.",
   "Choose whether you want a desktop icon. A Start menu icon is always made.",
   "If the old Gecko SeedLink service is installed on the PC, leave **Stop and disable the old Gecko SeedLink service** ticked, so your Gecko recorder connects to SeismoVerse (see chapter 5).",
   "At the end leave **Launch SeismoVerse** ticked and click **Finish**.",
 ]);
 P("The firewall rule is called **SeismoVerse**. It lets Gecko recorders (port 58772) and other programs (the SeedLink server, port 18000) connect to this PC.");
-H2("Update (also from SeisZone)");
+H2("Update to a new version");
 STEPS([
   "Run the new **SeismoVerseSetup.exe**. You do not need to uninstall the old version first.",
-  "If SeismoVerse (or SeisZone) is running, setup says it will be closed. Click **OK**. Recordings that were running continue by themselves when SeismoVerse starts again.",
+  "If SeismoVerse is running, setup says it will be closed. Click **OK**. Recordings that were running continue by themselves when SeismoVerse starts again.",
   "Finish the setup as above.",
 ]);
-NOTE("An update of SeisZone stays in its folder `C:\\Program Files\\SeisZone`. The old SeisZone program file and its shortcuts are removed; the new Start menu entry is **SeismoVerse**. Your instruments, settings and recordings are kept.");
+NOTE("An update installs into the same program folder as before and keeps your instruments, settings and recordings. SeismoVerse can also download and install updates by itself (chapter 13).");
 H2("Uninstall");
 P("Open **Windows Settings > Apps**, choose **SeismoVerse** and click **Uninstall**. This removes the program and the firewall rule. Your recordings, exports, settings and log files are **not** deleted.");
 
@@ -209,7 +210,7 @@ TABLE(["Setting", "Value"], [
 ], [1.3, 3]);
 P("To find this PC's IP address, open a Command Prompt and type `ipconfig`; use the IPv4 Address of the network the W610 is on. Give the PC a fixed IP address (or a DHCP reservation in the router), otherwise the W610 cannot find it after the address changes.");
 P("Nothing else is needed on the PC. The Gecko appears in the Sources list under **Gecko receiver :58772** with its serial number and site name, and its channels appear in the channels table.");
-NOTE("If the old Gecko SeedLink service still runs on this PC, the Gecko connects to it instead and the Gecko receiver row says that port 58772 is used by the old service. SeismoVerse offers to stop it: click **Stop old service** (Windows asks once for administrator permission). See chapter 13.");
+NOTE("If the old Gecko SeedLink service still runs on this PC, the Gecko connects to it instead and the Gecko receiver row says that port 58772 is used by the old service. SeismoVerse offers to stop it: click **Stop old service** (Windows asks once for administrator permission). See chapter 14.");
 
 // ---------------------------------------------------------------------------------------------
 H1("6. The channels table");
@@ -316,7 +317,7 @@ P("Click **Record** (or **Ctrl+R**). The Recordings window lists all recordings 
 IMG("05_record.png", "The Recordings window: running recordings (top) and a new recording (bottom).", 540);
 STEPS([
   "**Name**: any name, for example \"Kumari March 2026\".",
-  "**Folder**: where the files go. Default: `Documents\\SeisZone\\Recordings`.",
+  "**Folder**: where the files go. Default: `Documents\\SeismoVerse\\Recordings`.",
   "**Channels**: all channels (also channels that appear later), or only the channels you tick.",
   "**File length**: 15, 30 or 60 minutes. Files start on the clock (UTC), for example 10:00, 11:00.",
   "**Files**: one file per channel, or one file per station with all its channels.",
@@ -343,7 +344,7 @@ STEPS([
   "Tick the channels.",
   "Choose the start and end time (UTC), or use **Last 10 min**, **Last 1 h** or **The view's range**.",
   "Choose **One file per channel** or **One file with all channels**.",
-  "Choose the folder (default `Documents\\SeisZone\\Exports`) and click **Export**.",
+  "Choose the folder (default `Documents\\SeismoVerse\\Exports`) and click **Export**.",
 ]);
 P("SeismoVerse takes the data from your recordings first and, for anything not recorded, from the live data in memory and the disk buffer. It writes miniSEED files plus a report with the number of samples and any gaps per channel.");
 
@@ -399,7 +400,30 @@ P("**About** in the toolbar shows the program's name, its version, the author an
 IMG("02_about.png", "About SeismoVerse.", 360);
 
 // ---------------------------------------------------------------------------------------------
-H1("13. Troubleshooting");
+H1("13. Getting updates");
+P("New versions of SeismoVerse are published on GitHub, and SeismoVerse can download and install them by itself, on any computer with internet access. When it looks for a new version, nothing about your PC, your instruments or your data is sent.");
+H2("The daily check");
+BULLETS([
+  "Once a day, a little after SeismoVerse starts, it looks for a newer version. **Settings > Program > Check for updates once a day** switches this on or off (on by default).",
+  "A window opens only when a newer version exists. Without internet nothing happens.",
+]);
+H2("Check now");
+P("**Help > Check for updates...** looks at once and tells you the result: either that you have the newest version, or the update window below.");
+IMG("10_update.png", "An update is available (example).", 460);
+H2("Install an update");
+STEPS([
+  "Read **What's new** and click **Download and install**.",
+  "SeismoVerse downloads the installer and checks it against its published checksum. A damaged or changed download is refused and nothing is installed.",
+  "Windows asks for permission: click **Yes**. The window may show the publisher as unknown, because the installer is not signed with a certificate.",
+  "SeismoVerse closes, is updated and opens again by itself. Your instruments, settings and recordings are kept, and running recordings continue.",
+]);
+BULLETS([
+  "**Later** closes the window; the next daily check offers the update again.",
+  "**Skip this version** stops the daily check from offering this version. **Help > Check for updates...** still shows it.",
+  "A computer without internet can be updated by hand: copy the new **SeismoVerseSetup.exe** to it and run it (chapter 2).",
+]);
+
+H1("14. Troubleshooting");
 TABLE(["Problem", "What to do"], [
   ["An instrument shows no data (amber or red)", "Check that the VPN is connected (SeismoVerse reconnects by itself and fetches the missed data). Test the address with `ping 10.8.0.182` in a Command Prompt. Check the port (SeedLink 18000, GCF 1567). Click **Reconnect** and read the reason in the **Log**."],
   ["The Gecko does not connect", "SeismoVerse must be running (window or tray). The USR-W610 must be a **TCP Client** to this PC's current IP address, port **58772**. Check that the Windows firewall rule **SeismoVerse** is enabled, and allow SeismoVerse in other security software."],
@@ -407,23 +431,25 @@ TABLE(["Problem", "What to do"], [
   ["A port is in use by another program", "Close that program, or choose another port in Settings (and change it in the W610 or other programs too). SeismoVerse tries again every few seconds; the log names the program's process id."],
   ["Physical units are not offered", "SeismoVerse has no StationXML for that station. Remove the source and add it again with **Detect**, and wait until detection finishes."],
   ["Low disk space warning", "SeismoVerse never deletes anything. Copy old recording folders to another disk, then delete them yourself, or record to a folder on a bigger disk."],
-  ["Something else", "Look in the **Log** panel, or open **Help > Log folder** and send the file `seiszone.log` with your question."],
+  ["The update check says there is no connection", "Check the internet connection of this PC. A network that blocks github.com also blocks updates: download the installer on another computer and run it here."],
+  ["Something else", "Look in the **Log** panel, or open **Help > Log folder** and send the newest log file (`seismoverse.log`) with your question."],
 ], [1.3, 3]);
 
 // ---------------------------------------------------------------------------------------------
-H1("14. Files and folders");
-P("The folders keep the program's earlier name **SeisZone**, so nothing moved when the program was renamed.");
+H1("15. Files and folders");
+P("SeismoVerse keeps its files in these folders of your Windows user:");
 TABLE(["What", "Where"], [
-  ["Recordings (default)", "`Documents\\SeisZone\\Recordings`"],
-  ["Exports (default)", "`Documents\\SeisZone\\Exports`"],
-  ["Program log", "`%LOCALAPPDATA%\\SeisZone\\logs\\seiszone.log` (Help > Log folder)"],
-  ["Settings and sources", "`%APPDATA%\\SeisZone\\config.json`"],
-  ["Running recordings, SeedLink positions", "`%APPDATA%\\SeisZone\\state.json`"],
-  ["StationXML (instrument responses)", "`%APPDATA%\\SeisZone\\stationxml`"],
-  ["SeedLink server disk buffer", "`%LOCALAPPDATA%\\SeisZone\\ServerBuffer`"],
-  ["The program", "`C:\\Program Files\\SeismoVerse` (updated from SeisZone: `C:\\Program Files\\SeisZone`)"],
+  ["Recordings (default)", "`Documents\\SeismoVerse\\Recordings`"],
+  ["Exports (default)", "`Documents\\SeismoVerse\\Exports`"],
+  ["Program log", "`%LOCALAPPDATA%\\SeismoVerse\\logs\\seismoverse.log` (Help > Log folder)"],
+  ["Settings and sources", "`%APPDATA%\\SeismoVerse\\config.json`"],
+  ["Running recordings, SeedLink positions", "`%APPDATA%\\SeismoVerse\\state.json`"],
+  ["StationXML (instrument responses)", "`%APPDATA%\\SeismoVerse\\stationxml`"],
+  ["SeedLink server disk buffer", "`%LOCALAPPDATA%\\SeismoVerse\\ServerBuffer`"],
+  ["The program", "`C:\\Program Files\\SeismoVerse`"],
 ], [1.3, 3]);
-P("To open a folder like `%APPDATA%\\SeisZone`, type it into the Explorer address bar. Neither SeismoVerse nor its uninstaller deletes recordings, exports, settings or logs.");
+P("To open a folder like `%APPDATA%\\SeismoVerse`, type it into the Explorer address bar. Neither SeismoVerse nor its uninstaller deletes recordings, exports, settings or logs.");
+NOTE("On a PC that ran an earlier version of the program, the folders it used before stay in use, so nothing had to be moved. **Help > Log folder** and the **Open folder** buttons of the Recordings and Export windows always open the right folder.");
 
 // ---------------------------------------------------------------------------------------------
 H1("Appendix: keyboard shortcuts");

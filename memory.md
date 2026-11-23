@@ -48,7 +48,21 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
 
 ## Status (2026-11-22, version 1.7.0 installed 19:48)
 
-* **2026-11-23 afternoon - 2.1.0 on branch feature/gcf-manual-clients (pull request):** Data server
+* **2026-11-23 14:00 - 2.2.0 on branch fix/windows-fit-screen (pull request, with 2.1.1):** updates
+  through GitHub Releases of the PUBLIC repo rohitbhutta/seismoverse-releases (created; README
+  only). Publish: build.py then installer/publish.py --notes "...". Commits to that repo through
+  the API must use the noreply author (a Gmail slip happened). Nothing published yet.
+
+* **2026-11-23 13:25 - 2.1.1 on branch fix/windows-fit-screen (pull request):** 2.1.0 is installed
+  and running. Every window the main window opens is kept inside the screen (ui/screen_fit.py;
+  this PC has 1536 x 824 points at 125 %); the Data server tabs scroll. See docs/history.md.
+  Same branch: new PCs use SeismoVerse folders (paths.data_folder; a PC with SeisZone folders keeps
+  them - this PC does), log file seismoverse.log; manual and guide have no SeisZone name. Update
+  plan (GitHub Releases, public releases-only repo; the source repo is private):
+  docs/reports/2026-11-23-update-plan.md - not built, waiting for the user's choice.
+
+* **2026-11-23 13:13 - 2.1.0 merged (pull request #4, 4b0324d) and built (SeismoVerseSetup.exe
+  68.9 MB; not installed yet):** Data server
   > GCF over UDP > "Send to a computer": computers added by hand (config gcf_server.clients) get
   all data without asking, until removed. SeedLink tab has no Add (protocol). Untested with the
   earlier viewer as receiver. See docs/history.md.

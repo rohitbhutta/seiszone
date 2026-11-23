@@ -4,6 +4,78 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 14:00 - 2.2.0: updates from GitHub Releases (public releases-only repository)
+
+* The user chose "Separate public repo" for the update plan (docs/reports/2026-11-23-update-plan.md).
+* Created the public repository rohitbhutta/seismoverse-releases (README only; no installer
+  yet). Mistake: its first README commit (dbe469c, made with the GitHub API) showed the user's
+  personal Gmail as author. main was force-updated to the same README committed as Rohit Santra
+  <282983013+rohitbhutta@users.noreply.github.com> (3c17cd0); the old commit stays reachable by
+  its id until GitHub's cleanup - full removal needs deleting and recreating the repository
+  (the gh token has no delete_repo scope): asked the user. Auto-memory note written.
+* core/updater.py: latest_release (GitHub API, User-Agent "SeismoVerse/<v> update check", no
+  other data), parse_version / is_newer, download (temp folder, max 300 MB, SHA-256 must match
+  SeismoVerseSetup.exe.sha256 or the file is removed), automatic_check_allowed (installed
+  program only, Settings switch, once per 20 h, SEISZONE_UPDATE_CHECK=off in the tests),
+  start_installer (ShellExecute "/SILENT /SUPPRESSMSGBOXES /SHOWAPP=1").
+* ui/update_dialog.py: Help > Check for updates..., daily check 20 s after start, update window
+  (What's new, Download and install with progress / cancel, Later, Skip this version);
+  Settings > Program "Check for updates once a day" (config "updates": check, last_check, skip).
+* Installer: /SHOWAPP=1 opens SeismoVerse in its window after a silent update.
+* installer/publish.py: checks the build is this version, writes the .sha256, creates release
+  v<version> with gh (--dry-run shows the command). Each version once.
+* Tests: tests/test_updater.py (local fake GitHub on 127.0.0.1, never the real one) and window
+  tests in test_ui_shell.py.
+* Manual: chapter 13 "Getting updates" (+ picture), download address in chapter 2, a
+  troubleshooting row; chapters 14/15 renumbered. 29 pages, 2.2.0, no SeisZone name. User guide
+  section 15, README "Publishing an update". Version 2.2.0.
+* Not done: nothing published yet (first release needs the user's OK).
+
+## 2026-11-23 13:35 - 2.1.1 (same branch): no SeisZone name in the manual; new PCs get SeismoVerse folders
+
+* The user: there are still SeisZone names in the user manual - remove them all and give the final
+  document; and asked for a plan to publish updates that computers anywhere can install
+  (no server, only the GitHub account).
+* Folders: DATA_FOLDER is now "SeismoVerse"; paths.data_folder() uses the old "SeisZone" folder
+  of a place (AppData Roaming / Local / Documents) as long as it exists and no SeismoVerse
+  folder is there. A new PC gets SeismoVerse folders; this PC keeps its SeisZone folders
+  (checked: config, logs, buffer and Documents still resolve to them; nothing moved). The log
+  file is now seismoverse.log (older seiszone.log files stay). The uninstall message names the
+  SeismoVerse folders.
+* Manual and user guide: no "SeisZone" left (the PDF's text and metadata and the Word file's XML
+  were searched); folders shown as SeismoVerse with a note that a PC of an earlier version keeps
+  the folders it used. Screenshots retaken (paths show SeismoVerse). Manual 27 pages, 2.1.1.
+* Update plan: docs/reports/2026-11-23-update-plan.md (GitHub Releases in a public
+  releases-only repository, an in-app "Check for updates"); not built, waiting for the user.
+
+## 2026-11-23 13:25 - 2.1.1: windows always fit the screen (Data server title bar was hidden)
+
+* 2.1.0 installed by the user and running (13:15:40, C:\Program Files\SeisZone\SeismoVerse.exe
+  2.1.0; the first "installed" check at 13:1x found 2.0.0 still there and no setup log - the
+  user ran the installer again).
+* The user (screenshot): the Data server window "is not opening on the full screen ... the upper
+  side is hidden"; only dragging an edge brought it back. This PC: 1920 x 1080 at 125 % = 1536 x
+  824 points of free area. With the user's data the window was placed with its title bar above
+  the top edge (with test data it opens at y 102 - not reproduced with them).
+* Fix: ui/screen_fit.py fit_to_screen / keep_on_screen: a window is shrunk to the free area
+  (taskbar excluded, room for the title bar) and moved so its whole frame is inside. Applied to
+  every window MainWindow._open opens (Add source, Record, Export, Data server, Settings, About)
+  right after it is shown and once more when Windows has drawn its frame. The Data server tabs
+  are in scroll areas (minimum 480 x 360; natural height 472 instead of 861 points), so long
+  texts make a tab scroll instead of the window grow past the screen.
+* Checked on the real screen with an invisible window (WA_DontShowOnScreen): forced to y -150,
+  1000 points tall -> (385, 8, 760, 776), inside the free area.
+* tools/manual/shots.py turns keep_on_screen off (the offscreen screen is only 800 x 600).
+  Manual rebuilt (version 2.1.1). Version 2.1.1.
+
+## 2026-11-23 13:13 - 2.1.0 merged into main and built
+
+* At the user's OK ("Merge and build"): pull request #4 merged (merge commit 4b0324d), local main
+  pulled; identical to the tested branch (367 passed, 1 skipped).
+* `python installer/build.py`: build/dist/SeismoVerseSetup.exe 68.9 MB; SeismoVerse.exe answers
+  "SeismoVerse 2.1.0", file details 2.1.0. Same three PyInstaller warnings as before.
+* Not installed (the user runs the installer).
+
 ## 2026-11-23 afternoon - 2.1.0: Data server, send to a computer added by hand
 
 Branch feature/gcf-manual-clients. The user (screenshots of both Data server tabs): "Here is no
