@@ -4,6 +4,14 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 13:13 - 2.1.0 merged into main and built
+
+* At the user's OK ("Merge and build"): pull request #4 merged (merge commit 4b0324d), local main
+  pulled; identical to the tested branch (367 passed, 1 skipped).
+* `python installer/build.py`: build/dist/SeismoVerseSetup.exe 68.9 MB; SeismoVerse.exe answers
+  "SeismoVerse 2.1.0", file details 2.1.0. Same three PyInstaller warnings as before.
+* Not installed (the user runs the installer).
+
 ## 2026-11-23 afternoon - 2.1.0: Data server, send to a computer added by hand
 
 Branch feature/gcf-manual-clients. The user (screenshots of both Data server tabs): "Here is no
