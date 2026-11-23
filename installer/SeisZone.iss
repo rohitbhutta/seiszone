@@ -15,7 +15,7 @@
 ; by setup or uninstall (they keep the folder name SeisZone).
 
 #ifndef AppVer
-  #define AppVer "2.1.1"
+  #define AppVer "2.2.0"
 #endif
 #define AppName "SeismoVerse"
 #define Exe "SeismoVerse.exe"
@@ -182,8 +182,14 @@ var
 begin
   if (CurStep = ssPostInstall) and WizardIsTaskSelected('stopoldservice') then
     StopOldService;
+  { /SHOWAPP=1 (an update started from SeismoVerse's own update window): open it in its window }
   if (CurStep = ssPostInstall) and ClosedBySetup and WizardSilent then
-    ExecAsOriginalUser(ExpandConstant('{app}\{#Exe}'), '--minimized', '', SW_SHOWNORMAL, ewNoWait, Code);
+  begin
+    if ExpandConstant('{param:showapp|0}') = '1' then
+      ExecAsOriginalUser(ExpandConstant('{app}\{#Exe}'), '', '', SW_SHOWNORMAL, ewNoWait, Code)
+    else
+      ExecAsOriginalUser(ExpandConstant('{app}\{#Exe}'), '--minimized', '', SW_SHOWNORMAL, ewNoWait, Code);
+  end;
 end;
 
 { After "Remove SeismoVerse from this computer?" was answered Yes (the question says it closes). }

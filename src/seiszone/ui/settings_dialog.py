@@ -300,8 +300,10 @@ class SettingsDialog(QDialog):
         self.autostart.setChecked(bool(u.get("start_with_windows", False)))
         self.reopen = QCheckBox("Open the viewer windows again that were open when SeismoVerse was closed")
         self.reopen.setChecked(bool(u.get("reopen_viewers", False)))
+        self.update_check = QCheckBox("Check for updates once a day (asks GitHub; nothing about this PC is sent)")
+        self.update_check.setChecked(bool((self.config.get("updates") or {}).get("check", True)))
         lay = QVBoxLayout(w)
-        for cb in (self.tray, self.start_min, self.autostart, self.reopen):
+        for cb in (self.tray, self.start_min, self.autostart, self.reopen, self.update_check):
             lay.addWidget(cb)
         lay.addWidget(self._hint("Data is received, served and recorded only while SeismoVerse runs: keep it in the "
                                  "tray and let it start with Windows on a station PC."))
@@ -348,6 +350,7 @@ class SettingsDialog(QDialog):
                    "start_minimized": self.start_min.isChecked(),
                    "start_with_windows": self.autostart.isChecked(),
                    "reopen_viewers": self.reopen.isChecked()},
+            "updates": {"check": self.update_check.isChecked()},
             "buffer_minutes": self.buffer.value(),
         }
 

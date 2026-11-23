@@ -114,6 +114,16 @@ if tabs:
     pump(0.4)
     shot(srv, "08_data_server_gcf.png")
 
+from seiszone.core.updater import Release  # noqa: E402
+from seiszone.ui.update_dialog import UpdateDialog  # noqa: E402
+upd = UpdateDialog(Release(version="2.3.0", tag="v2.3.0", title="SeismoVerse 2.3.0",
+                           notes="### What's new\n* Example: a new filter in the viewer\n* Example: faster start\n",
+                           setup_url="", setup_size=69_000_000, sha256="0" * 64, page_url=""), config)
+upd.show()
+pump(0.4)
+shot(upd, "10_update.png")
+upd.reject()
+
 st = win.open_settings()
 pump(0.6)
 shot(st, "09_settings.png")

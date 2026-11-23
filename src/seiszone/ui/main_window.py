@@ -28,6 +28,7 @@ from .export_dialog import ExportDialog
 from .log_panel import LogPanel
 from .record_dialog import RecordDialog
 from .screen_fit import keep_on_screen
+from .update_dialog import UpdateDialog, check_for_updates
 from .server_window import DataServerWindow
 from .settings_dialog import SettingsDialog
 from .sources_panel import SourcesPanel
@@ -229,6 +230,8 @@ class MainWindow(QMainWindow):
         self.act_quit = A("Quit", self.request_quit, None, f"Stop {APP_NAME} completely", "Ctrl+Q")
         self.act_guide = A("User guide", self.open_user_guide, None, "Open the SeismoVerse user guide", "F1")
         self.act_logs = A("Log folder", lambda: open_folder(paths.log_dir()), None, paths.log_dir())
+        self.act_updates = A("Check for updates...", lambda: self.check_updates(manual=True), None,
+                             f"Look for a newer {APP_NAME} on GitHub (nothing about this PC is sent)")
 
     def _build_toolbar(self):
         tb = QToolBar("Main toolbar", self)
@@ -264,6 +267,7 @@ class MainWindow(QMainWindow):
         m.addAction(self.act_guide)
         m.addAction(self.act_logs)
         m.addSeparator()
+        m.addAction(self.act_updates)
         m.addAction(self.act_about)
         self.act_guide.setEnabled(user_guide_path() is not None)
 
@@ -564,6 +568,22 @@ class MainWindow(QMainWindow):
 
     def open_about(self):
         return self._open("about", lambda: AboutDialog(self.config, self))
+
+    # ------------------------------------------------------------------ updates
+    def check_updates(self, manual=True):
+        """Ask GitHub for a newer version (core/updater.py, ui/update_dialog.py)."""
+        return check_for_updates(self, self.config, manual)
+
+    def check_updates_at_start(self):
+        """The automatic check, at most once a day, only in the installed program and only when
+        it is switched on (Settings > Program)."""
+        from ..core import updater
+        if updater.automatic_check_allowed(self.config.get("updates") or {}):
+            return self.check_updates(manual=False)
+        return None
+
+    def open_update(self, release):
+        return self._open("update", lambda: UpdateDialog(release, self.config, self), modal=False)
 
     def open_user_guide(self):
         p = user_guide_path()

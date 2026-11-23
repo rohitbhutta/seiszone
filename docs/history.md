@@ -4,6 +4,33 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 14:00 - 2.2.0: updates from GitHub Releases (public releases-only repository)
+
+* The user chose "Separate public repo" for the update plan (docs/reports/2026-11-23-update-plan.md).
+* Created the public repository rohitbhutta/seismoverse-releases (README only; no installer
+  yet). Mistake: its first README commit (dbe469c, made with the GitHub API) showed the user's
+  personal Gmail as author. main was force-updated to the same README committed as Rohit Santra
+  <282983013+rohitbhutta@users.noreply.github.com> (3c17cd0); the old commit stays reachable by
+  its id until GitHub's cleanup - full removal needs deleting and recreating the repository
+  (the gh token has no delete_repo scope): asked the user. Auto-memory note written.
+* core/updater.py: latest_release (GitHub API, User-Agent "SeismoVerse/<v> update check", no
+  other data), parse_version / is_newer, download (temp folder, max 300 MB, SHA-256 must match
+  SeismoVerseSetup.exe.sha256 or the file is removed), automatic_check_allowed (installed
+  program only, Settings switch, once per 20 h, SEISZONE_UPDATE_CHECK=off in the tests),
+  start_installer (ShellExecute "/SILENT /SUPPRESSMSGBOXES /SHOWAPP=1").
+* ui/update_dialog.py: Help > Check for updates..., daily check 20 s after start, update window
+  (What's new, Download and install with progress / cancel, Later, Skip this version);
+  Settings > Program "Check for updates once a day" (config "updates": check, last_check, skip).
+* Installer: /SHOWAPP=1 opens SeismoVerse in its window after a silent update.
+* installer/publish.py: checks the build is this version, writes the .sha256, creates release
+  v<version> with gh (--dry-run shows the command). Each version once.
+* Tests: tests/test_updater.py (local fake GitHub on 127.0.0.1, never the real one) and window
+  tests in test_ui_shell.py.
+* Manual: chapter 13 "Getting updates" (+ picture), download address in chapter 2, a
+  troubleshooting row; chapters 14/15 renumbered. 29 pages, 2.2.0, no SeisZone name. User guide
+  section 15, README "Publishing an update". Version 2.2.0.
+* Not done: nothing published yet (first release needs the user's OK).
+
 ## 2026-11-23 13:35 - 2.1.1 (same branch): no SeisZone name in the manual; new PCs get SeismoVerse folders
 
 * The user: there are still SeisZone names in the user manual - remove them all and give the final

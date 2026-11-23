@@ -937,3 +937,110 @@ def test_data_server_window_fits_and_scrolls(qapp, window):
         assert settings.screen().availableGeometry().contains(settings.frameGeometry())
     finally:
         settings.reject()
+
+
+# --------------------------------------------------------------------------------------------
+# updates (ui/update_dialog.py; GitHub is never asked: updater.latest_release is replaced)
+# --------------------------------------------------------------------------------------------
+def _release(version="9.1.0"):
+    from seiszone.core.updater import Release
+    return Release(version=version, tag=f"v{version}", title=f"SeismoVerse {version}", notes="## New\n* faster",
+                   setup_url="http://127.0.0.1:9/x.exe", setup_size=70_000_000, sha256="0" * 64,
+                   page_url="https://github.com/o/r/releases/tag/v" + version)
+
+
+def test_check_for_updates_from_the_help_menu(qapp, window, monkeypatch):
+    from seiszone.core import updater
+    from seiszone.ui import update_dialog
+    assert window.act_updates.text() == "Check for updates..."
+    helps = [m for m in window.menuBar().findChildren(type(window.window_menu)) if m.title() == "&Help"]
+    assert helps and window.act_updates in helps[0].actions()
+    assert window.check_updates_at_start() is None                  # tests: never automatic
+    said = []
+    monkeypatch.setattr(update_dialog.QMessageBox, "information", lambda *a: said.append(a[2]))
+
+    def run(manual=True):
+        window.check_updates(manual=manual)
+        end = time.time() + 5
+        while getattr(window, "_update_check", None) is not None and time.time() < end:
+            pump(qapp, 0.05)
+
+    # up to date
+    monkeypatch.setattr(updater, "latest_release", lambda: _release(VERSION))
+    run()
+    assert said[-1] == f"SeismoVerse {VERSION} is the newest version."
+    assert window.config.get("updates")["last_check"] > 0
+    # no connection: said when asked by hand, silent at start
+    def fail():
+        raise updater.UpdateError("The update check did not work: no connection to GitHub (offline).")
+    monkeypatch.setattr(updater, "latest_release", fail)
+    run()
+    assert "no connection to GitHub" in said[-1]
+    n = len(said)
+    run(manual=False)
+    assert len(said) == n
+    # a newer version: the update window opens
+    monkeypatch.setattr(updater, "latest_release", lambda: _release("9.1.0"))
+    run()
+    dlg = window.dialogs.get("update")
+    try:
+        assert dlg is not None and dlg.isVisible() and not dlg.isModal()
+        assert "SeismoVerse 9.1.0 is available" in dlg.findChildren(QLabel)[0].text()
+        assert "faster" in dlg.notes.toPlainText() and "70 MB" in dlg.info.text()
+        dlg.skip()                                                   # Skip this version
+        assert window.config.get("updates")["skip"] == "9.1.0"
+    finally:
+        dlg.close()
+    # skipped: not offered at start, but still shown when asked by hand
+    pump(qapp, 0.1)
+    run(manual=False)
+    assert window.dialogs.get("update") is None
+    run(manual=True)
+    assert window.dialogs.get("update") is not None
+    window.dialogs["update"].close()
+
+
+def test_update_window_downloads_checks_and_starts_the_installer(qapp, window, monkeypatch):
+    from seiszone.core import updater
+    from seiszone.ui.update_dialog import UpdateDialog
+    started = []
+    monkeypatch.setattr(updater, "download", lambda rel, progress=None, cancelled=None:
+                        (progress(35_000_000, 70_000_000), r"C:\Temp\SeismoVerseSetup-9.1.0.exe")[1])
+    monkeypatch.setattr(updater, "start_installer", lambda path: started.append(path))
+    dlg = UpdateDialog(_release(), window.config, window)
+    dlg.show()
+    try:
+        dlg.install()
+        end = time.time() + 5
+        while dlg.job is not None and time.time() < end:
+            pump(qapp, 0.05)
+        assert started == [r"C:\Temp\SeismoVerseSetup-9.1.0.exe"]
+        assert "allow it when Windows asks" in dlg.status.text() and not dlg.install_button.isEnabled()
+        # a download that fails says why and offers the button again
+        dlg2 = UpdateDialog(_release(), window.config, window)
+
+        def bad(rel, progress=None, cancelled=None):
+            raise updater.UpdateError("The downloaded installer does not match its published checksum.")
+        monkeypatch.setattr(updater, "download", bad)
+        dlg2.install()
+        end = time.time() + 5
+        while dlg2.job is not None and time.time() < end:
+            pump(qapp, 0.05)
+        assert "does not match" in dlg2.status.text() and dlg2.install_button.isEnabled()
+        assert len(started) == 1
+        dlg2.close()
+    finally:
+        dlg.close()
+
+
+def test_update_check_setting(qapp, window):
+    window.config.update_section("updates", {"last_check": 123.0, "skip": "9.0.0"})
+    dlg = window.open_settings()
+    try:
+        assert dlg.update_check.isChecked() and "once a day" in dlg.update_check.text()
+        dlg.update_check.setChecked(False)
+        dlg.accept()
+        u = window.config.get("updates")
+        assert u["check"] is False and u["last_check"] == 123.0 and u["skip"] == "9.0.0"   # the rest kept
+    finally:
+        dlg.close()

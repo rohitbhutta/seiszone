@@ -8,7 +8,7 @@ SeedLink so other programs can read it.
 It is built only on open standards: SeedLink 3, Guralp GCF / Scream protocol, Kelunji Gecko
 telemetry framing, miniSEED 2 and FDSN StationXML.
 
-Version 2.1.1 (named SeisZone up to 1.9.0). User manual (Word and PDF): `docs/manual/`. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
+Version 2.2.0 (named SeisZone up to 1.9.0). User manual (Word and PDF): `docs/manual/`. Python 3.14, PySide6 (Qt 6), pyqtgraph, numpy, scipy.
 
 ## Features
 
@@ -162,6 +162,26 @@ sources list and in the rows' context menu: one Windows administrator prompt run
 the port…", and the engine, which tries a busy port again every 3 s, takes the ports. The
 service is only disabled (Windows Services can switch it on again). A port held by any other
 program is shown as `in use by another program` (the log gives its process id).
+
+## Publishing an update
+
+Installers are published as GitHub Releases of the **public** repository
+`rohitbhutta/seismoverse-releases` (this source repository stays private). SeismoVerse asks it
+for the newest release once a day and with Help > Check for updates (core/updater.py), downloads
+`SeismoVerseSetup.exe`, refuses it unless its SHA-256 matches `SeismoVerseSetup.exe.sha256`, and
+starts it (`/SILENT /SUPPRESSMSGBOXES /SHOWAPP=1`: setup closes SeismoVerse, updates it and
+opens it again).
+
+```
+# 1. raise the version: src/seiszone/__init__.py, installer/SeisZone.iss, installer/version_info.txt
+python installer/build.py
+python installer/publish.py --notes "What's new in this version" --dry-run   # check
+python installer/publish.py --notes "What's new in this version"             # publish
+```
+
+`publish.py` checks that the installer is the build of this version, writes the checksum file
+and creates release `v<version>` with the `gh` tool (signed in on this PC). Each version is
+published once. The release can be edited or deleted on GitHub.
 
 ## Version
 

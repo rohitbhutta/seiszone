@@ -22,6 +22,7 @@ Contents
 12. The tray icon
 13. Troubleshooting
 14. Where SeismoVerse keeps its files
+15. Updates
 
 ---
 
@@ -607,3 +608,20 @@ On a PC that ran an earlier version of the program, the folders it used before s
 To open a folder like `%APPDATA%\SeismoVerse`, type it into the Explorer address bar. These files
 belong to your Windows user. Neither SeismoVerse nor its uninstaller deletes recordings, exports,
 settings or logs.
+
+## 15. Updates
+
+New versions are published as GitHub Releases of github.com/rohitbhutta/seismoverse-releases.
+SeismoVerse looks for one once a day, a little after it starts (Settings > Program > "Check for
+updates once a day", on by default; only the installed program, not a run from the source
+folder), and at once with **Help > Check for updates...**. Nothing about the PC or its data is
+sent.
+
+When a newer version exists, the update window shows What's new and **Download and install**:
+SeismoVerse downloads the installer, refuses it unless its SHA-256 matches the published
+checksum, and starts it. Windows asks for permission (the publisher may be shown as unknown:
+the installer is not signed); setup closes SeismoVerse, updates it in place and opens it again.
+Instruments, settings and recordings are kept; running recordings continue. **Later** asks again
+at the next daily check; **Skip this version** stops the daily check from offering it (Help >
+Check for updates still shows it). Without internet nothing happens; the installer can always be
+copied to a PC and run by hand.

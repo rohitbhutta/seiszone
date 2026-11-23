@@ -48,6 +48,11 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
 
 ## Status (2026-11-22, version 1.7.0 installed 19:48)
 
+* **2026-11-23 14:00 - 2.2.0 on branch fix/windows-fit-screen (pull request, with 2.1.1):** updates
+  through GitHub Releases of the PUBLIC repo rohitbhutta/seismoverse-releases (created; README
+  only). Publish: build.py then installer/publish.py --notes "...". Commits to that repo through
+  the API must use the noreply author (a Gmail slip happened). Nothing published yet.
+
 * **2026-11-23 13:25 - 2.1.1 on branch fix/windows-fit-screen (pull request):** 2.1.0 is installed
   and running. Every window the main window opens is kept inside the screen (ui/screen_fit.py;
   this PC has 1536 x 824 points at 125 %); the Data server tabs scroll. See docs/history.md.

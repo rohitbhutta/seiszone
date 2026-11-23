@@ -8,7 +8,7 @@ const {
 } = require("docx");
 
 const [SHOTS, ICON, OUT] = process.argv.slice(2);
-const VERSION = "2.1.1";
+const VERSION = "2.2.0";
 const TEAL = "1F8A7E";
 const DARK = "1B2A33";
 const MUTED = "5B6B73";
@@ -131,8 +131,10 @@ BULLETS([
 // ---------------------------------------------------------------------------------------------
 H1("2. Installing and updating");
 H2("Install");
+P("Download **SeismoVerseSetup.exe** from **github.com/rohitbhutta/seismoverse-releases** (**Releases**, the newest version is at the top). It works on any Windows 10 or 11 computer (64-bit).");
 STEPS([
-  "Run **SeismoVerseSetup.exe**. Windows asks for administrator permission: click **Yes**. Setup needs it only to copy the program to `C:\\Program Files\\SeismoVerse` and to add one Windows Firewall rule. SeismoVerse itself always runs with your normal user rights.",
+  "Run **SeismoVerseSetup.exe**. If Windows shows **Windows protected your PC**, click **More info** and then **Run anyway** (the installer is not signed with a certificate).",
+  "Windows asks for administrator permission: click **Yes**. Setup needs it only to copy the program to `C:\\Program Files\\SeismoVerse` and to add one Windows Firewall rule. SeismoVerse itself always runs with your normal user rights.",
   "Choose whether you want a desktop icon. A Start menu icon is always made.",
   "If the old Gecko SeedLink service is installed on the PC, leave **Stop and disable the old Gecko SeedLink service** ticked, so your Gecko recorder connects to SeismoVerse (see chapter 5).",
   "At the end leave **Launch SeismoVerse** ticked and click **Finish**.",
@@ -144,7 +146,7 @@ STEPS([
   "If SeismoVerse is running, setup says it will be closed. Click **OK**. Recordings that were running continue by themselves when SeismoVerse starts again.",
   "Finish the setup as above.",
 ]);
-NOTE("An update installs into the same program folder as before and keeps your instruments, settings and recordings.");
+NOTE("An update installs into the same program folder as before and keeps your instruments, settings and recordings. SeismoVerse can also download and install updates by itself (chapter 13).");
 H2("Uninstall");
 P("Open **Windows Settings > Apps**, choose **SeismoVerse** and click **Uninstall**. This removes the program and the firewall rule. Your recordings, exports, settings and log files are **not** deleted.");
 
@@ -208,7 +210,7 @@ TABLE(["Setting", "Value"], [
 ], [1.3, 3]);
 P("To find this PC's IP address, open a Command Prompt and type `ipconfig`; use the IPv4 Address of the network the W610 is on. Give the PC a fixed IP address (or a DHCP reservation in the router), otherwise the W610 cannot find it after the address changes.");
 P("Nothing else is needed on the PC. The Gecko appears in the Sources list under **Gecko receiver :58772** with its serial number and site name, and its channels appear in the channels table.");
-NOTE("If the old Gecko SeedLink service still runs on this PC, the Gecko connects to it instead and the Gecko receiver row says that port 58772 is used by the old service. SeismoVerse offers to stop it: click **Stop old service** (Windows asks once for administrator permission). See chapter 13.");
+NOTE("If the old Gecko SeedLink service still runs on this PC, the Gecko connects to it instead and the Gecko receiver row says that port 58772 is used by the old service. SeismoVerse offers to stop it: click **Stop old service** (Windows asks once for administrator permission). See chapter 14.");
 
 // ---------------------------------------------------------------------------------------------
 H1("6. The channels table");
@@ -398,7 +400,30 @@ P("**About** in the toolbar shows the program's name, its version, the author an
 IMG("02_about.png", "About SeismoVerse.", 360);
 
 // ---------------------------------------------------------------------------------------------
-H1("13. Troubleshooting");
+H1("13. Getting updates");
+P("New versions of SeismoVerse are published on GitHub, and SeismoVerse can download and install them by itself, on any computer with internet access. When it looks for a new version, nothing about your PC, your instruments or your data is sent.");
+H2("The daily check");
+BULLETS([
+  "Once a day, a little after SeismoVerse starts, it looks for a newer version. **Settings > Program > Check for updates once a day** switches this on or off (on by default).",
+  "A window opens only when a newer version exists. Without internet nothing happens.",
+]);
+H2("Check now");
+P("**Help > Check for updates...** looks at once and tells you the result: either that you have the newest version, or the update window below.");
+IMG("10_update.png", "An update is available (example).", 460);
+H2("Install an update");
+STEPS([
+  "Read **What's new** and click **Download and install**.",
+  "SeismoVerse downloads the installer and checks it against its published checksum. A damaged or changed download is refused and nothing is installed.",
+  "Windows asks for permission: click **Yes**. The window may show the publisher as unknown, because the installer is not signed with a certificate.",
+  "SeismoVerse closes, is updated and opens again by itself. Your instruments, settings and recordings are kept, and running recordings continue.",
+]);
+BULLETS([
+  "**Later** closes the window; the next daily check offers the update again.",
+  "**Skip this version** stops the daily check from offering this version. **Help > Check for updates...** still shows it.",
+  "A computer without internet can be updated by hand: copy the new **SeismoVerseSetup.exe** to it and run it (chapter 2).",
+]);
+
+H1("14. Troubleshooting");
 TABLE(["Problem", "What to do"], [
   ["An instrument shows no data (amber or red)", "Check that the VPN is connected (SeismoVerse reconnects by itself and fetches the missed data). Test the address with `ping 10.8.0.182` in a Command Prompt. Check the port (SeedLink 18000, GCF 1567). Click **Reconnect** and read the reason in the **Log**."],
   ["The Gecko does not connect", "SeismoVerse must be running (window or tray). The USR-W610 must be a **TCP Client** to this PC's current IP address, port **58772**. Check that the Windows firewall rule **SeismoVerse** is enabled, and allow SeismoVerse in other security software."],
@@ -406,11 +431,12 @@ TABLE(["Problem", "What to do"], [
   ["A port is in use by another program", "Close that program, or choose another port in Settings (and change it in the W610 or other programs too). SeismoVerse tries again every few seconds; the log names the program's process id."],
   ["Physical units are not offered", "SeismoVerse has no StationXML for that station. Remove the source and add it again with **Detect**, and wait until detection finishes."],
   ["Low disk space warning", "SeismoVerse never deletes anything. Copy old recording folders to another disk, then delete them yourself, or record to a folder on a bigger disk."],
+  ["The update check says there is no connection", "Check the internet connection of this PC. A network that blocks github.com also blocks updates: download the installer on another computer and run it here."],
   ["Something else", "Look in the **Log** panel, or open **Help > Log folder** and send the newest log file (`seismoverse.log`) with your question."],
 ], [1.3, 3]);
 
 // ---------------------------------------------------------------------------------------------
-H1("14. Files and folders");
+H1("15. Files and folders");
 P("SeismoVerse keeps its files in these folders of your Windows user:");
 TABLE(["What", "Where"], [
   ["Recordings (default)", "`Documents\\SeismoVerse\\Recordings`"],
