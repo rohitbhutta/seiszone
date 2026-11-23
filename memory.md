@@ -48,6 +48,11 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
 
 ## Status (2026-11-22, version 1.7.0 installed 19:48)
 
+* **2026-11-23 14:30 - signed updates (branch fix/signed-updates):** #5 merged (16b08c8). Releases
+  must carry SeismoVerseSetup.exe.sig (Ed25519, core/ed25519.py) by the key in
+  %USERPROFILE%\.seismoverse-release\signing.key (public d812e2fb...f19d in TRUSTED_KEYS). NEVER
+  commit, upload or print that key; the user keeps an offline copy. Nothing published yet.
+
 * **2026-11-23 14:00 - 2.2.0 on branch fix/windows-fit-screen (pull request, with 2.1.1):** updates
   through GitHub Releases of the PUBLIC repo rohitbhutta/seismoverse-releases (created; README
   only). Publish: build.py then installer/publish.py --notes "...". Commits to that repo through

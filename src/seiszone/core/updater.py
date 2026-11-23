@@ -1,9 +1,16 @@
 """Updates without a server of our own: GitHub Releases of a small public repository that holds
 only the installers (RELEASES_REPO; the source repository stays private).
 
-Publishing (installer/publish.py, on the build PC): a release "v<version>" with two files,
-SeismoVerseSetup.exe and SeismoVerseSetup.exe.sha256 ("<sha256 hex>  SeismoVerseSetup.exe"),
-and the "What's new" text as the release notes.
+Publishing (installer/publish.py, on the build PC): a release "v<version>" with three files,
+SeismoVerseSetup.exe, SeismoVerseSetup.exe.sha256 ("<sha256 hex>  SeismoVerseSetup.exe") and
+SeismoVerseSetup.exe.sig (base64 Ed25519 signature of signed_message(version, sha256), made with
+the publisher's key, which never leaves the build PC), and the "What's new" text as notes.
+
+Trust: an update is installed only when its signature checks with one of TRUSTED_KEYS (built
+into the program) - so a stranger who got into the GitHub account still could not make
+SeismoVerse install anything - and the downloaded installer has the signed SHA-256. The
+signature also binds the version, so an old installer cannot be offered as a newer one. Only
+https addresses of GitHub (ALLOWED_HOSTS) are used, also after redirects.
 
 Checking (ui/update_dialog.py): one HTTPS request to the GitHub API for the newest release
 (latest_release). Nothing about the PC or its data is sent - only the request itself, with
@@ -16,6 +23,7 @@ SEISZONE_UPDATE_CHECK=off (set by the tests) or config "updates": {"check": fals
 automatic check; the tests use a local fake release server only.
 """
 
+import base64
 import hashlib
 import json
 import logging
@@ -24,10 +32,12 @@ import re
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
 from .. import APP_NAME, VERSION
+from . import ed25519
 
 log = logging.getLogger("seiszone")
 
@@ -35,6 +45,13 @@ RELEASES_REPO = "rohitbhutta/seismoverse-releases"
 API = "https://api.github.com"
 SETUP_ASSET = f"{APP_NAME}Setup.exe"
 SHA_ASSET = SETUP_ASSET + ".sha256"
+SIG_ASSET = SETUP_ASSET + ".sig"
+# public keys (hex) of the publisher's signing key(s); the secret key stays on the build PC
+# (%USERPROFILE%\.seismoverse-release\signing.key, installer/publish.py)
+TRUSTED_KEYS = ("d812e2fb372a5ab2a9bf514325342ace3d4ad8196563bc7469926b037583f19d",)
+ALLOWED_HOSTS = ("api.github.com", "github.com", "objects.githubusercontent.com",
+                 "release-assets.githubusercontent.com")
+REQUIRE_HTTPS = True
 ENV = "SEISZONE_UPDATE_CHECK"
 CHECK_EVERY = 20 * 3600          # s between automatic checks (about once a day)
 TIMEOUT = 20.0                   # s for one request
@@ -93,9 +110,52 @@ def automatic_check_allowed(cfg_updates, now=None, frozen=None):
     return not (0 < now - last < CHECK_EVERY)
 
 
+def signed_message(version, sha256):
+    """What the publisher signs: the program, the version and the installer's SHA-256."""
+    return f"{APP_NAME} release\nversion {version}\nsha256 {sha256.lower()}\n".encode("ascii")
+
+
+def signature_ok(version, sha256, signature, keys=None):
+    """True when signature (bytes) is the signature of this version and SHA-256 by one of the
+    trusted publisher keys."""
+    msg = signed_message(version, sha256)
+    for key in TRUSTED_KEYS if keys is None else keys:
+        try:
+            if ed25519.verify(bytes.fromhex(key), msg, signature):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def _check_url(url):
+    """UpdateError unless url is an https address of GitHub (ALLOWED_HOSTS)."""
+    u = urllib.parse.urlsplit(str(url or ""))
+    host = (u.hostname or "").lower()
+    if (REQUIRE_HTTPS and u.scheme != "https") or u.scheme not in ("https", "http") or host not in ALLOWED_HOSTS:
+        raise UpdateError(f"The update points to an address that is not GitHub ({u.scheme}://{host}); "
+                          "it is not used.")
+
+
+class _GitHubRedirectsOnly(urllib.request.HTTPRedirectHandler):
+    """Follow a redirect only to an https GitHub address (checked before it is asked)."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _check_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def _get(url, timeout, accept="application/vnd.github+json"):
+    _check_url(url)
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": accept})
-    return urllib.request.urlopen(req, timeout=timeout)   # noqa: S310 - https (or the tests' local server)
+    opener = urllib.request.build_opener(_GitHubRedirectsOnly)
+    r = opener.open(req, timeout=timeout)              # checked: https GitHub only, also redirects
+    try:
+        _check_url(r.geturl())                         # also where a redirect ended
+    except UpdateError:
+        r.close()
+        raise
+    return r
 
 
 def _reason(e):
@@ -124,23 +184,39 @@ def latest_release(repo=RELEASES_REPO, api=API, timeout=TIMEOUT):
     if version is None:
         raise UpdateError(f"The newest release ({tag or 'no name'}) has no version number.")
     assets = {a.get("name"): a for a in data.get("assets") or [] if isinstance(a, dict)}
-    setup, sha = assets.get(SETUP_ASSET), assets.get(SHA_ASSET)
+    setup, sha, sig = assets.get(SETUP_ASSET), assets.get(SHA_ASSET), assets.get(SIG_ASSET)
     if setup is None:
         raise UpdateError(f"The newest release has no {SETUP_ASSET}.")
     if sha is None:
         raise UpdateError(f"The newest release has no checksum file ({SHA_ASSET}); it is not installed.")
-    try:
-        with _get(sha["browser_download_url"], timeout, accept="application/octet-stream") as r:
-            text = r.read(4096).decode("ascii", "replace")
-    except (OSError, KeyError) as e:
-        raise UpdateError(f"The checksum of the update could not be read ({_reason(e)}).") from None
+    if sig is None:
+        raise UpdateError("The newest release is not signed by the SeismoVerse publisher; it is not installed.")
+    text = _small(sha, timeout, "checksum")
     m = re.search(r"\b([0-9a-fA-F]{64})\b", text)
     if not m:
         raise UpdateError("The checksum file of the update is not valid; it is not installed.")
-    return Release(version=".".join(str(x) for x in version), tag=tag, title=str(data.get("name") or tag),
+    try:
+        signature = base64.b64decode(_small(sig, timeout, "signature").strip(), validate=True)
+    except ValueError:
+        signature = b""
+    version_text = ".".join(str(x) for x in version)
+    if not signature_ok(version_text, m.group(1), signature):
+        raise UpdateError("The newest release is not signed by the SeismoVerse publisher (the signature does "
+                          "not match); it is not installed.")
+    _check_url(setup.get("browser_download_url"))
+    return Release(version=version_text, tag=tag, title=str(data.get("name") or tag),
                    notes=str(data.get("body") or ""), setup_url=str(setup.get("browser_download_url") or ""),
                    setup_size=int(setup.get("size") or 0), sha256=m.group(1).lower(),
                    page_url=str(data.get("html_url") or ""))
+
+
+def _small(asset, timeout, what):
+    """The text of a small release file (checksum, signature)."""
+    try:
+        with _get(asset["browser_download_url"], timeout, accept="application/octet-stream") as r:
+            return r.read(4096).decode("ascii", "replace")
+    except (OSError, KeyError) as e:
+        raise UpdateError(f"The {what} of the update could not be read ({_reason(e)}).") from None
 
 
 def download(release, folder=None, progress=None, cancelled=None, timeout=TIMEOUT):
