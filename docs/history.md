@@ -4,6 +4,21 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 (late) - plan for Linux, Mac and iPhone/iPad (plan only, nothing changed)
+
+* Asked: run SeismoVerse on a Linux machine and an "iOS machine"; plan first.
+* Read the code for Windows-only parts: paths.py (APPDATA folders), single_instance.py (Windows
+  mutex; elsewhere no protection), ui/app.py (registry autostart, native close filter, taskbar
+  id), core/updater.py (runs the setup .exe), core/ports.py (old Gecko service, already a no-op
+  elsewhere), external tools filter (*.exe), theme font. Everything else is portable.
+* Checked: PySide6 6.12 wheels need glibc 2.34+ (Linux) and macOS 14+; Qt for Python 6.12 runs on
+  iOS but cannot use numpy/scipy yet -> SeismoVerse cannot be built for iPhone/iPad today.
+* This PC has no WSL and no Docker. The source repo rohitbhutta/seiszone is **public** (the notes
+  said private).
+* Plan: docs/reports/2026-11-23-linux-macos-ios-plan.md - steps 2.3.0 common base, Linux AppImage,
+  Linux updates, Mac .app/.dmg, optional Linux service and an iPhone/iPad live web page. Waiting
+  for the user's answers (part 8 of the plan).
+
 ## 2026-11-23 14:41 - 2.2.0 installed and running
 
 * The user ran the installer (setup log #004 at 14:40:24). SeismoVerse.exe 2.2.0 runs as the
