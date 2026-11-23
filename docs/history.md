@@ -4,6 +4,13 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 - 1.9.0 merged into main and built
+
+* At the user's OK ("Merge and build"): pull request #2 merged (merge commit 15e1f18), local
+  main pulled. Full suite on main: 357 passed, 1 skipped.
+* `python installer/build.py`: build/dist/SeisZoneSetup.exe 68.9 MB, SeisZone.exe reports 1.9.0.
+  Not installed (the user runs the installer).
+
 ## 2026-11-23 03:00 - 1.9.0: Port box in Add source; any SeedLink server (same pull request)
 
 * Asked: SeedLink sources by IP and a port typed by hand; no port = 18000 (default); a typed port
