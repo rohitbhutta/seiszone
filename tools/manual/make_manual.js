@@ -8,7 +8,7 @@ const {
 } = require("docx");
 
 const [SHOTS, ICON, OUT] = process.argv.slice(2);
-const VERSION = "2.1.0";
+const VERSION = "2.1.1";
 const TEAL = "1F8A7E";
 const DARK = "1B2A33";
 const MUTED = "5B6B73";

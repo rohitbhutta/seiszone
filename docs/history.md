@@ -4,6 +4,26 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 13:25 - 2.1.1: windows always fit the screen (Data server title bar was hidden)
+
+* 2.1.0 installed by the user and running (13:15:40, C:\Program Files\SeisZone\SeismoVerse.exe
+  2.1.0; the first "installed" check at 13:1x found 2.0.0 still there and no setup log - the
+  user ran the installer again).
+* The user (screenshot): the Data server window "is not opening on the full screen ... the upper
+  side is hidden"; only dragging an edge brought it back. This PC: 1920 x 1080 at 125 % = 1536 x
+  824 points of free area. With the user's data the window was placed with its title bar above
+  the top edge (with test data it opens at y 102 - not reproduced with them).
+* Fix: ui/screen_fit.py fit_to_screen / keep_on_screen: a window is shrunk to the free area
+  (taskbar excluded, room for the title bar) and moved so its whole frame is inside. Applied to
+  every window MainWindow._open opens (Add source, Record, Export, Data server, Settings, About)
+  right after it is shown and once more when Windows has drawn its frame. The Data server tabs
+  are in scroll areas (minimum 480 x 360; natural height 472 instead of 861 points), so long
+  texts make a tab scroll instead of the window grow past the screen.
+* Checked on the real screen with an invisible window (WA_DontShowOnScreen): forced to y -150,
+  1000 points tall -> (385, 8, 760, 776), inside the free area.
+* tools/manual/shots.py turns keep_on_screen off (the offscreen screen is only 800 x 600).
+  Manual rebuilt (version 2.1.1). Version 2.1.1.
+
 ## 2026-11-23 13:13 - 2.1.0 merged into main and built
 
 * At the user's OK ("Merge and build"): pull request #4 merged (merge commit 4b0324d), local main

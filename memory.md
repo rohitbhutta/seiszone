@@ -48,6 +48,10 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
 
 ## Status (2026-11-22, version 1.7.0 installed 19:48)
 
+* **2026-11-23 13:25 - 2.1.1 on branch fix/windows-fit-screen (pull request):** 2.1.0 is installed
+  and running. Every window the main window opens is kept inside the screen (ui/screen_fit.py;
+  this PC has 1536 x 824 points at 125 %); the Data server tabs scroll. See docs/history.md.
+
 * **2026-11-23 13:13 - 2.1.0 merged (pull request #4, 4b0324d) and built (SeismoVerseSetup.exe
   68.9 MB; not installed yet):** Data server
   > GCF over UDP > "Send to a computer": computers added by hand (config gcf_server.clients) get

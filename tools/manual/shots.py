@@ -27,6 +27,8 @@ from fake_engine import FakeEngine  # noqa: E402
 from seiszone.ui import server_window  # noqa: E402
 server_window.local_addresses = lambda: ["192.168.1.50"]
 from seiszone.ui.main_window import MainWindow  # noqa: E402
+from seiszone.ui import main_window  # noqa: E402
+main_window.keep_on_screen = lambda w: None   # the offscreen screen is only 800 x 600: keep the sizes set here
 
 
 def pump(seconds):

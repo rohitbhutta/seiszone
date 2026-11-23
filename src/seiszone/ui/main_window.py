@@ -27,6 +27,7 @@ from .channels_panel import ChannelsPanel
 from .export_dialog import ExportDialog
 from .log_panel import LogPanel
 from .record_dialog import RecordDialog
+from .screen_fit import keep_on_screen
 from .server_window import DataServerWindow
 from .settings_dialog import SettingsDialog
 from .sources_panel import SourcesPanel
@@ -510,6 +511,7 @@ class MainWindow(QMainWindow):
             dlg.show()
             dlg.raise_()
             dlg.activateWindow()
+        keep_on_screen(dlg)          # never larger than the screen, title bar always reachable
         return dlg
 
     def add_source(self, initial_text=""):

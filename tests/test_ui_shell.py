@@ -863,3 +863,60 @@ def test_autostart_entry_of_the_old_program_is_taken_over(monkeypatch, tmp_path)
                 winreg.DeleteKey(winreg.HKEY_CURRENT_USER, k)
             except OSError:
                 pass
+
+
+# --------------------------------------------------------------------------------------------
+# windows stay on the screen (ui/screen_fit.py)
+# --------------------------------------------------------------------------------------------
+def test_a_window_never_starts_above_or_beyond_the_screen(qapp):
+    """The user's case: 1920 x 1080 at 125 % leaves 1536 x 824 points; the Data server window
+    had its title bar above the top edge. fit_to_screen shrinks a window to the free area and
+    moves its frame (title bar included) inside."""
+    from PySide6.QtCore import QRect
+    from seiszone.ui import screen_fit
+    avail = QRect(0, 0, 1536, 824)
+    dlg = QDialog()
+    try:
+        for x, y, w, h in ((385, -150, 760, 1000),       # above the top and taller than the screen
+                           (-300, 100, 760, 600),         # off the left side
+                           (1200, 500, 760, 600),         # off the right side and the bottom
+                           (100, 100, 2000, 600)):        # wider than the screen
+            dlg.setGeometry(x, y, w, h)
+            assert screen_fit.fit_to_screen(dlg, avail)
+            g = dlg.geometry()                          # offscreen: no frame, so this is the frame's place
+            assert g.top() >= avail.top() and g.x() >= avail.left(), (x, y, w, h, g.getRect())
+            # room is kept for the title bar Windows adds above the window
+            assert g.y() + g.height() + screen_fit.TITLE_GUESS <= avail.bottom() + 1, (x, y, w, h, g.getRect())
+            assert g.right() <= avail.right(), (x, y, w, h, g.getRect())
+        dlg.setGeometry(385, 102, 760, 600)               # already fine: left alone
+        assert not screen_fit.fit_to_screen(dlg, avail) and dlg.geometry().getRect() == (385, 102, 760, 600)
+    finally:
+        dlg.deleteLater()
+
+
+def test_data_server_window_fits_and_scrolls(qapp, window):
+    """The Data server window opens inside the screen and its tabs scroll, so a small screen or
+    long texts never push its title bar out of reach; the same for a dialog opened from the
+    main window."""
+    from PySide6.QtWidgets import QScrollArea
+    dlg = window.open_data_server()
+    try:
+        pump(qapp, 0.2)
+        avail = dlg.screen().availableGeometry()
+        g = dlg.frameGeometry()
+        assert avail.contains(g), (g.getRect(), avail.getRect())
+        assert all(isinstance(dlg.tabs.widget(i), QScrollArea) for i in range(dlg.tabs.count()))
+        assert dlg.minimumSize().height() <= 400 and dlg.sizeHint().height() < 600
+        # far off the screen and too tall: back inside when it is opened again
+        dlg.setGeometry(100, -200, 760, avail.height() + 300)
+        from seiszone.ui.screen_fit import fit_to_screen
+        fit_to_screen(dlg)
+        assert dlg.geometry().top() >= avail.top() and dlg.geometry().bottom() <= avail.bottom()
+    finally:
+        dlg.close()
+    settings = window.open_settings()
+    try:
+        pump(qapp, 0.2)
+        assert settings.screen().availableGeometry().contains(settings.frameGeometry())
+    finally:
+        settings.reject()

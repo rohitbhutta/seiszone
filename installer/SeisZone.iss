@@ -15,7 +15,7 @@
 ; by setup or uninstall (they keep the folder name SeisZone).
 
 #ifndef AppVer
-  #define AppVer "2.1.0"
+  #define AppVer "2.1.1"
 #endif
 #define AppName "SeismoVerse"
 #define Exe "SeismoVerse.exe"
