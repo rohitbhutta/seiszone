@@ -99,7 +99,9 @@ exp = win.open_export_dialog()
 pump(0.6)
 shot(exp, "06_export.png")
 
+config.update_section("gcf_server", {"enabled": True, "clients": ["192.168.1.20:1567"]})  # one added by hand
 srv = win.open_data_server()
+srv.resize(820, 800)
 pump(0.6)
 tabs = srv.findChildren(__import__("PySide6.QtWidgets", fromlist=["QTabWidget"]).QTabWidget)
 if tabs:

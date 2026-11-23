@@ -42,7 +42,7 @@ from .links import RECEIVING
 from .packet_store import PacketStore
 from .recorder import RecordingManager
 from .seedlink_client import SeedLinkClient
-from .gcf_server import GcfServer
+from .gcf_server import GcfServer, client_list
 from .seedlink_server import SeedLinkServer
 from .stationxml import ResponseStore
 
@@ -634,6 +634,11 @@ class Engine:
         self.gcf_server = server
         self._gs_error = ""
         log.info("GCF server listening on UDP %s:%d (channels up to %g sps)", bind, self._gs_port, max_rate)
+        server.set_fixed(self._gcf_fixed())
+
+    def _gcf_fixed(self):
+        """[(ip, port)] of the computers added by hand (config["gcf_server"]["clients"])."""
+        return client_list((self.config.get("gcf_server") or {}).get("clients"))
 
     def _close_gcf_server(self):
         srv, self.gcf_server = self.gcf_server, None
@@ -646,6 +651,7 @@ class Engine:
         srv = self.gcf_server
         return {"enabled": enabled, "bind": bind, "port": self._gs_port or port, "max_rate": max_rate,
                 "listening": srv is not None, "error": self._gs_error,
+                "fixed": [f"{ip}:{p}" for ip, p in self._gcf_fixed()],
                 "clients": len(srv.clients) if srv else 0, "peers": srv.peers() if srv else [],
                 "blocks": srv.blocks_sent if srv else 0, "control": list(srv.control) if srv else []}
 
@@ -764,6 +770,7 @@ class Engine:
                 await self._open_gcf_server()
             elif self.gcf_server is not None:   # the SeedLink port it names may have changed
                 self.gcf_server.seedlink_port = self._sl_port if self._sl_server is not None else None
+                self.gcf_server.set_fixed(self._gcf_fixed())     # clients added / removed by hand
             self._open_store()
 
     # ================================================================== housekeeping

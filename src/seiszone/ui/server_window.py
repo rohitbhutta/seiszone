@@ -10,6 +10,12 @@ page of the user's earlier viewer: switch, port, Clients, Control).
 
 Settings are saved in config["gcf_server"] and config["seedlink_server"] (its "Listen on" and
 "Organization" stay in Settings > SeedLink server) and applied at once (Apply).
+
+GCF tab, "Send to a computer": the user types another computer's IP address (and port, empty =
+1567) and clicks Add: it is saved in config["gcf_server"]["clients"] at once and gets all data
+without asking first, until the user selects it in Clients and clicks Remove. SeedLink cannot
+send to a computer that did not ask, so the SeedLink tab has no Add: its programs connect by
+themselves.
 """
 
 import logging
@@ -21,6 +27,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QDialog, QDialogBut
                                QHeaderView, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QSpinBox, QTableWidget,
                                QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
 
+from ..core.gcf_server import DEFAULT_PORT, client_list, parse_client
 from . import theme
 from .settings_dialog import parse_port
 
@@ -174,13 +181,52 @@ class DataServerWindow(QDialog):
         self.how.setWordWrap(True)
         self.how.setTextFormat(Qt.RichText)
         self.clients = _table(COLUMNS)
+        self.clients.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.clients.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.control = _log_box()
+        # a computer added by hand: it gets all data without asking first
+        self.add_ip = QLineEdit()
+        self.add_ip.setPlaceholderText("IP address, e.g. 192.168.1.20")
+        self.add_ip.setClearButtonEnabled(True)
+        self.add_port = QLineEdit()
+        self.add_port.setPlaceholderText(str(DEFAULT_PORT))
+        self.add_port.setFixedWidth(90)
+        self.add_button = QPushButton(theme.icon("add"), "Add")
+        self.add_button.setToolTip("Send all data to this computer from now on, without it asking first")
+        self.add_button.clicked.connect(self.add_client)
+        self.remove_button = QPushButton(theme.icon("remove"), "Remove")
+        self.remove_button.setToolTip("Stop sending to the computer selected in Clients (only those added by hand)")
+        self.remove_button.clicked.connect(self.remove_client)
+        for b in (self.add_button, self.remove_button):
+            b.setAutoDefault(False)         # Enter in another field never adds or removes a computer
+        self.add_ip.returnPressed.connect(self.add_client)
+        self.add_port.returnPressed.connect(self.add_client)
+        for e in (self.add_ip, self.add_port):
+            e.textEdited.connect(self.error.hide)
+        add_row = QHBoxLayout()
+        add_row.addWidget(QLabel("Send to a computer"))
+        add_row.addWidget(self.add_ip, 1)
+        add_row.addWidget(QLabel("Port"))
+        add_row.addWidget(self.add_port)
+        add_row.addWidget(self.add_button)
+        add_row.addWidget(self.remove_button)
+        self.clients_hint = QLabel(
+            "Computers you add here get all data without asking first and stay until you select them and "
+            "click Remove. Other computers appear by themselves while they read this PC.")
+        self.clients_hint.setWordWrap(True)
+        self.clients_hint.setStyleSheet(f"color: {theme.COLORS['muted']};")
+        self.add_note = QLabel()
+        self.add_note.setWordWrap(True)
+        self.add_note.hide()
         lay = QVBoxLayout(w)
         lay.addLayout(form)
         lay.addWidget(self.state)
         lay.addWidget(self.how)
+        lay.addLayout(add_row)
+        lay.addWidget(self.add_note)
         lay.addWidget(QLabel("Clients"))
         lay.addWidget(self.clients, 2)
+        lay.addWidget(self.clients_hint)
         lay.addWidget(QLabel("Control"))
         lay.addWidget(self.control, 1)
         return w
@@ -220,6 +266,11 @@ class DataServerWindow(QDialog):
         self.sl_buffer.setWordWrap(True)
         self.sl_clients = _table(SL_COLUMNS)
         self.sl_control = _log_box()
+        sl_hint = QLabel("SeedLink programs connect by themselves and appear here while they are connected; "
+                         "SeedLink cannot send to a computer that did not ask. To send to a computer without "
+                         "it asking, use the GCF over UDP tab (Send to a computer).")
+        sl_hint.setWordWrap(True)
+        sl_hint.setStyleSheet(f"color: {theme.COLORS['muted']};")
         lay = QVBoxLayout(w)
         lay.addLayout(form)
         lay.addWidget(self.sl_state)
@@ -227,6 +278,7 @@ class DataServerWindow(QDialog):
         lay.addWidget(self.sl_how)
         lay.addWidget(QLabel("Clients"))
         lay.addWidget(self.sl_clients, 2)
+        lay.addWidget(sl_hint)
         lay.addWidget(QLabel("Control"))
         lay.addWidget(self.sl_control, 1)
         return w
@@ -280,6 +332,75 @@ class DataServerWindow(QDialog):
         QTimer.singleShot(300, self.refresh)
         return True
 
+    # ------------------------------------------------------------------ clients added by hand
+    def _fixed(self):
+        """["ip:port"] of the computers added by hand (the saved list)."""
+        return [f"{ip}:{port}" for ip, port in
+                client_list((self.config.get("gcf_server") or {}).get("clients"))]
+
+    def _show_error(self, text):
+        self.tabs.setCurrentIndex(TAB_GCF)
+        self.error.setText(text)
+        self.error.show()
+
+    def _save_fixed(self, fixed):
+        self.config.update_section("gcf_server", {"clients": list(fixed)})
+        log.info("GCF server clients added by hand: %s", ", ".join(fixed) or "none")
+        try:
+            self.engine.apply_settings()
+        except Exception:
+            log.exception("applying the GCF server clients failed")
+        QTimer.singleShot(300, self.refresh)
+
+    def add_client(self):
+        """Add the typed computer to the computers added by hand (saved at once)."""
+        try:
+            ip, port = parse_client(self.add_ip.text(), self.add_port.text())
+        except ValueError as e:
+            self._show_error(str(e))
+            return False
+        key = f"{ip}:{port}"
+        fixed = self._fixed()
+        if key in fixed:
+            self._show_error(f"{key} is already in the list.")
+            return False
+        self.error.hide()
+        self._save_fixed(fixed + [key])
+        self.add_ip.clear()
+        self.add_port.clear()
+        c = theme.COLORS
+        st = (self.engine.status() or {}).get("gcf_server") or {}
+        if st.get("listening"):
+            self.add_note.setText(f"{key} added: it gets all data from now on.")
+            self.add_note.setStyleSheet(f"color: {c['ok']};")
+        else:
+            self.add_note.setText(f"{key} added. It gets data once the GCF server is on: tick \"Send all data to "
+                                  "other computers on the network\" above and click Apply.")
+            self.add_note.setStyleSheet(f"color: {c['warn']};")
+        self.add_note.show()
+        return True
+
+    def remove_client(self):
+        """Remove the computer selected in Clients (only one added by hand)."""
+        rows = self.clients.selectionModel().selectedRows() if self.clients.selectionModel() else []
+        if not rows:
+            self._show_error("Select a computer in Clients first, then click Remove.")
+            return False
+        item = self.clients.item(rows[0].row(), 0)
+        key = item.text() if item is not None else ""
+        fixed = self._fixed()
+        if key not in fixed:
+            self._show_error(f"{key} was not added by hand: it stops by itself when it stops asking "
+                             "(after 3 minutes at the latest).")
+            return False
+        self.error.hide()
+        fixed.remove(key)
+        self._save_fixed(fixed)
+        self.add_note.setText(f"{key} removed: nothing more is sent to it.")
+        self.add_note.setStyleSheet(f"color: {theme.COLORS['muted']};")
+        self.add_note.show()
+        return True
+
     # ------------------------------------------------------------------ live state
     def refresh(self):
         status = self.engine.status() or {}
@@ -308,10 +429,29 @@ class DataServerWindow(QDialog):
                                     f"{int(st.get('blocks') or 0)} blocks sent", c["ok"])
         else:
             self._state(self.state, "The GCF server is off.", c["muted"])
-        _fill(self.clients, [(p.get("address", ""), p.get("params", ""),
-                              time.strftime(WHEN, time.localtime(p.get("since") or 0)),
-                              f"{float(p.get('idle') or 0):.0f} s ago", str(p.get("blocks", 0)))
-                             for p in st.get("peers") or []])
+        rows, seen = [], set()
+        for p in st.get("peers") or []:
+            addr = p.get("address", "")
+            seen.add(addr)
+            if p.get("fixed"):
+                rows.append((addr, f"{p.get('params', '')} (added by hand)",
+                             time.strftime(WHEN, time.localtime(p.get("since") or 0)),
+                             "sent without asking", str(p.get("blocks", 0))))
+            else:
+                rows.append((addr, p.get("params", ""), time.strftime(WHEN, time.localtime(p.get("since") or 0)),
+                             f"{float(p.get('idle') or 0):.0f} s ago", str(p.get("blocks", 0))))
+        waiting = "waiting: the GCF server is off" if not st.get("listening") else "waiting"
+        for addr in st.get("fixed") if "fixed" in st else self._fixed():
+            if addr not in seen:
+                rows.append((addr, "(added by hand)", "-", waiting, "0"))
+        sel = self.clients.selectionModel().selectedRows() if self.clients.selectionModel() else []
+        picked = self.clients.item(sel[0].row(), 0).text() if sel and self.clients.item(sel[0].row(), 0) else None
+        _fill(self.clients, rows)
+        if picked is not None:
+            for r, cells in enumerate(rows):
+                if cells[0] == picked:
+                    self.clients.selectRow(r)
+                    break
         self._lines = _show_lines(self.control, st.get("control") or [], self._lines)
 
     def _refresh_seedlink(self, st):

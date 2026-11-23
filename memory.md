@@ -48,6 +48,11 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
 
 ## Status (2026-11-22, version 1.7.0 installed 19:48)
 
+* **2026-11-23 afternoon - 2.1.0 on branch feature/gcf-manual-clients (pull request):** Data server
+  > GCF over UDP > "Send to a computer": computers added by hand (config gcf_server.clients) get
+  all data without asking, until removed. SeedLink tab has no Add (protocol). Untested with the
+  earlier viewer as receiver. See docs/history.md.
+
 * **2026-11-23 12:42 - 2.0.0 "SeismoVerse" installed and running** (merged in pull request #3,
   65df26a; 38/39 sources as before; installed in place in C:\Program Files\SeisZone):
   the program is now named **SeismoVerse** (the user's request); the folders keep the old name

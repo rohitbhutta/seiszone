@@ -8,7 +8,7 @@ const {
 } = require("docx");
 
 const [SHOTS, ICON, OUT] = process.argv.slice(2);
-const VERSION = "2.0.0";
+const VERSION = "2.1.0";
 const TEAL = "1F8A7E";
 const DARK = "1B2A33";
 const MUTED = "5B6B73";
@@ -360,6 +360,22 @@ BULLETS([
 ]);
 H2("GCF over UDP (port 1567, off)");
 P("For the earlier viewer on another computer. Tick **Send all data to other computers on the network (GCF over UDP)** and press **Apply**. On the other computer add a UDP server with **this PC's IP address:1567**. If another program already uses port 1567 on this PC, choose another port (for example 1568) and use that on the other computer.");
+IMG("08_data_server_gcf.png", "Data server, GCF tab: Send to a computer, and the Clients list with one computer added by hand.", 470);
+H2("Sending to a computer by hand");
+P("Normally the other computer asks for the data and appears in **Clients** by itself. To send all data to a computer **without it asking first**:");
+STEPS([
+  "On the **GCF over UDP** tab, type the other computer's **IP address** in **Send to a computer**, for example `192.168.1.20`.",
+  "Leave **Port** empty for **1567**, or type the port the other computer listens on.",
+  "Click **Add**. The computer is saved at once and appears in **Clients** as **(added by hand)**.",
+]);
+BULLETS([
+  "It gets every data block from now on, as long as the GCF server is on. While the server is off, the list says **waiting: the GCF server is off**.",
+  "It stays in the list, also after SeismoVerse restarts, and is never dropped for being idle.",
+  "To stop it, select it in **Clients** and click **Remove**. Computers that asked by themselves cannot be removed this way: they stop when they stop asking.",
+  "**Control** shows when a computer was added, removed or asked to stop.",
+]);
+NOTE("The other program must accept data on that port without asking for it first. If it ignores the data, add this PC as a server in that program instead (see above).");
+P("The **SeedLink over TCP** tab has no Add button: a SeedLink program always connects by itself, and SeedLink cannot send to a computer that did not ask.");
 
 // ---------------------------------------------------------------------------------------------
 H1("11. Settings");

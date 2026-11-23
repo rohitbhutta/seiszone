@@ -479,6 +479,16 @@ GCF over UDP, step by step:
 3. The window lists the connected computers (Clients, Params, since when, last request, blocks
    sent) and what happened (Control). The status bar shows **Data server :1567 - 1 client**.
 
+**Send to a computer (added by hand).** On the GCF tab, type another computer's IP address in
+**Send to a computer** (Port empty = 1567, or the port it listens on) and click **Add**. It is
+saved at once, listed in Clients as **(added by hand)**, and gets every data block without asking
+first - also after SeismoVerse restarts, and it is never dropped for being idle (while the GCF
+server is off it says "waiting: the GCF server is off"). To stop it, select it in Clients and
+click **Remove**; computers that asked by themselves cannot be removed this way (they stop when
+they stop asking). The other program must accept data it did not ask for; if it ignores it, add
+this PC as a server in that program instead. The SeedLink tab has no Add: SeedLink cannot send to
+a computer that did not ask.
+
 Only one program on a PC can use a port. If the earlier viewer runs on this PC with port 1567,
 the window says "port 1567 is in use by another program": choose another port (for example
 1568) and type that on the other computer. The server is off until you switch it on, so it never
