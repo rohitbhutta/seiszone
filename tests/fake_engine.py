@@ -133,9 +133,13 @@ class FakeEngine:
                 "paused": False, "error": ""}
 
     def gcf_server_status(self, now):
+        from seiszone.core.gcf_server import client_list
         on = bool((self.config.get("gcf_server") or {}).get("enabled"))
+        fixed = [f"{ip}:{p}" for ip, p in client_list((self.config.get("gcf_server") or {}).get("clients"))]
+        peers = [{"address": "192.168.1.100:1567", "params": "B", "since": now - 120, "idle": 3.0,
+                  "blocks": 4321, "fixed": False}] if on else []
+        peers += [{"address": a, "params": "B", "since": now - 30, "idle": 30.0, "blocks": 77, "fixed": True}
+                  for a in fixed] if on else []
         return {"enabled": on, "port": 1567, "max_rate": 1000, "listening": on, "error": "",
-                "clients": 1 if on else 0, "blocks": 4321 if on else 0,
-                "peers": [{"address": "192.168.1.100:1567", "params": "B", "since": now - 120, "idle": 3.0,
-                           "blocks": 4321}] if on else [],
+                "clients": len(peers), "blocks": 4321 if on else 0, "peers": peers, "fixed": fixed,
                 "control": ["22-11-2026 21:16:23  Added client 192.168.1.100:1567"] if on else []}

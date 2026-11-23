@@ -12,7 +12,12 @@ Protocol (the server side of core/gcf_link.py; core/gcf.py describes the blocks)
     client -> server  GCFSTOP        server -> client  GCFACKN; the client is removed
 
 A client that sends nothing for CLIENT_TIMEOUT s is removed (pull clients refresh their
-GCFSEND:B every 20 s). Channels above config["gcf_server"]["max_rate"] sps are not sent (the
+GCFSEND:B every 20 s).
+
+Clients added by hand (set_fixed, from config["gcf_server"]["clients"], the Add button of the Data
+server window): the server sends them every block without being asked first, they are never
+removed for being idle, and only the user removes them. A GCFSEND:B from such a computer only
+refreshes it; its GCFSTOP is answered and noted, but it keeps its data until the user removes it. Channels above config["gcf_server"]["max_rate"] sps are not sent (the
 "sps transmitted block limit" of the earlier viewer's server).
 
 The data comes from the DataHub as miniSEED records and is cut again into GCF blocks per channel:
@@ -39,6 +44,7 @@ Threading: everything runs in the engine's asyncio loop (hub listeners too).
 """
 
 import asyncio
+import ipaddress
 import logging
 import math
 import re
@@ -58,6 +64,47 @@ BLOCK_SECONDS = 2            # longest block (at most 250 samples)
 MAX_PIECES = 4               # pieces of one channel open at once (live + backfill)
 PIECE_IDLE = 30.0            # s: a piece not continued for this long is sent as it is
 CONTROL_LINES = 200          # control log lines kept for the user interface
+DEFAULT_PORT = 1567          # the usual GCF UDP port (also of a client added by hand)
+
+
+def parse_client(text, port_text="", default_port=DEFAULT_PORT):
+    """(ip, port) of a computer typed in the Data server window: an IPv4 address, optionally
+    with ":port", and/or a port box (empty: 1567). ValueError with a message for the user."""
+    text = str(text or "").strip()
+    port_text = str(port_text or "").strip()
+    host, sep, typed = text.partition(":")
+    host = host.strip()
+    if not host:
+        raise ValueError("Type the other computer's IP address, for example 192.168.1.20.")
+    try:
+        ip = str(ipaddress.IPv4Address(host))
+    except ValueError:
+        raise ValueError(f"{host} is not an IP address: type it like 192.168.1.20.") from None
+    if sep and port_text and typed.strip() != port_text:
+        raise ValueError(f"The address says port {typed.strip()} and the Port box says {port_text}: keep only one.")
+    p = (typed.strip() if sep else "") or port_text or str(default_port)
+    try:
+        port = int(p)
+    except ValueError:
+        port = 0
+    if not 1 <= port <= 65535:
+        raise ValueError("The port must be a number from 1 to 65535.")
+    return ip, port
+
+
+def client_list(items):
+    """[(ip, port)] from config["gcf_server"]["clients"] (["ip:port", ...]); bad entries are
+    skipped (and logged)."""
+    out = []
+    for item in items or []:
+        try:
+            addr = parse_client(item)
+        except ValueError as e:
+            log.warning("GCF server: client %r in the settings is skipped: %s", item, e)
+            continue
+        if addr not in out:
+            out.append(addr)
+    return out
 STATE_KEY = "gcf_server_ids"
 B36 = re.compile(r"[^0-9A-Z]")
 TAPS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -105,7 +152,7 @@ class GcfServer(asyncio.DatagramProtocol):
         self.seedlink_port = seedlink_port          # told to SeismoVerse clients in the status blocks
         self.gcf_names = dict(gcf_names or {})      # sid -> (system id, stream id) of GCF sources
         self.transport = None
-        self.clients = {}            # (ip, port) -> {"params", "since", "last", "blocks"}
+        self.clients = {}            # (ip, port) -> {"params", "since", "last", "blocks", "fixed"}
         self.control = []            # [text] like the earlier viewer's Control box
         self.blocks_sent = 0
         self._channels = {}          # sid -> _Channel (None: not sent, with the reason in _skipped)
@@ -159,6 +206,12 @@ class GcfServer(asyncio.DatagramProtocol):
             self._status_sent.clear()          # the new client gets every station's status at once
         elif cmd.startswith(b"GCFSTOP"):
             self._send(b"GCFACKN", addr)
+            c = self.clients.get(addr)
+            if c is not None and c.get("fixed"):
+                c["last"] = now
+                self._note(f"Client {addr[0]}:{addr[1]} asked to stop; it was added by hand and keeps "
+                           "getting data until it is removed here")
+                return
             if self.clients.pop(addr, None) is not None:
                 self._note(f"Removed client {addr[0]}:{addr[1]} (GCFSTOP)")
                 log.info("GCF server: client %s:%d stopped (%d left)", addr[0], addr[1], len(self.clients))
@@ -183,7 +236,41 @@ class GcfServer(asyncio.DatagramProtocol):
     def peers(self):
         now = time.time()
         return [{"address": f"{a[0]}:{a[1]}", "params": c["params"], "since": c["since"],
-                 "idle": now - c["last"], "blocks": c["blocks"]} for a, c in list(self.clients.items())]
+                 "idle": now - c["last"], "blocks": c["blocks"], "fixed": bool(c.get("fixed"))}
+                for a, c in list(self.clients.items())]
+
+    def set_fixed(self, addrs):
+        """The clients added by hand: [(ip, port)]. New ones get every block from now on (and
+        every station's status at once); hand-added ones no longer listed are removed. A client
+        that asked by itself and is now listed becomes hand-added (it is kept)."""
+        want = []
+        for ip, port in addrs or []:
+            addr = (str(ip), int(port))
+            if addr not in want:
+                want.append(addr)
+        now = time.time()
+        for addr, c in list(self.clients.items()):
+            if c.get("fixed") and addr not in want:
+                del self.clients[addr]
+                self._note(f"Removed client {addr[0]}:{addr[1]} (removed by hand)")
+                log.info("GCF server: client %s:%d removed by hand", addr[0], addr[1])
+        added = False
+        for addr in want:
+            c = self.clients.get(addr)
+            if c is not None:
+                c["fixed"] = True
+                continue
+            if len(self.clients) >= MAX_CLIENTS:
+                self._note(f"Not sending to {addr[0]}:{addr[1]} ({MAX_CLIENTS} clients already)")
+                continue
+            self.clients[addr] = {"params": "B", "since": now, "last": now, "blocks": 0, "fixed": True}
+            self._note(f"Added client {addr[0]}:{addr[1]} by hand: it gets all data from now on")
+            log.info("GCF server: client %s:%d added by hand (%d now)", addr[0], addr[1], len(self.clients))
+            added = True
+        if added:
+            self._status_sent.clear()          # the new client gets every station's status at once
+        if not self.clients:
+            self._channels.clear()
 
     # ------------------------------------------------------------------ data
     def on_record(self, rec, source_id=""):
@@ -323,7 +410,7 @@ class GcfServer(asyncio.DatagramProtocol):
     def tick(self, now=None):
         now = time.time() if now is None else now
         for addr, c in list(self.clients.items()):
-            if now - c["last"] > CLIENT_TIMEOUT:
+            if not c.get("fixed") and now - c["last"] > CLIENT_TIMEOUT:
                 del self.clients[addr]
                 self._note(f"Removed client {addr[0]}:{addr[1]} (no request for {CLIENT_TIMEOUT:.0f} s)")
                 log.info("GCF server: client %s:%d timed out", addr[0], addr[1])

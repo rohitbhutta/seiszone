@@ -67,7 +67,8 @@ DEFAULTS = {
     "gecko": {"enabled": True, "bind": "0.0.0.0", "ports": [58772], "rename": {}},
     "seedlink_server": {"enabled": True, "bind": "0.0.0.0", "port": 18000, "organization": "SeismoVerse",
                         "buffer_days": 2, "buffer_folder": ""},
-    "gcf_server": {"enabled": False, "bind": "0.0.0.0", "port": 1567, "max_rate": 1000},
+    "gcf_server": {"enabled": False, "bind": "0.0.0.0", "port": 1567, "max_rate": 1000,
+                   "clients": []},      # ["ip:port"]: computers it sends to without being asked (added by hand)
     "recording": {"folder": "", "file_minutes": 60, "layout": "channel"},
     "buffer_minutes": 60,
     "view": {"window_seconds": 300, "filter": "none", "units": "counts", "scale": "auto",

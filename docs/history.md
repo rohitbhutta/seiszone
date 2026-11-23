@@ -4,6 +4,58 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 afternoon - 2.1.0: Data server, send to a computer added by hand
+
+Branch feature/gcf-manual-clients. The user (screenshots of both Data server tabs): "Here is no
+option to add or type anything in this both sections" (Clients, Control). Asked what to enter;
+the user chose "Add a client by hand"; plan approved ("Yes, build it").
+* GCF over UDP tab: "Send to a computer" row (IP address, Port - empty = 1567, Add, Remove).
+  Saved at once in config["gcf_server"]["clients"] (["ip:port"]) and applied (apply_settings).
+  core/gcf_server.py: parse_client / client_list, GcfServer.set_fixed(): a hand-added client
+  gets every block and the status blocks without asking, is never removed for being idle, its
+  GCFSTOP is answered and noted but it keeps its data; only Remove (set_fixed without it) ends it.
+  A computer that asked by itself and is then added becomes hand-added. engine: set_fixed when
+  the server opens and at every apply; status["gcf_server"]["fixed"].
+* Clients list: rows selectable; hand-added ones show "B (added by hand)" / "sent without asking",
+  or "waiting: the GCF server is off". Remove works only on hand-added ones (others: says why).
+  Add / Remove are not default buttons (Enter in another field does nothing to the list).
+* SeedLink tab: no Add (SeedLink cannot send to a computer that did not ask); a line under its
+  Clients list says so.
+* Not known yet: whether the earlier viewer accepts GCF it did not ask for - test with it on
+  another computer only with the user's OK.
+* Docs: user guide section 10, manual chapter 10 "Sending to a computer by hand" with a picture
+  of the GCF tab (27 pages, version 2.1.0). Version 2.1.0.
+* Tests: full suite 367 passed, 1 skipped. The first full run had one failure plus its teardown
+  error in tests/test_probe.py::test_probe_gcf_offline (UDP probe against a local fake unit,
+  code not touched here); it passed alone, 3 x the whole probe file, and the second full run -
+  a timing flake under load, to watch.
+* My line-ending helper rewrote the new PDF as if it were text (it would have been damaged); it
+  was restored from the build before any commit and the helper now skips binary files.
+
+## 2026-11-23 12:42 - 2.0.0 installed and running
+
+* The user ran SeismoVerseSetup.exe. SeismoVerse.exe 2.0.0 runs as the normal user from
+  C:\Program Files\SeisZone (updated in place; SeisZone.exe removed). Start menu and Public
+  desktop show SeismoVerse (no SeisZone shortcut left); firewall rule "SeismoVerse" enabled, the
+  old "SeisZone" rule deleted. Start with Windows was off before and stays off (no Run value).
+* Log: "SeedLink server organization changed from SeisZone to SeismoVerse", "SeismoVerse 2.0.0
+  starting", Gecko receiver on 58772 and SeedLink server on 18000 listening, ready at 12:42:21;
+  sources 38/39 receiving (the same 38/39 as before the update), missed data fetched. One
+  warning: SeedLink THA (10.8.0.7) sent a packet that is no valid miniSEED record (skipped).
+* The user then asked about the Data server window: "no option to add or type anything" in the
+  Clients and Control lists (they are read-only lists filled by connections) - asked what they
+  want to enter there.
+
+## 2026-11-23 12:39 - 2.0.0 merged into main and built
+
+* At the user's OK ("Merge and build"): pull request #3 merged (merge commit 65df26a), local main
+  pulled; its files are identical to the tested branch (363 passed, 1 skipped).
+* `python installer/build.py`: build/dist/SeismoVerseSetup.exe 68.8 MB; SeismoVerse.exe answers
+  "SeismoVerse 2.0.0" and its file details say SeismoVerse 2.0.0. The three PyInstaller warnings
+  (pyqtgraph.opengl, pycparser tables, scipy _cdflib) were in the 1.9.0 build too.
+* Not installed (the user runs the installer). After installing: check the version in About, that
+  the 38 sources are back, and that the Start menu shows SeismoVerse and no SeisZone.
+
 ## 2026-11-23 midday - 2.0.0: renamed SeismoVerse; About, Add source, label box; user manual
 
 Branch feature/seismoverse-name, pull request #3 (opened at the user's OK, commit c39ad8a;

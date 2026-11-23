@@ -203,3 +203,106 @@ def test_seiszone_pulls_from_seiszone(tmp_path):
     start, rate, got = segs[0]
     assert start == T0 + 1 and rate == 100.0
     assert np.array_equal(got, y[63:63 + len(got)]) and len(got) >= 2800
+
+
+# ------------------------------------------------------------------------------------------
+# computers added by hand (Data server window > GCF over UDP > Send to a computer)
+# ------------------------------------------------------------------------------------------
+def test_parse_client_address_and_port():
+    assert gcf_server.parse_client("192.168.1.20") == ("192.168.1.20", 1567)
+    assert gcf_server.parse_client(" 192.168.1.20 ", "1568") == ("192.168.1.20", 1568)
+    assert gcf_server.parse_client("192.168.1.20:1600") == ("192.168.1.20", 1600)
+    assert gcf_server.parse_client("192.168.1.20:1600", "1600") == ("192.168.1.20", 1600)
+    for text, port, says in (("", "", "Type the other computer's IP address"),
+                             ("my-pc", "", "is not an IP address"),
+                             ("192.168.1.300", "", "is not an IP address"),
+                             ("192.168.1.20", "abc", "from 1 to 65535"),
+                             ("192.168.1.20", "70000", "from 1 to 65535"),
+                             ("192.168.1.20:1600", "1567", "keep only one")):
+        with pytest.raises(ValueError, match=says):
+            gcf_server.parse_client(text, port)
+    assert gcf_server.client_list(["10.0.0.2", "10.0.0.2:1567", "bad", "10.0.0.3:1600"]) == [
+        ("10.0.0.2", 1567), ("10.0.0.3", 1600)]
+
+
+def test_hand_added_client_gets_data_without_asking(tmp_path):
+    """A computer added by hand never sends a request: it still gets the status and every data
+    block, is never removed for being idle, keeps its data after a GCFSTOP, and goes only when
+    it is removed by hand. Loopback only, random ports."""
+    async def main():
+        hub = DataHub()
+        hub.descriptions["KA.KAND"] = "KANGSABATI DOWN"
+        srv = GcfServer(hub, State(str(tmp_path / "s.json")), seedlink_port=18000)
+        port = await srv.open("127.0.0.1", 0)
+        loop = asyncio.get_running_loop()
+        tr, cl = await loop.create_datagram_endpoint(Client, local_addr=("127.0.0.1", 0))   # only listens
+        me = tr.get_extra_info("sockname")[:2]
+        srv.set_fixed([me])
+        assert srv.peers()[0]["fixed"] and srv.peers()[0]["address"] == f"{me[0]}:{me[1]}"
+        assert "by hand" in srv.control[-1]
+        recs, y = records(SID, T0, 1000, seed=5)
+        for r in recs:
+            hub.add_record(r, "t")
+        srv.tick(now=srv.clients[me]["last"] + 1)
+        blocks = [gcf.parse_datagram(d) for d in await _drain(cl.got)]
+        assert any(b.is_status and "KA.KAND KANGSABATI DOWN" in b.status_text for b in blocks)
+        got = _samples([b for b in blocks if not b.is_status], "HN0JZ0")
+        assert got and got[0][0] == T0 and got[0][1] == list(y[:len(got[0][1])]) and len(got[0][1]) >= 800
+        # never removed for being idle
+        srv.tick(now=srv.clients[me]["last"] + gcf_server.CLIENT_TIMEOUT * 10)
+        assert me in srv.clients
+        # its GCFSTOP is answered, but it keeps getting data (only the user removes it)
+        srv.datagram_received(b"GCFSTOP", me)
+        assert me in srv.clients and "added by hand" in srv.control[-1]
+        await _drain(cl.got)
+        # the same list again changes nothing; an empty list removes it
+        srv.set_fixed([me])
+        assert len(srv.clients) == 1
+        srv.set_fixed([])
+        assert not srv.clients and "removed by hand" in srv.control[-1]
+        more, _y = records(SID, T0 + 10, 400, seed=6)
+        for r in more:
+            hub.add_record(r, "t")
+        assert not [d for d in await _drain(cl.got) if d != b"GCFACKN"]   # nothing more is sent
+        # a computer that asked by itself and is then added by hand stays, now kept
+        tr2, cl2 = await loop.create_datagram_endpoint(Client, remote_addr=("127.0.0.1", port))
+        tr2.sendto(b"GCFSEND:B")
+        await asyncio.sleep(0.1)
+        other = next(iter(srv.clients))
+        assert not srv.clients[other].get("fixed")
+        srv.set_fixed([other])
+        assert srv.clients[other]["fixed"]
+        tr.close()
+        tr2.close()
+        srv.close()
+
+    asyncio.run(main())
+
+
+def test_engine_applies_hand_added_clients(tmp_path):
+    """config["gcf_server"]["clients"] reaches the running GCF server at once (apply_settings)
+    and after a restart of the server; the status lists them. Loopback, random port."""
+    from seiszone.config import Config
+    from seiszone.core.engine import Engine
+    cfg = Config(str(tmp_path / "config.json"))
+    cfg.update_section("gcf_server", {"enabled": True, "bind": "127.0.0.1", "port": 0, "clients": []})
+    cfg.update_section("seedlink_server", {"enabled": False})
+    cfg.update_section("gecko", {"enabled": False})
+    eng = Engine(cfg, State(str(tmp_path / "state.json")))
+    eng.start()
+    try:
+        for _ in range(100):
+            if eng.status()["gcf_server"]["listening"]:
+                break
+            __import__("time").sleep(0.05)
+        assert eng.status()["gcf_server"]["listening"]
+        cfg.update_section("gcf_server", {"clients": ["127.0.0.1:59999", "bad address"]})
+        eng.apply_settings().result(10)
+        st = eng.status()["gcf_server"]
+        assert st["fixed"] == ["127.0.0.1:59999"]
+        assert [(p["address"], p["fixed"]) for p in st["peers"]] == [("127.0.0.1:59999", True)]
+        cfg.update_section("gcf_server", {"clients": []})
+        eng.apply_settings().result(10)
+        assert eng.status()["gcf_server"]["peers"] == []
+    finally:
+        eng.stop()

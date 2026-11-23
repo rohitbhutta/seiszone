@@ -681,7 +681,8 @@ def test_data_server_window(qapp, window, tmp_path):
         dlg.enabled.setChecked(True)
         dlg.max_rate.setValue(500)
         assert dlg.apply()
-        assert window.config.get("gcf_server") == {"enabled": True, "bind": "0.0.0.0", "port": 1567, "max_rate": 500}
+        assert window.config.get("gcf_server") == {"enabled": True, "bind": "0.0.0.0", "port": 1567, "max_rate": 500,
+                                                   "clients": []}
         assert ("apply_settings",) in window.engine.calls
         dlg.refresh()
         assert "Server active on UDP port 1567 - 1 client" in dlg.state.text()
@@ -733,6 +734,73 @@ def test_data_server_window(qapp, window, tmp_path):
         assert dlg.sl_buffer.text().startswith("Disk buffer off")
         dlg.sl_days.setValue(2)
         assert dlg.apply()
+    finally:
+        dlg.close()
+
+
+def test_data_server_send_to_a_computer_added_by_hand(qapp, window):
+    """GCF tab: type another computer's IP (and port), Add: saved at once, applied, listed as
+    added by hand (waiting while the server is off); wrong input says why; only computers added
+    by hand can be removed. The SeedLink tab explains why it has no Add."""
+    dlg = window.open_data_server()
+    try:
+        assert not window.config.get("gcf_server").get("clients")
+        assert "Other computers appear by themselves" in dlg.clients_hint.text()
+        assert dlg.clients.selectionMode() != dlg.clients.SelectionMode.NoSelection
+        assert not dlg.add_button.autoDefault() and not dlg.remove_button.autoDefault()   # Enter elsewhere: no Add
+        for ip, port, says in (("", "", "Type the other computer's IP address"),
+                               ("my-pc", "", "is not an IP address"),
+                               ("192.168.1.20", "0", "from 1 to 65535")):
+            dlg.add_ip.setText(ip)
+            dlg.add_port.setText(port)
+            assert not dlg.add_client() and says in dlg.error.text()
+        assert not window.config.get("gcf_server").get("clients")
+        # the GCF server is off: saved and listed, it waits for the server
+        calls = len(window.engine.calls)
+        dlg.add_ip.setText("192.168.1.20")
+        dlg.add_port.setText("")
+        assert dlg.add_client()
+        assert window.config.get("gcf_server")["clients"] == ["192.168.1.20:1567"]
+        assert ("apply_settings",) in window.engine.calls[calls:]
+        assert dlg.add_ip.text() == "" and "once the GCF server is on" in dlg.add_note.text()
+        dlg.refresh()
+        rows = [[dlg.clients.item(r, k).text() for k in range(5)] for r in range(dlg.clients.rowCount())]
+        assert rows == [["192.168.1.20:1567", "(added by hand)", "-", "waiting: the GCF server is off", "0"]]
+        dlg.add_ip.setText("192.168.1.20:1567")
+        assert not dlg.add_client() and "already in the list" in dlg.error.text()
+        # the server on: it gets data without asking, beside a computer that asked by itself
+        dlg.enabled.setChecked(True)
+        assert dlg.apply()
+        assert window.config.get("gcf_server")["clients"] == ["192.168.1.20:1567"]   # Apply keeps the list
+        dlg.add_ip.setText("10.8.0.50")
+        dlg.add_port.setText("1600")
+        assert dlg.add_client() and "gets all data from now on" in dlg.add_note.text()
+        dlg.refresh()
+        rows = {dlg.clients.item(r, 0).text(): (dlg.clients.item(r, 1).text(), dlg.clients.item(r, 3).text())
+                for r in range(dlg.clients.rowCount())}
+        assert rows == {"192.168.1.100:1567": ("B", "3 s ago"),
+                        "192.168.1.20:1567": ("B (added by hand)", "sent without asking"),
+                        "10.8.0.50:1600": ("B (added by hand)", "sent without asking")}
+        # Remove: nothing selected / one that asked by itself / one added by hand
+        dlg.clients.clearSelection()
+        assert not dlg.remove_client() and "Select a computer" in dlg.error.text()
+        row = {dlg.clients.item(r, 0).text(): r for r in range(dlg.clients.rowCount())}
+        dlg.clients.selectRow(row["192.168.1.100:1567"])
+        assert not dlg.remove_client() and "was not added by hand" in dlg.error.text()
+        dlg.clients.selectRow(row["10.8.0.50:1600"])
+        dlg.refresh()                                     # the selection survives a refresh
+        assert dlg.clients.item(dlg.clients.selectionModel().selectedRows()[0].row(), 0).text() == "10.8.0.50:1600"
+        assert dlg.remove_client() and "removed" in dlg.add_note.text()
+        assert window.config.get("gcf_server")["clients"] == ["192.168.1.20:1567"]
+        # the SeedLink tab says why it has no Add
+        assert "SeedLink cannot send to a computer that did not ask" in " ".join(
+            w.text() for w in dlg.tabs.widget(1).findChildren(type(dlg.clients_hint)))
+        dlg.tabs.setCurrentIndex(0)
+        dlg.resize(820, 760)
+        dlg.show()
+        pump(qapp, 0.3)
+        os.makedirs(SCREENS, exist_ok=True)
+        assert dlg.grab().save(os.path.join(SCREENS, "data_server_send_to.png"))
     finally:
         dlg.close()
 
