@@ -4,6 +4,16 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 12:39 - 2.0.0 merged into main and built
+
+* At the user's OK ("Merge and build"): pull request #3 merged (merge commit 65df26a), local main
+  pulled; its files are identical to the tested branch (363 passed, 1 skipped).
+* `python installer/build.py`: build/dist/SeismoVerseSetup.exe 68.8 MB; SeismoVerse.exe answers
+  "SeismoVerse 2.0.0" and its file details say SeismoVerse 2.0.0. The three PyInstaller warnings
+  (pyqtgraph.opengl, pycparser tables, scipy _cdflib) were in the 1.9.0 build too.
+* Not installed (the user runs the installer). After installing: check the version in About, that
+  the 38 sources are back, and that the Start menu shows SeismoVerse and no SeisZone.
+
 ## 2026-11-23 midday - 2.0.0: renamed SeismoVerse; About, Add source, label box; user manual
 
 Branch feature/seismoverse-name, pull request #3 (opened at the user's OK, commit c39ad8a;
