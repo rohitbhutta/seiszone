@@ -413,7 +413,7 @@ IMG("10_update.png", "An update is available (example).", 460);
 H2("Install an update");
 STEPS([
   "Read **What's new** and click **Download and install**.",
-  "SeismoVerse downloads the installer and checks it against its published checksum. A damaged or changed download is refused and nothing is installed.",
+  "SeismoVerse downloads the installer and checks that it is the publisher's own: it must carry the publisher's signature and match its checksum. A damaged, changed or foreign installer is refused and nothing is installed.",
   "Windows asks for permission: click **Yes**. The window may show the publisher as unknown, because the installer is not signed with a certificate.",
   "SeismoVerse closes, is updated and opens again by itself. Your instruments, settings and recordings are kept, and running recordings continue.",
 ]);

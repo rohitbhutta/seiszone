@@ -168,9 +168,17 @@ program is shown as `in use by another program` (the log gives its process id).
 Installers are published as GitHub Releases of the **public** repository
 `rohitbhutta/seismoverse-releases` (this source repository stays private). SeismoVerse asks it
 for the newest release once a day and with Help > Check for updates (core/updater.py), downloads
-`SeismoVerseSetup.exe`, refuses it unless its SHA-256 matches `SeismoVerseSetup.exe.sha256`, and
-starts it (`/SILENT /SUPPRESSMSGBOXES /SHOWAPP=1`: setup closes SeismoVerse, updates it and
-opens it again).
+`SeismoVerseSetup.exe` (https GitHub addresses only, also for redirects) and starts it
+(`/SILENT /SUPPRESSMSGBOXES /SHOWAPP=1`: setup closes SeismoVerse, updates it and opens it
+again) - only when `SeismoVerseSetup.exe.sig` is a valid Ed25519 signature of the version and the
+SHA-256 by a key in `TRUSTED_KEYS` and the installer has that SHA-256. So even someone who got
+into the GitHub account could not make SeismoVerse install anything.
+
+**The signing key** is `%USERPROFILE%\.seismoverse-release\signing.key` on the build PC - never
+in this repository, never on GitHub. **Keep a copy offline** (a USB stick in a safe place): if it
+is lost, installed SeismoVerse versions will not accept updates signed with a new key (they then
+need one manual install of a version that trusts the new key). If it is stolen, make a new key,
+put its public key into `TRUSTED_KEYS` and remove the old one in the next version.
 
 ```
 # 1. raise the version: src/seiszone/__init__.py, installer/SeisZone.iss, installer/version_info.txt
@@ -179,8 +187,9 @@ python installer/publish.py --notes "What's new in this version" --dry-run   # c
 python installer/publish.py --notes "What's new in this version"             # publish
 ```
 
-`publish.py` checks that the installer is the build of this version, writes the checksum file
-and creates release `v<version>` with the `gh` tool (signed in on this PC). Each version is
+`publish.py` checks that the installer is the build of this version, writes the checksum and
+signature files (refusing a key that is not in `TRUSTED_KEYS`) and creates release `v<version>`
+with the `gh` tool (signed in on this PC). Each version is
 published once. The release can be edited or deleted on GitHub.
 
 ## Version

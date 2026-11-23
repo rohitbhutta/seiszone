@@ -618,8 +618,9 @@ folder), and at once with **Help > Check for updates...**. Nothing about the PC 
 sent.
 
 When a newer version exists, the update window shows What's new and **Download and install**:
-SeismoVerse downloads the installer, refuses it unless its SHA-256 matches the published
-checksum, and starts it. Windows asks for permission (the publisher may be shown as unknown:
+SeismoVerse downloads the installer, refuses it unless the release carries the publisher's
+Ed25519 signature (made with a key that never leaves the publisher's PC) and the installer's
+SHA-256 matches the signed checksum, and starts it. Windows asks for permission (the publisher may be shown as unknown:
 the installer is not signed); setup closes SeismoVerse, updates it in place and opens it again.
 Instruments, settings and recordings are kept; running recordings continue. **Later** asks again
 at the next daily check; **Skip this version** stops the daily check from offering it (Help >

@@ -4,6 +4,35 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 14:30 - 2.2.0 (branch fix/signed-updates): updates must be signed by the publisher
+
+* After the user's "Merge, build, publish": pull request #5 merged (16b08c8). Before building, the
+  automatic security review flagged the updater: the SHA-256 came from the same GitHub release as
+  the installer, so whoever got into the GitHub account could publish a harmful installer that
+  every SeismoVerse installs. Agreed - fixed before the first release (the first published version
+  checks every later one). Publishing waits for the user's OK on this change.
+* core/ed25519.py: Ed25519 (RFC 8032 reference code, no extra library). Checked: RFC 8032 test
+  vectors 1-3; byte-identical signatures and keys with OpenSSL 3.5 (vectors 2-3 and a fresh key).
+* Publisher key: %USERPROFILE%\.seismoverse-release\signing.key on this PC (not in the repo, not
+  in OneDrive, not on GitHub); public key d812e2fb...f19d in core/updater.py TRUSTED_KEYS. The
+  user must keep an offline copy.
+* updater: a release needs SeismoVerseSetup.exe.sig = signature of "SeismoVerse release /
+  version / sha256" by a trusted key (also stops an old installer being offered as newer);
+  only https GitHub addresses (ALLOWED_HOSTS), each redirect checked before it is followed
+  (a test showed urllib follows the whole chain first - now refused before asking).
+* publish.py: --new-key (never overwrites), refuses a key not in TRUSTED_KEYS, writes and
+  self-checks the .sig, uploads three files.
+* Tests: 16 in test_updater.py (vectors, foreign / replayed / missing / invalid signature, http
+  and foreign hosts, redirect away refused and within GitHub followed, key handling).
+* Docs: README (key, backup, rotation), manual step "publisher's signature", user guide 15.
+* Second security finding (key file permissions): the existing key and its folder now allow only
+  the user's account (icacls, inheritance removed); publish.py --new-key does the same (tested).
+* Tests: one full run was stopped after 9.5 min (little CPU; looked stuck); the rerun with
+  per-test progress and a 3-min hang dump finished in 11:50 on a busy PC: 387 passed, 1 skipped,
+  1 failed - test_many_waiting_records_cost_little_per_record (0.513 s against a 0.5 s limit;
+  recorder code unchanged; alone it failed 1 of 3 times, its file passes): a load-sensitive
+  timing test, to watch. No test hung.
+
 ## 2026-11-23 14:00 - 2.2.0: updates from GitHub Releases (public releases-only repository)
 
 * The user chose "Separate public repo" for the update plan (docs/reports/2026-11-23-update-plan.md).
