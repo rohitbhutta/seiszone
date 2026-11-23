@@ -12,7 +12,10 @@ what was found and what is waiting. Reports with the details are in docs/reports
   "did not answer", and closed - normal single-instance behaviour).
 * Uses the existing SeisZone folders (config, server buffer from 07:00 UTC, logs); the new log
   file is seismoverse.log, the old seiszone.log is kept. Ready 14:41:01, 39 sources connecting;
-  status ? receiving, ? channels; no warnings.
+  status 14:42 and 14:43: 37/39 receiving, 147 channels (channels still coming back). One
+  warning: GODHVANI (10.8.0.97) no answer within 15 s - it had already lost its link at
+  14:30:33 under 2.1.0 ("semaphore timeout"; 37/39 at 14:37-14:38 before the update), so not
+  caused by the update; SeismoVerse keeps retrying.
 * The automatic update check ran 23 s after start (14:41:24): "SeismoVerse 2.2.0 is the newest
   version", last_check saved - the installed program talks to the real releases repository.
 
