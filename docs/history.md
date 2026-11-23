@@ -6,7 +6,8 @@ what was found and what is waiting. Reports with the details are in docs/reports
 
 ## 2026-11-23 midday - 2.0.0: renamed SeismoVerse; About, Add source, label box; user manual
 
-Branch feature/seismoverse-name. The user asked (with four screenshots):
+Branch feature/seismoverse-name, pull request #3 (opened at the user's OK, commit c39ad8a;
+full suite 363 passed, 1 skipped; not merged, built or installed). The user asked (with four screenshots):
 * "Change the application name as SeismoVerse": APP_NAME, window titles, tray, messages, the
   SeedLink server's software string ("SeismoVerse v2.0.0"), GCF status text, probe user agent,
   export report, installer (SeismoVerseSetup.exe, SeismoVerse.exe, Start menu, firewall rule),
