@@ -4,6 +4,24 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 14:40 - 2.2.0 merged, built and published (the first signed release)
+
+* At the user's OK ("Merge, build, publish"): pull request #6 merged (a6903b5); main identical to
+  the tested branch.
+* Build: build/dist/SeismoVerseSetup.exe 68.9 MB, SeismoVerse.exe answers "SeismoVerse 2.2.0";
+  the frozen program contains core.ed25519, core.updater, ui.update_dialog, ui.screen_fit. Same
+  three PyInstaller warnings as before.
+* Published with installer/publish.py (dry run first): release v2.2.0 of
+  rohitbhutta/seismoverse-releases, "latest", three files (installer, .sha256, .sig), SHA-256
+  1fd113dd...4e56, author shown as rohitbhutta, tag on the noreply commit 3c17cd0.
+  https://github.com/rohitbhutta/seismoverse-releases/releases/tag/v2.2.0
+* End-to-end check with the program's own updater code against the real GitHub: release found,
+  signature valid, offered to 2.1.1 and not to 2.2.0, the installer downloaded through
+  github.com -> release-assets.githubusercontent.com (both allowed) in 96 s, identical to the
+  build.
+* This PC still runs 2.1.0 (no updater): it needs one manual install of 2.2.0; from then on
+  updates come through Help > Check for updates / the daily check.
+
 ## 2026-11-23 14:30 - 2.2.0 (branch fix/signed-updates): updates must be signed by the publisher
 
 * After the user's "Merge, build, publish": pull request #5 merged (16b08c8). Before building, the
