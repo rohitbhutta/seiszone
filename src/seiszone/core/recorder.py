@@ -207,7 +207,7 @@ class RecordingManager:
                 now = time.time()
                 for station in self._stations_of(s):
                     s.arrival[station] = now
-                self._rec_log(s, "SeisZone restarted - recording continues")
+                self._rec_log(s, "SeismoVerse restarted - recording continues")
                 log.info("recording %r continues -> %s", s.name, s.folder)
         hub.add_listener(self.on_record)
         self._stop = threading.Event()
@@ -299,7 +299,7 @@ class RecordingManager:
                 if s.active and s.pending:
                     self._retry_pending(s)
                 if s.active and s.pending:
-                    self._report_lost(s, list(s.pending), "SeisZone closing")
+                    self._report_lost(s, list(s.pending), "SeismoVerse closing")
                     s.pending.clear()
                     s.pending_bytes = 0
             self._close_handles()
@@ -321,7 +321,7 @@ class RecordingManager:
         if u.free < DISK_WARN_BYTES or u.free < u.total * DISK_WARN_FRACTION:
             pct = 100.0 * u.free / u.total if u.total else 0.0
             return u.free, (f"Low disk space for {folder}: {u.free / 1024 ** 3:.1f} GB free of "
-                            f"{u.total / 1024 ** 3:.0f} GB ({pct:.1f} %). SeisZone never deletes "
+                            f"{u.total / 1024 ** 3:.0f} GB ({pct:.1f} %). SeismoVerse never deletes "
                             f"recordings - free up space or choose another folder.")
         return u.free, None
 

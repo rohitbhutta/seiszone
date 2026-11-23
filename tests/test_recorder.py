@@ -194,7 +194,7 @@ def test_restart_continues(tmp_path):
         assert fh.read() == b"".join(r.raw for r in recs)
     assert mgr2.sessions()[0]["files"] == 1
     text = rec_log(folder)
-    assert "SeisZone restarted - recording continues" in text
+    assert "SeismoVerse restarted - recording continues" in text
     assert "GAP" not in text                     # continuous data across the restart
     mgr2.close()
 
@@ -414,7 +414,7 @@ def test_computer_off_while_recording_is_backfilled_into_the_same_files(tmp_path
         p0 = recorder.name_time(m)
         assert all(p0 <= r.start < p0 + 900 for r in mseed.read_file(os.path.join(folder, name)))
     text = rec_log(folder)
-    assert "SeisZone restarted - recording continues" in text
+    assert "SeismoVerse restarted - recording continues" in text
     from obspy import read
     from seiszone.core import export
     assert len(export.find_files([folder], sid, HOUR + 5, HOUR + 3605)) == 5   # found by the viewers / export

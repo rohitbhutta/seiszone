@@ -36,8 +36,8 @@ FREE_ACTION_TEXT = "Free the port – stop the old Gecko SeedLink service"
 WAITING_TEXT = "Waiting for the port…"
 FREE_WAIT = 60.0                    # s "Waiting for the port…" is shown before the error comes back
 OFFER_TITLE = "Gecko recorder"
-OFFER_TEXT = ("Your Gecko recorder is connected to the old Gecko SeedLink service, not SeisZone. "
-              "Stop and disable the old service now so the Gecko connects to SeisZone? "
+OFFER_TEXT = ("Your Gecko recorder is connected to the old Gecko SeedLink service, not SeismoVerse. "
+              "Stop and disable the old service now so the Gecko connects to SeismoVerse? "
               "(Windows asks for administrator permission; you can re-enable it in Windows Services.)")
 OFFER_STOP, OFFER_LATER = "Stop old service", "Not now"
 
@@ -246,7 +246,7 @@ class SourcesPanel(QWidget):
             return False
         ans = QMessageBox.question(
             self, "Remove source",
-            f"Remove {self._label(src)}?\n\nSeisZone stops reading from it. Recordings already "
+            f"Remove {self._label(src)}?\n\nSeismoVerse stops reading from it. Recordings already "
             "written stay on disk.", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if ans != QMessageBox.Yes:
             return False
@@ -331,7 +331,7 @@ class SourcesPanel(QWidget):
                f"Connected now: {len(links)}")
         if GECKO_KEY in self._held:
             tip += ("\n\nThe old Gecko SeedLink service holds this port, so the Gecko connects to it and "
-                    f"not to SeisZone. Right-click: {FREE_ACTION_TEXT}.")
+                    f"not to SeismoVerse. Right-click: {FREE_ACTION_TEXT}.")
         return {"key": GECKO_KEY, "state": state, "fixed": True, "tip": tip,
                 "texts": [f"Gecko receiver :{ports}", "this PC", "Gecko in", state,
                           str(sum(x.get("records", 0) for x in links)), f"{len(links)} linked"],
@@ -353,7 +353,7 @@ class SourcesPanel(QWidget):
                      "tip": f"{p.get('peer', '')} reads {p.get('stations', '')}"}
                     for i, p in enumerate(peers)]
         k = int(s.get("clients") or len(peers))
-        tip = f"Other programs read every channel from SeisZone here (SeedLink, port {s.get('port')})."
+        tip = f"Other programs read every channel from SeismoVerse here (SeedLink, port {s.get('port')})."
         if SERVER_KEY in self._held:
             tip += (f"\n\nThe old Gecko SeedLink service holds this port. Right-click: {FREE_ACTION_TEXT}.")
         return {"key": SERVER_KEY, "state": state, "fixed": True, "tip": tip,
@@ -504,13 +504,13 @@ class SourcesPanel(QWidget):
         port_text = " and ".join(str(p) for p in self._held_ports(gecko, server, held or self._waiting))
         if self._freeing is not None:
             self.old_service_label.setText(f"{WAITING_TEXT} The old Gecko SeedLink service is being stopped; "
-                                           f"SeisZone takes port {port_text} as soon as it is free.")
+                                           f"SeismoVerse takes port {port_text} as soon as it is free.")
         elif GECKO_KEY in held:
             self.old_service_label.setText(f"Port {port_text} is used by the old Gecko SeedLink service: your Gecko "
-                                           "recorder connects to it, not to SeisZone.")
+                                           "recorder connects to it, not to SeismoVerse.")
         else:
             self.old_service_label.setText(f"Port {port_text} is used by the old Gecko SeedLink service, so "
-                                           "SeisZone's SeedLink server cannot start.")
+                                           "SeismoVerse's SeedLink server cannot start.")
         self.free_button.setEnabled(self._freeing is None)
         self.old_service_bar.setVisible(True)
 

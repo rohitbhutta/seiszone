@@ -32,8 +32,6 @@ log = logging.getLogger("seiszone")
 
 DEFAULT_SEEDLINK_PORT = 18000
 NOT_DATA = ("SOH", "LOG", "ACE", "OCF")   # state-of-health / log streams: not ticked by default
-EXAMPLES = [("10.8.0.182:18000", "Guralp SeedLink"), ("10.8.0.181:1567", "Guralp GCF"),
-            ("rtserve.iris.washington.edu:18000", "SeedLink server")]
 CH_ROLE = Qt.UserRole + 1
 
 
@@ -90,7 +88,7 @@ class AddSourceDialog(QDialog):
         title = QLabel("Add an instrument or SeedLink server")
         title.setStyleSheet("font-size: 13pt; font-weight: 600;")
         intro = QLabel("Type its IP address. Leave the port empty for SeedLink on 18000 (the default), or "
-                       "type the port of any SeedLink or GCF server. SeisZone finds the stations, channels, "
+                       "type the port of any SeedLink or GCF server. SeismoVerse finds the stations, channels, "
                        "sample rates and StationXML by itself.")
         intro.setWordWrap(True)
         intro.setStyleSheet(f"color: {c['muted']};")
@@ -119,17 +117,6 @@ class AddSourceDialog(QDialog):
         row.addWidget(port_label)
         row.addWidget(self.port_edit)
         row.addWidget(self.detect_button)
-
-        links = "&nbsp;&nbsp;&middot;&nbsp;&nbsp;".join(
-            f"<a href='{t}' style='color:{c['accent']}; text-decoration:none'>{t}</a> {d}" for t, d in EXAMPLES)
-        examples = QLabel(f"Examples: {links}")
-        examples.setWordWrap(True)
-        examples.setToolTip("Click an example to put it in the field")
-        examples.linkActivated.connect(self._use_example)
-        gecko = QLabel("Kelunji Gecko recorders are not added here: they connect by themselves to this PC "
-                       "on port 58772 and appear under \"Gecko receiver\" in the Sources list.")
-        gecko.setWordWrap(True)
-        gecko.setStyleSheet(f"color: {c['muted']};")
 
         self.error = QLabel()
         self.error.setWordWrap(True)
@@ -160,7 +147,7 @@ class AddSourceDialog(QDialog):
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.clicked.connect(self.reject)
         self.manual_button = QPushButton("Add anyway as SeedLink")
-        self.manual_button.setToolTip("Add the address as a SeedLink source with every channel; SeisZone "
+        self.manual_button.setToolTip("Add the address as a SeedLink source with every channel; SeismoVerse "
                                       "keeps trying to connect in the background")
         self.manual_button.clicked.connect(self.add_manual)
         self.manual_button.hide()
@@ -183,8 +170,6 @@ class AddSourceDialog(QDialog):
         lay.addWidget(intro)
         lay.addSpacing(4)
         lay.addLayout(row)
-        lay.addWidget(examples)
-        lay.addWidget(gecko)
         lay.addWidget(self.error)
         prog = QHBoxLayout()
         prog.addWidget(self.busy, 1)
@@ -212,7 +197,7 @@ class AddSourceDialog(QDialog):
         self.card_notes.setStyleSheet(f"color: {c['warn']}; border: 0;")
 
         self.name = QLineEdit()
-        self.name.setPlaceholderText("Name shown in SeisZone, e.g. KUMARI")
+        self.name.setPlaceholderText("Name shown in SeismoVerse, e.g. KUMARI")
         name_label = QLabel("Display name")
         name_label.setStyleSheet("border: 0;")
 
@@ -249,14 +234,6 @@ class AddSourceDialog(QDialog):
     # ------------------------------------------------------------------------------------
     # detection
     # ------------------------------------------------------------------------------------
-    def _use_example(self, text):
-        if self.state == "detecting":
-            return
-        self.edit.setText(text)
-        self.port_edit.clear()
-        self._text_edited(text)
-        self.edit.setFocus()
-
     def target(self):
         """'host' or 'host:port' for the probe from the address field and the Port box (empty:
         the default, SeedLink on 18000). ValueError with a message for the user."""
@@ -394,7 +371,7 @@ class AddSourceDialog(QDialog):
         self.card_summary.setText("<br>".join(html.escape(x) for x in lines))
         self.card_notes.setText("Check the address and the port, and that this PC can reach the instrument "
                                 "(VPN connected?). If it is a SeedLink server that is slow to answer, you can "
-                                "still add it: SeisZone keeps trying to connect in the background.")
+                                "still add it: SeismoVerse keeps trying to connect in the background.")
         self.card_notes.show()
         try:
             from ..core.probe import parse_target
@@ -554,7 +531,7 @@ class AddSourceDialog(QDialog):
             if existing:
                 ans = QMessageBox.question(
                     self, "Source already added",
-                    f"{src['host']}:{src['port']} is already in SeisZone as "
+                    f"{src['host']}:{src['port']} is already in SeismoVerse as "
                     f"'{existing.get('name') or existing['host']}'.\n\nReplace it with what was found now?",
                     QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
                 if ans != QMessageBox.Yes:

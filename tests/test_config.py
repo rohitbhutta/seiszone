@@ -135,3 +135,20 @@ def test_version_1_server_port_moves_to_18000(tmp_path):
     fresh = Config(str(tmp_path / "new" / "config.json"))
     assert fresh.get("seedlink_server", "port") == 18000
     assert not os.path.exists(fresh.path)               # nothing written until something changes
+
+
+
+def test_old_program_name_as_organization_becomes_the_new_name(tmp_path):
+    """The SeedLink server's organization: the old default "SeisZone" becomes "SeismoVerse"
+    (saved at once); one the user typed stays."""
+    path = tmp_path / "config.json"
+    data = Config(str(tmp_path / "defaults.json")).data
+    data["seedlink_server"]["organization"] = "SeisZone"
+    cfg_mod.atomic_write_json(str(path), data)
+    cfg = Config(str(path))
+    assert cfg.get("seedlink_server", "organization") == "SeismoVerse"
+    with open(path, encoding="utf-8") as fh:
+        assert json.load(fh)["seedlink_server"]["organization"] == "SeismoVerse"
+    data["seedlink_server"]["organization"] = "IIT Roorkee"
+    cfg_mod.atomic_write_json(str(path), data)
+    assert Config(str(path)).get("seedlink_server", "organization") == "IIT Roorkee"

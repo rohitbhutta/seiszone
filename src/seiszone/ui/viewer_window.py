@@ -688,7 +688,7 @@ class ViewerWindow(QMainWindow):
 
     def save_picture(self, path=None):
         if path is None:
-            name = time.strftime("SeisZone_%Y-%m-%d_%H%M%S.png", time.gmtime())
+            name = time.strftime("SeismoVerse_%Y-%m-%d_%H%M%S.png", time.gmtime())
             path, _ = QFileDialog.getSaveFileName(self, "Save picture", f"{paths.exports_dir()}\\{name}",
                                                   "PNG image (*.png);;JPEG image (*.jpg)")
         if not path:

@@ -102,7 +102,7 @@ class GcfServer(asyncio.DatagramProtocol):
         self.hub = hub
         self.state = state
         self.max_rate = float(max_rate or 0) or 1e9
-        self.seedlink_port = seedlink_port          # told to SeisZone clients in the status blocks
+        self.seedlink_port = seedlink_port          # told to SeismoVerse clients in the status blocks
         self.gcf_names = dict(gcf_names or {})      # sid -> (system id, stream id) of GCF sources
         self.transport = None
         self.clients = {}            # (ip, port) -> {"params", "since", "last", "blocks"}
@@ -304,7 +304,7 @@ class GcfServer(asyncio.DatagramProtocol):
         site = self.hub.descriptions.get(station, "")
         chans = sorted((sid, ch.ids) for sid, ch in self._channels.items()
                        if ch is not None and sid.startswith(station + "."))
-        text = f"SeisZone {VERSION} {station}" + (f" {site}" if site else "")
+        text = f"SeismoVerse {VERSION} {station}" + (f" {site}" if site else "")
         if self.seedlink_port:
             text += f" seedlink={self.seedlink_port}"
         for sid, ids in chans:

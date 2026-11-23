@@ -3,7 +3,7 @@
 each with its own settings, and the same channel can be in several of them.
 
 One plot row per channel, stacked vertically, X axes linked, UTC time axis under the bottom row,
-a label box left of each row (station, location.channel, site name, units) and a caption per
+a label box left of each row (site name, station, location.channel, units) and a caption per
 trace (channel, min/max of what is visible, filter). Above the plots a tool bar: window length
 (time zoom), amplitude zoom, filter on/off with its choice, units, scale mode, mean removal,
 null offsets, the eye (captions shown / hidden), time / amplitude cursors and Live/Pause.
@@ -233,7 +233,7 @@ class _TraceLabel(pg.LabelItem):
 
 class _LanePanel(QGraphicsWidget):
     """The label panel left of a trace, like the user's earlier viewer: a box in the trace's
-    colour with the station, the channel, the site name and the units ("g", "m/s²", "counts") -
+    colour with the site name on top, the station, the channel and the units ("g", "m/s²", "counts") -
     pale, and in full colour for the channel under the mouse. In overlay mode the first row's
     panel shows a box for every channel."""
 
@@ -278,7 +278,7 @@ class _LanePanel(QGraphicsWidget):
             for k, text in enumerate(lines[:self.BOX_LINES]):
                 if (k + 1) * line_h > h:
                     break
-                font = self.bold if k < 2 else self.font
+                font = self.bold if k < len(lines) - 1 else self.font   # all but the units
                 p.setFont(font)
                 width = r.width() - 9
                 text = QFontMetrics(font).elidedText(text, Qt.ElideRight, int(width))
@@ -912,9 +912,9 @@ class WaveformView(QWidget):
 
     @staticmethod
     def panel_lines(sid, units, label="", scale=1.0, site=""):
-        """The lines of a channel's label box: its label (else the station), location.channel,
-        the site name (when the station has one) and its units - or its scale factor ("×3067")
-        when it has one, as the earlier viewer shows it."""
+        """The lines of a channel's label box: the site name first (when the station has one),
+        then its label (else the station), location.channel and its units - or its scale factor
+        ("×3067") when it has one, as the earlier viewer shows it."""
         parts = sid.split(".")
         loc_cha = f"{parts[2]}.{parts[3]}" if len(parts) == 4 and parts[2] else parts[-1]
         try:
@@ -924,7 +924,7 @@ class WaveformView(QWidget):
         last = units if scale == 1.0 else fmt_gain(scale)
         site = str(site or "").strip()
         if site:
-            return (label or ".".join(parts[:2])), loc_cha, site, last
+            return site, (label or ".".join(parts[:2])), loc_cha, last
         return (label or ".".join(parts[:2])), loc_cha, last
 
     def set_trace_label(self, sid, text):

@@ -1,7 +1,10 @@
-# SeisZone user guide
+# SeismoVerse user guide
 
-SeisZone shows, records and shares live seismic data. This guide is for the person who runs
-the station PC. Press **F1** in SeisZone (or Help > User guide) to open it again.
+SeismoVerse shows, records and shares live seismic data. This guide is for the person who runs
+the station PC. Press **F1** in SeismoVerse (or Help > User guide) to open it again.
+
+Up to version 1.9.0 the program was called **SeisZone**. Its folders keep that name, so
+your sources, settings, recordings and logs stay where they were (section 14).
 
 Contents
 
@@ -18,37 +21,38 @@ Contents
 11. Settings
 12. The tray icon
 13. Troubleshooting
-14. Where SeisZone keeps its files
+14. Where SeismoVerse keeps its files
 
 ---
 
 ## 1. Install
 
-1. Run **SeisZoneSetup.exe**. Windows asks for administrator permission: answer **Yes**.
-   Setup needs it only to copy the program to `C:\Program Files\SeisZone` and to add one
-   Windows Firewall rule. SeisZone itself always runs with your normal user rights.
+1. Run **SeismoVerseSetup.exe**. Windows asks for administrator permission: answer **Yes**.
+   Setup needs it only to copy the program to `C:\Program Files\SeismoVerse` (an update of SeisZone stays in
+   `C:\Program Files\SeisZone`) and to add one
+   Windows Firewall rule. SeismoVerse itself always runs with your normal user rights.
 2. Choose whether you want a desktop icon. A Start menu icon is always made. If the old Gecko
    SeedLink service is installed, leave **"Stop and disable the old Gecko SeedLink service, so
-   your Gecko recorder connects to SeisZone"** ticked (see section 13).
-3. If SeisZone is already running (for an update), setup tells you **"SeisZone is running and
-   will be closed"**. Click OK. Recordings that were running continue when SeisZone starts again.
-4. At the end leave **Launch SeisZone** ticked and click Finish.
+   your Gecko recorder connects to SeismoVerse"** ticked (see section 13).
+3. If SeismoVerse is already running (for an update), setup tells you **"SeismoVerse is running and
+   will be closed"**. Click OK. Recordings that were running continue when SeismoVerse starts again.
+4. At the end leave **Launch SeismoVerse** ticked and click Finish.
 
-The firewall rule is called **SeisZone**. It lets a Kelunji Gecko (port 58772) and other
-programs (the SeisZone SeedLink server, port 18000) connect to this PC.
+The firewall rule is called **SeismoVerse**. It lets a Kelunji Gecko (port 58772) and other
+programs (the SeismoVerse SeedLink server, port 18000) connect to this PC.
 
-**Uninstall** (Windows Settings > Apps > SeisZone) removes the program and the firewall rule.
+**Uninstall** (Windows Settings > Apps > SeismoVerse) removes the program and the firewall rule.
 Your recordings, exports, settings and log files are **not** deleted.
 
 ## 2. First start
 
-* SeisZone opens with an empty Sources list. Add your instruments (section 3). A Kelunji Gecko
+* SeismoVerse opens with an empty Sources list. Add your instruments (section 3). A Kelunji Gecko
   appears by itself once its USR-W610 is set up (section 4).
-* Everything you add is saved. Next time SeisZone starts it connects to all sources again by
+* Everything you add is saved. Next time SeismoVerse starts it connects to all sources again by
   itself.
-* When Windows asks whether SeisZone may use the network (the firewall question), allow it for
+* When Windows asks whether SeismoVerse may use the network (the firewall question), allow it for
   the networks you use. The installer has already added a rule, so usually no question comes.
-* Only one SeisZone runs at a time. Starting it again just brings the open window to the front.
+* Only one SeismoVerse runs at a time. Starting it again just brings the open window to the front.
 
 ## 3. Add an instrument (only IP address and port)
 
@@ -57,7 +61,7 @@ Your recordings, exports, settings and log files are **not** deleted.
    box only if it is not the usual SeedLink port: **empty = 18000** (the default). Any other port
    you type, for example `16000` or `18001`, is used exactly as typed. (Typing `10.8.0.182:16000`
    in the address box works too.)
-3. Click **Detect**. SeisZone asks the instrument what it is: station and network code, site
+3. Click **Detect**. SeismoVerse asks the instrument what it is: station and network code, site
    name, channels, and its StationXML (instrument response). Over a slow VPN this can take
    a minute or two; the progress lines show what it is doing.
 4. Check the result: the display name (you may change it, e.g. KUMARI) and the channels to
@@ -71,33 +75,33 @@ Examples for our Guralp Fortimus units:
 | Kangsabati Down | `10.8.0.181:18000` | `10.8.0.181:1567` |
 | Kumari | `10.8.0.182:18000` | `10.8.0.182:1567` |
 
-What you type decides how SeisZone reads the instrument:
+What you type decides how SeismoVerse reads the instrument:
 
-| You type | SeisZone reads |
+| You type | SeismoVerse reads |
 |----------|----------------|
 | `10.8.0.182`, Port empty | **SeedLink** (miniSEED) on port **18000**, the default. Only if no SeedLink server answers there does it try GCF on 1567 (and says so). |
 | Port `18000` | **SeedLink** only |
 | Port `1567` | **GCF** only (Scream protocol) |
-| Any other port, e.g. `16000` | **SeedLink** on that port first (any SeedLink server: SeisComP, ringserver, another digitiser, another SeisZone), then GCF on that port |
+| Any other port, e.g. `16000` | **SeedLink** on that port first (any SeedLink server: SeisComP, ringserver, another digitiser, another SeismoVerse), then GCF on that port |
 
-SeisZone recognises every SeedLink server by its answer to HELLO, also those that end their
+SeismoVerse recognises every SeedLink server by its answer to HELLO, also those that end their
 lines differently or send only one line. If detection finds nothing but you know a SeedLink
 server is there, **Add anyway as SeedLink** adds it with the port in the Port box (empty = 18000)
 and keeps trying to connect.
 
 * **SeedLink is the best choice:** after a break (VPN down, PC off) the instrument sends the
-  missed data again, so recordings have no gaps. SeisZone shows **live data first** and fetches
+  missed data again, so recordings have no gaps. SeismoVerse shows **live data first** and fetches
   the missed time in the background over a second connection; the Sources list then says
-  "live - fetching missed data, 5 h 10 min to go". The first time SeisZone reads a station it
+  "live - fetching missed data, 5 h 10 min to go". The first time SeismoVerse reads a station it
   fetches the instrument's **last day** the same way. **Latency** is always that of the live
-  data (a few seconds; SeisZone measures it against UTC from internet time servers, so a
+  data (a few seconds; SeismoVerse measures it against UTC from internet time servers, so a
   wrong PC clock does not change it).
 * **GCF (1567)**: use it if SeedLink is switched off on the instrument.
 * You can also add any other SeedLink server on the Internet or your network, for example a
   public data centre server on port 18000.
 
 If nothing answers, the notes say why (wrong address, VPN not connected, port closed). You can
-still click **Add anyway as SeedLink**: SeisZone then keeps trying to connect in the
+still click **Add anyway as SeedLink**: SeismoVerse then keeps trying to connect in the
 background and starts receiving as soon as the instrument can be reached.
 
 To remove a source, select it in the Sources list and click **Remove**. **Reconnect** drops
@@ -106,7 +110,7 @@ the connection and opens it again at once.
 ## 4. Kelunji Gecko SMR03 with a USR-W610
 
 A Gecko is not added with Add source. Its USR-W610 (serial to WiFi/LAN converter) connects
-**to this PC** and SeisZone receives it on TCP port **58772**.
+**to this PC** and SeismoVerse receives it on TCP port **58772**.
 
 Set up the USR-W610 once (in its own web page, see its manual):
 
@@ -121,7 +125,7 @@ To find this PC's IP address: open a Command Prompt and type `ipconfig`; use the
 Address" of the network the W610 is on. Give the PC a fixed IP address (or a DHCP
 reservation in the router), otherwise the W610 cannot find it after the address changes.
 
-Nothing else is needed on the PC: the firewall rule was made by the installer and SeisZone
+Nothing else is needed on the PC: the firewall rule was made by the installer and SeismoVerse
 listens on 58772 whenever it runs. The Gecko then appears in the Sources list under
 **Gecko receiver :58772** with its serial number and site name, and its channels (network
 SS, station SMR03) appear in the channels table.
@@ -135,13 +139,13 @@ connects to it instead; see **Gecko recorder does not appear / port in use** in 
 * **Sources** (left): your instruments and servers with a coloured dot:
   green = receiving data, amber = connecting or waiting for data, red = error,
   grey = stopped or switched off. Also listed: the **Gecko receiver** (Geckos connected to this
-  PC) and the **SeedLink server** (programs reading data from SeisZone).
+  PC) and the **SeedLink server** (programs reading data from SeismoVerse).
 * **Channels** (centre): one row per channel (section 6). Tick channels and click **Open viewer** in
   the toolbar to see them live in a viewer window of their own (section 7).
-* **Log** (bottom): what SeisZone is doing, also errors and warnings.
+* **Log** (bottom): what SeismoVerse is doing, also errors and warnings.
 * **Status bar**: sources receiving, Gecko links, SeedLink server clients, recording state,
   free disk space and the PC clock: "PC clock 19.0 s fast - corrected" means the PC clock is
-  wrong, but SeisZone uses the correct UTC anyway (to set the PC clock right: Windows Settings >
+  wrong, but SeismoVerse uses the correct UTC anyway (to set the PC clock right: Windows Settings >
   Time & language > Date & time > Sync now).
 * **Window** menu: open a new viewer, bring an open viewer to the front, close all viewers.
 
@@ -155,7 +159,7 @@ Description, Rate (samples per second), Latest sample (UTC), Latency, Packets, G
 
 **Latency** is how old the newest sample is: UTC now minus the time stamp of the newest sample.
 UTC now comes from internet time servers (checked every 15 minutes), so it is right even when the
-PC clock is not; without internet SeisZone uses the PC clock. The colour of the row tells you at a glance:
+PC clock is not; without internet SeismoVerse uses the PC clock. The colour of the row tells you at a glance:
 
 | Colour | Meaning |
 |--------|---------|
@@ -164,7 +168,7 @@ PC clock is not; without internet SeisZone uses the PC clock. The colour of the 
 | Red | no recent data for more than 5 minutes: check the instrument, the VPN or the network |
 
 A slow channel (for example 5 samples per second) sends a packet only every minute or so, so
-its latency is naturally larger; SeisZone allows for that.
+its latency is naturally larger; SeismoVerse allows for that.
 
 Use the filter box to find channels, **Tick all** / **Untick all** for the listed channels, and
 click a column title to sort. To see channels:
@@ -180,20 +184,20 @@ click a column title to sort. To see channels:
 
 A viewer is a window of its own (with its own taskbar button, minimize and maximize). Open as
 many as you like, with any channels; the same channel can be in several viewers with different
-settings. Closing a viewer (X) closes only that viewer, never SeisZone. SeisZone starts with its
-main window alone; tick **Open the viewer windows again that were open when SeisZone was
+settings. Closing a viewer (X) closes only that viewer, never SeismoVerse. SeismoVerse starts with its
+main window alone; tick **Open the viewer windows again that were open when SeismoVerse was
 closed** in Settings > Program to have them back at every start.
 
-On the left of every trace a box shows its **station** (or the label you gave the channel), its
-**location.channel**, the **site name** (for example Nagdhaniba) and its **units** (counts, m/s,
-m/s² or g). The colours follow the
+On the left of every trace a box shows the **site name** on top (for example Nagdhaniba), below
+it the **station** (or the label you gave the channel) and the **location.channel**, and last its
+**units** (counts, m/s, m/s² or g). The colours follow the
 component: **Z green, N red, E sky blue**, others blue. The box
 of the channel under the mouse is drawn in full colour.
 
 **History of the last day.** A viewer can show up to **1440 minutes (one day)**, also of times
-before SeisZone was started:
+before SeismoVerse was started:
 
-* SeisZone keeps a per-second summary (minimum, maximum) of every channel for the last day and
+* SeismoVerse keeps a per-second summary (minimum, maximum) of every channel for the last day and
   saves it when it stops, so a long window shows the whole day also after a restart.
 * Older times are read from your **recordings** (in the background; "Reading the recorded
   history..." shows meanwhile): full detail for short windows, and filtered views of long ones.
@@ -322,7 +326,7 @@ viewer. Opened from a channel's menu, the design is for that channel only.
 These compare the **calibration signal** fed into a sensor with the sensor's **output**. You
 need both in the viewer: the sensor's channel and the channel that carries the calibration
 signal (the instrument must be sending that channel, and the calibration signal must be switched
-on at the instrument - SeisZone does not switch it on). Select the time of the calibration with
+on at the instrument - SeismoVerse does not switch it on). Select the time of the calibration with
 Shift+drag, choose the check, then pick the two channels and press **Calculate** - or Ctrl+drag
 from the calibration signal's channel to the sensor's channel, and both are picked for you.
 
@@ -334,7 +338,7 @@ from the calibration signal's channel to the sensor's channel, and both are pick
 
 For results in physical units enter the three values of the calibration sheets: the calibration
 channel's **microvolts per count**, the **calibration resistor** (ohm) and the **coil
-constant**. SeisZone keeps them for the station. With all three left at 1 the results are
+constant**. SeismoVerse keeps them for the station. With all three left at 1 the results are
 relative (output counts per calibration count). When the channel has a sensitivity (StationXML
 or Calibration), the result also says how many percent the measured one differs.
 
@@ -342,7 +346,7 @@ Each trace shows its channel name, the minimum and maximum of what is visible, a
 scale factor and offset when they are set. Breaks in a trace are gaps in the data.
 
 **Live backfill.** When a link was down and the instrument sends the missed data afterwards
-(SeedLink instruments always do: SeisZone asks for everything since the last record it got), an
+(SeedLink instruments always do: SeismoVerse asks for everything since the last record it got), an
 open viewer draws those data into the gap within about two seconds, like the recording gets them.
 You do not need to reopen the viewer. Data older than the live buffer (Settings > Display) are
 shown from the **disk buffer** of the SeedLink server (the last 2 days of every channel, see "The
@@ -355,7 +359,7 @@ then it backfills like the others.
 
 Click **Record** (or Ctrl+R). The Recordings window shows all recordings (top) and lets you
 start new ones (bottom). It is a window of its own: minimize it, maximize it, or keep it open
-beside SeisZone. Drag the **divider** between the two parts up or down to make the recordings
+beside SeismoVerse. Drag the **divider** between the two parts up or down to make the recordings
 list bigger or smaller; size and divider are remembered. From a viewer, **Record these
 channels** opens it with that viewer's channels ticked.
 
@@ -378,19 +382,19 @@ Where the files go:
 ```
 
 The name holds the date, the start and the end time of the file (UTC, HHMM): the files above
-hold 10:00 to 11:00 UTC. The last file of a day ends at `2400`. Files recorded by SeisZone 1.7
+hold 10:00 to 11:00 UTC. The last file of a day ends at `2400`. Files recorded by SeismoVerse 1.7
 and older are named `WB.KUM.0J.HNZ__20260314T100000Z.mseed`; they are still found by the
 viewers and the export, and are never renamed.
 
 **When the computer was switched off or restarted while recording:** the recording goes on by
-itself when SeisZone starts again. For SeedLink instruments SeisZone asks each instrument for
+itself when SeismoVerse starts again. For SeedLink instruments SeismoVerse asks each instrument for
 the data it missed (from the last record it received, as far back as the instrument still
 holds it) and writes it into the same folder and into the file of its hour,
 next to what was already recorded - nothing is written twice. `recording_log.txt` says when
 data came back and which gap stayed. Instruments pulled over GCF UDP (port 1567) cannot send
 old data again: the time the computer was off stays a gap in their files.
 
-The files are standard **miniSEED**: any seismology program can read them. SeisZone writes the
+The files are standard **miniSEED**: any seismology program can read them. SeismoVerse writes the
 data exactly as the instrument sent it (no conversion, no loss). Data that arrives late (for
 example sent again by the instrument after a VPN break) is written into the right older file.
 
@@ -400,11 +404,11 @@ every new file, gaps per channel, and when links were lost and came back.
 Important:
 
 * **A recording runs until you stop it.** Select it and click **Stop...**. The files stay.
-* **SeisZone never deletes recordings.** When the disk gets full (less than 5 GB or 5 % free)
+* **SeismoVerse never deletes recordings.** When the disk gets full (less than 5 GB or 5 % free)
   it only warns you in the log and the status bar. Then move old files to another disk
   yourself.
-* **Recordings survive restarts.** If SeisZone is closed, crashes or Windows restarts, every
-  recording that was running continues as soon as SeisZone runs again. Tick "Start SeisZone
+* **Recordings survive restarts.** If SeismoVerse is closed, crashes or Windows restarts, every
+  recording that was running continues as soon as SeismoVerse runs again. Tick "Start SeismoVerse
   when I log in to Windows" in Settings so this happens without you.
 * **Open folder** shows the files of a recording in Explorer.
 
@@ -419,14 +423,14 @@ Click **Export** (or Ctrl+E).
 3. Choose **One file per channel** or **One file with all channels**.
 4. Choose the output folder (default `Documents\SeisZone\Exports`) and click Export.
 
-SeisZone takes the data from your recordings first and, for anything not recorded, from the
+SeismoVerse takes the data from your recordings first and, for anything not recorded, from the
 live data in memory (the last 60 minutes by default). It cuts exactly the chosen window and
 writes miniSEED files plus a report `export_info__<time>.txt` with the number of samples and
 any gaps per channel.
 
 ## 10. The SeedLink server: data for other programs
 
-SeisZone offers every channel it receives (Fortimus, Gecko, other servers) over SeedLink, so
+SeismoVerse offers every channel it receives (Fortimus, Gecko, other servers) over SeedLink, so
 other seismology programs can read it at the same time.
 
 In the other program, add a SeedLink source with:
@@ -436,7 +440,7 @@ In the other program, add a SeedLink source with:
   (the installer's firewall rule allows it)
 
 The other program can ask for recent data again after it was closed (standard SeedLink
-sequence numbers), as long as SeisZone still holds it in memory. The Sources list shows the
+sequence numbers), as long as SeismoVerse still holds it in memory. The Sources list shows the
 connected programs under **SeedLink server :18000**.
 
 ### The data server: this PC's data on another computer (UDP 1567 and TCP 18000)
@@ -446,7 +450,7 @@ earlier viewer's "My Server" page. It has two tabs, one per server:
 
 * **GCF over UDP (earlier viewer)**: port 1567, off until you switch it on (below).
 * **SeedLink over TCP**: port 18000, on by default. Every SeedLink program reads all of this PC's
-  data from it: SeisZone (**Add source**, this PC's IP:18000), SeisComP, Swarm, ObsPy. A SeedLink
+  data from it: SeismoVerse (**Add source**, this PC's IP:18000), SeisComP, Swarm, ObsPy. A SeedLink
   client asks again for what it missed, so its data are backfilled after a network outage. The
   tab shows whether the server runs, this PC's addresses, the connected programs (Client,
   Stations, Connected since, Packets sent) and what happened (Control). Tick or untick it, or
@@ -454,7 +458,7 @@ earlier viewer's "My Server" page. It has two tabs, one per server:
   SeedLink server.
 * **Keep on disk** (SeedLink tab, default **2 days**): every packet is also written to
   `%LOCALAPPDATA%\SeisZone\ServerBuffer`, like the earlier viewer's "Server Buffer". A computer
-  that reads this PC and was switched off for hours - even while SeisZone itself restarted -
+  that reads this PC and was switched off for hours - even while SeismoVerse itself restarted -
   gets everything it missed when it connects again, and the viewers show data that old. The tab
   shows the space used (about 1.5 GB per day with 38 instruments) and how far back it reaches.
   Older files are removed by themselves; this folder is not a recording and your recordings are
@@ -468,8 +472,8 @@ GCF over UDP, step by step:
 2. On the other computer (same network):
    * **earlier viewer**: Windows > Network Control > right-click > **Add UDP Server**, type
      **this PC's IP:1567** (the window shows this PC's IP addresses);
-   * **SeisZone**: **Add source**, type **this PC's IP:1567**. SeisZone sees that it is
-     SeisZone and reads all its stations from its SeedLink server (port 18000) instead: the exact
+   * **SeismoVerse**: **Add source**, type **this PC's IP:1567**. SeismoVerse sees that it is
+     SeismoVerse and reads all its stations from its SeedLink server (port 18000) instead: the exact
      channel names, and data missed while the network was down is fetched again. If that
      SeedLink server is off, it reads GCF (one station per source, with its exact names).
 3. The window lists the connected computers (Clients, Params, since when, last request, blocks
@@ -491,44 +495,44 @@ Click **Settings**. Changes take effect when you click OK; ports are reopened at
   commas), and a naming table to give a Gecko's data other network / station / location codes
   (by serial number).
 * **SeedLink server**: on/off, listen address (0.0.0.0 = all networks, 127.0.0.1 = only this
-  PC), port (default 18000; SeisZone 1.0.0 used 18010 and moves it to 18000 by itself), organization name.
+  PC), port (default 18000; SeismoVerse 1.0.0 used 18010 and moves it to 18000 by itself), organization name.
 * **Recording**: default folder, file length, one file per channel or per station.
 * **Display**: how many minutes of live data are kept in memory per channel, dark or light
   colours, default time window.
-* **Program**: closing the window keeps SeisZone running in the tray; start minimized in the
-  tray; **Start SeisZone when I log in to Windows**.
+* **Program**: closing the window keeps SeismoVerse running in the tray; start minimized in the
+  tray; **Start SeismoVerse when I log in to Windows**.
 
 If you change the Gecko port, change the USR-W610 to the same port. If you change the SeedLink
 server port, change it in the other programs too.
 
 ## 12. The tray icon
 
-SeisZone has an icon in the notification area (next to the clock). When "closing the window
-keeps SeisZone running in the tray" is on (default), closing the window does **not** stop
-SeisZone: data keeps coming in, recordings keep running and the SeedLink server keeps serving.
+SeismoVerse has an icon in the notification area (next to the clock). When "closing the window
+keeps SeismoVerse running in the tray" is on (default), closing the window does **not** stop
+SeismoVerse: data keeps coming in, recordings keep running and the SeedLink server keeps serving.
 
-Right-click the tray icon: **Show SeisZone**, **Recording...**, **Quit**. Only **Quit** (here or
-File > Quit) stops SeisZone completely. Running recordings then pause and continue when
-SeisZone starts again.
+Right-click the tray icon: **Show SeismoVerse**, **Recording...**, **Quit**. Only **Quit** (here or
+File > Quit) stops SeismoVerse completely. Running recordings then pause and continue when
+SeismoVerse starts again.
 
 ## 13. Troubleshooting
 
 **A Fortimus (or other SeedLink server) shows no data (amber or red)**
 
 * VPN: the Fortimus units (10.8.0.x) are reached over the VPN. Check that the VPN is
-  connected. When it comes back SeisZone reconnects by itself and fetches the missed data.
+  connected. When it comes back SeismoVerse reconnects by itself and fetches the missed data.
 * Test the address: open a Command Prompt and type `ping 10.8.0.182`.
 * Wrong port: SeedLink is 18000, GCF is 1567. Remove the source and add it again with Detect.
 * Click **Reconnect** on the source, and look at the **Log** panel for the reason.
 
 **The Gecko does not connect (nothing under "Gecko receiver")**
 
-* SeisZone must be running (in the window or the tray).
+* SeismoVerse must be running (in the window or the tray).
 * The USR-W610 must be a **TCP Client** to **this PC's current IP address**, port **58772**.
   If the PC's IP address changed, change it in the W610 (or give the PC a fixed address).
-* Firewall: the installer adds the rule "SeisZone". If you use other security software, allow
-  SeisZone or TCP port 58772 there too. Check in Windows Defender Firewall > Advanced settings
-  > Inbound Rules that "SeisZone" is enabled.
+* Firewall: the installer adds the rule "SeismoVerse". If you use other security software, allow
+  SeismoVerse or TCP port 58772 there too. Check in Windows Defender Firewall > Advanced settings
+  > Inbound Rules that "SeismoVerse" is enabled.
 * Both devices must be on the same network (or a route must exist between them).
 
 **Gecko recorder does not appear / port in use**
@@ -536,38 +540,38 @@ SeisZone starts again.
 The Gecko connects to whatever program listens on port 58772 of this PC. If the **old Gecko
 SeedLink service** (the Windows service "GeckoSeedLink" of the earlier Gecko setup) still runs,
 it holds port 58772 (Gecko) and its own SeedLink port 18010, the Gecko stays connected to it,
-and SeisZone shows on the **Gecko receiver** row:
+and SeismoVerse shows on the **Gecko receiver** row:
 `error - port 58772 is used by the old Gecko SeedLink service`.
 
-* The first time this happens while the SeisZone window is open, SeisZone asks: *"Your Gecko
-  recorder is connected to the old Gecko SeedLink service, not SeisZone. Stop and disable the
+* The first time this happens while the SeismoVerse window is open, SeismoVerse asks: *"Your Gecko
+  recorder is connected to the old Gecko SeedLink service, not SeismoVerse. Stop and disable the
   old service now ...?"* Click **Stop old service**. Windows asks once for administrator permission (click Yes).
 * Later, use the button **Free the port – stop the old Gecko SeedLink service** above the
   sources list, or right-click the Gecko receiver / SeedLink server row.
-* The rows then show **Waiting for the port…**. Within a few seconds SeisZone opens the ports
-  itself, the rows turn to **listening** and the Gecko connects to SeisZone (the W610 dials
+* The rows then show **Waiting for the port…**. Within a few seconds SeismoVerse opens the ports
+  itself, the rows turn to **listening** and the Gecko connects to SeismoVerse (the W610 dials
   again by itself, usually within a minute).
 * The installer does the same when its task **"Stop and disable the old Gecko SeedLink
   service..."** stays ticked (it is offered only when that service exists).
 * The old service is only stopped and switched off (start type "Disabled"), not removed. To use
   it again: Windows key, type **Services**, open **Gecko SeedLink Server**, set Startup type to
-  Automatic and click Start (then SeisZone gets the ports no more).
+  Automatic and click Start (then SeismoVerse gets the ports no more).
 
 If the row says `port ... is in use by another program`, some other program holds the port
 (another SeedLink server, a second copy of a program). Close or uninstall that program, or
 choose another port in Settings (and then change it in the W610 or the other programs too).
-SeisZone tries the port again every few seconds and takes it as soon as it is free. The log
+SeismoVerse tries the port again every few seconds and takes it as soon as it is free. The log
 names the busy port and the process id of the program that holds it (Task Manager, Details
 tab, PID column).
 
 **Physical units are not offered for a channel**
 
-SeisZone has no StationXML for that station. Remove and re-add the source with Detect (with a
+SeismoVerse has no StationXML for that station. Remove and re-add the source with Detect (with a
 working connection to the instrument's web page), and wait until the detection finishes.
 
 **Low disk space warning**
 
-SeisZone never deletes anything. Copy old recording folders to another disk or archive, then
+SeismoVerse never deletes anything. Copy old recording folders to another disk or archive, then
 delete them yourself, or choose a folder on a bigger disk for new recordings.
 
 **Something else**
@@ -575,7 +579,7 @@ delete them yourself, or choose a folder on a bigger disk for new recordings.
 Look in the Log panel, or open the log file (Help > Log folder). Send the file
 `seiszone.log` with your question.
 
-## 14. Where SeisZone keeps its files
+## 14. Where SeismoVerse keeps its files
 
 | What | Where |
 |------|-------|
@@ -585,8 +589,8 @@ Look in the Log panel, or open the log file (Help > Log folder). Send the file
 | Settings and sources | `%APPDATA%\SeisZone\config.json` |
 | Running recordings, SeedLink positions | `%APPDATA%\SeisZone\state.json` |
 | StationXML (instrument responses) | `%APPDATA%\SeisZone\stationxml` |
-| The program | `C:\Program Files\SeisZone` |
+| The program | `C:\Program Files\SeismoVerse` (updated from SeisZone: `C:\Program Files\SeisZone`) |
 
 To open a folder like `%APPDATA%\SeisZone`, type it into the Explorer address bar. These files
-belong to your Windows user. Neither SeisZone nor its uninstaller deletes recordings, exports,
+belong to your Windows user. Neither SeismoVerse nor its uninstaller deletes recordings, exports,
 settings or logs.

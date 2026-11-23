@@ -34,7 +34,8 @@ log = logging.getLogger("seiszone")
 
 ACTIVATE_NAME = "SeisZone.Activate"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-RUN_VALUE = APP_NAME
+RUN_VALUE = "SeisZone"     # the old program name: the entry of 1.9.0 and older is taken over
+OLD_EXE = "seiszone.exe"   # the program file of 1.9.0 and older (now SeismoVerse.exe)
 SOURCE_SCRIPT = Path(__file__).resolve().parents[3] / "run_seiszone.py"   # the source folder's starter
 PROBE_QUIT_WAIT = 5.0      # s Quit waits for an instrument detection that is still running
 
@@ -147,7 +148,8 @@ def refresh_autostart():
     program = command_program(cur) if cur else ""
     if not cur or not os.path.exists(program):
         return set_autostart(True)
-    if getattr(sys, "frozen", False) and os.path.basename(program).lower().startswith("python"):
+    if getattr(sys, "frozen", False) and (os.path.basename(program).lower().startswith("python")
+                                          or os.path.basename(program).lower() == OLD_EXE):
         return set_autostart(True)
     log.info("start with Windows keeps the existing entry (%s)", cur)
     return True
@@ -276,7 +278,7 @@ class Controller(QObject):
             self.tray = QSystemTrayIcon(theme.app_icon(), self)
             self.tray.setToolTip(f"{APP_NAME} {VERSION}")
             menu = QMenu()
-            menu.addAction("Show SeisZone", self.show_window)
+            menu.addAction("Show SeismoVerse", self.show_window)
             menu.addAction("Recording...", self.show_recording)
             menu.addSeparator()
             menu.addAction("Quit", self.quit)
@@ -314,7 +316,7 @@ class Controller(QObject):
 
     def hidden_to_tray(self):
         if self.tray is not None and not self.config.get("ui", "tray_hint_shown", False):
-            self.tray.showMessage(APP_NAME, "SeisZone keeps running in the tray", theme.app_icon(), 5000)
+            self.tray.showMessage(APP_NAME, "SeismoVerse keeps running in the tray", theme.app_icon(), 5000)
             self.config.set("ui", "tray_hint_shown", True)
 
     def quit(self):
@@ -323,7 +325,7 @@ class Controller(QObject):
         if running_threads()[0]:
             self.show_window()
             answer = QMessageBox.question(
-                self.window, APP_NAME, "An export is still being written.\n\nQuit SeisZone when it "
+                self.window, APP_NAME, "An export is still being written.\n\nQuit SeismoVerse when it "
                 "is finished?", QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
             if answer != QMessageBox.Yes:
                 return
@@ -434,7 +436,7 @@ def main(argv=None):
     config = cfg_mod.Config()
     state = cfg_mod.State()
     theme.apply(app, args.theme or config.get("ui", "theme", "dark") or "dark")
-    app.setQuitOnLastWindowClosed(False)  # the tray keeps SeisZone alive; Controller.quit ends it
+    app.setQuitOnLastWindowClosed(False)  # the tray keeps SeismoVerse alive; Controller.quit ends it
     log.info("%s %s starting (Python %s)", APP_NAME, VERSION, sys.version.split()[0])
 
     engine = Engine(config, state)
@@ -458,8 +460,8 @@ def main(argv=None):
     if problems:
         QTimer.singleShot(0, lambda: QMessageBox.warning(
             window if window.isVisible() else None, APP_NAME,
-            "SeisZone could not read its files at start:\n\n" + "\n\n".join(problems)
-            + ("\n\nSettings are not saved in this session; start SeisZone again later."
+            "SeismoVerse could not read its files at start:\n\n" + "\n\n".join(problems)
+            + ("\n\nSettings are not saved in this session; start SeismoVerse again later."
                if config.read_only else "")
             + ("\n\nRecordings in progress and SeedLink resume positions were not restored."
                if state.load_error else "")))

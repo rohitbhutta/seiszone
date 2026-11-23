@@ -50,7 +50,7 @@ SEEDLINK_TRIES = 3          # HELLO attempts before SeedLink counts as "not ther
 WEB_RETRY_PAUSE = 2         # s between tries of the web page
 GCF_SAMPLE_SECONDS = 12     # s of GCF data read to learn the streams and rates
 WEB_WAIT = 150              # s the probe waits at most for the web reader (StationXML download)
-USER_AGENT = f"SeisZone/{VERSION} instrument probe"
+USER_AGENT = f"SeismoVerse/{VERSION} instrument probe"
 HOST_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9.\-]{0,251}[A-Za-z0-9])?$")
 
 
@@ -139,7 +139,10 @@ def seedlink_info(host, port, level, timeout=15):
                 raise OSError("unexpected reply to INFO")
             rec = pkt[8:]
             n, off = struct.unpack(">H", rec[30:32])[0], struct.unpack(">H", rec[44:46])[0]
-            xml += rec[off:off + n].rstrip(b"\x00 ")
+            # the record says how many bytes it holds; only NUL padding is dropped. (Spaces were
+            # dropped too until 2.0.0, which glued two XML attributes together when a piece ended
+            # on a space, and the station list came back empty.)
+            xml += rec[off:off + n].rstrip(b"\x00")
             if pkt[6:8] != b" *":
                 break
     return xml.decode("utf-8", "replace")
@@ -269,7 +272,7 @@ def summarize_blocks(blocks):
     return out
 
 
-SEISZONE_STATUS = re.compile(r"^SeisZone \S+ (?P<station>[^ .]+\.[^ .]+)(?P<site>.*?)(?: seedlink=(?P<sl>\d+))?$")
+SEISZONE_STATUS = re.compile(r"^(?:SeismoVerse|SeisZone) \S+ (?P<station>[^ .]+\.[^ .]+)(?P<site>.*?)(?: seedlink=(?P<sl>\d+))?$")
 SEISZONE_NAME = re.compile(r"^(?P<system>[0-9A-Z]+) (?P<stream>[0-9A-Z]+) = (?P<sid>[^ ]+\.[^ ]+\.[^ ]*\.[^ ]+)$")
 
 
@@ -442,7 +445,7 @@ def guralp_web(host, log=lambda m: None, need_xml=None, box=None):
         skip = False  # cannot tell: download it
     if skip:
         info["stationxml_skipped"] = True
-        log(f"StationXML of {info['net']}.{info['sta']} is already in SeisZone - not downloaded again.")
+        log(f"StationXML of {info['net']}.{info['sta']} is already in SeismoVerse - not downloaded again.")
         return info
     try:
         storage = http_get(host, "/tab9.html").decode("utf-8", "replace")
@@ -594,7 +597,7 @@ class Instrument:
             name = d.get("stationxml_name") or "StationXML"
             lines.append(f"StationXML: found on the instrument ({name}, {len(self.stationxml) // 1024} KB)")
         elif d.get("stationxml_skipped"):
-            lines.append("StationXML: already in SeisZone (not downloaded again)")
+            lines.append("StationXML: already in SeismoVerse (not downloaded again)")
         else:
             lines.append("StationXML: not found (values are shown in counts)")
         return lines
@@ -701,12 +704,12 @@ def probe(text, log=None, prefer_direct=True, need_xml=None, web=_UNREAD):
         res = gcf_udp_sample(host, p)
         sz = seiszone_status(res.get("status")) if res else None
         if sz and sz["seedlink"]:
-            log(f"This is SeisZone on another computer; its SeedLink server is on port {sz['seedlink']} - "
+            log(f"This is SeismoVerse on another computer; its SeedLink server is on port {sz['seedlink']} - "
                 "reading all its stations from there ...")
             other = probe(f"{host}:{sz['seedlink']}", log, prefer_direct=False, need_xml=need_xml)
             if other.found:
                 other.details["typed"] = f"{host}:{p}"
-                other.notes.insert(0, f"Typed {host}:{p}: this is SeisZone on another computer. SeisZone reads "
+                other.notes.insert(0, f"Typed {host}:{p}: this is SeismoVerse on another computer. SeismoVerse reads "
                                       f"all its stations from its SeedLink server ({host}:{sz['seedlink']}), "
                                       "with their own names, and fetches data missed during an outage again.")
                 return other
@@ -740,13 +743,13 @@ def probe(text, log=None, prefer_direct=True, need_xml=None, web=_UNREAD):
 def _finish_gcf(inst, res, web, log):
     chosen, others = pick_system(res["blocks"], web)
     streams = summarize_blocks([b for b in res["blocks"] if b.system_id == chosen])
-    if not web:   # relayed by another SeisZone: its status blocks give the exact names
+    if not web:   # relayed by another SeismoVerse: its status blocks give the exact names
         web = _seiszone_web(seiszone_status(res.get("status")), chosen, streams) or web
     inst.details["gcf_status"] = res.get("status", [])[-3:]
     sysids = [chosen] if chosen else []
     inst.details["system_id"] = chosen
     if others:
-        inst.notes.append(f"This port also sends data of digitiser(s) {', '.join(others)}; SeisZone "
+        inst.notes.append(f"This port also sends data of digitiser(s) {', '.join(others)}; SeismoVerse "
                           f"uses {chosen} only. Add the others through their own address if needed.")
     web_by_gcf = {s["gcf"]: s for s in (web or {}).get("streams", [])}
     net = (web or {}).get("net") or "XX"
@@ -776,11 +779,11 @@ def _finish_gcf(inst, res, web, log):
     desc = (web or {}).get("site") or (web or {}).get("label") or f"Guralp {inst.details['system_id']}"
     inst.stations.append({"net": net, "sta": sta, "desc": desc, "channels": chans})
     log(f"GCF instrument found: system {inst.details['system_id']}, {len(chans)} channel(s).")
-    if web and web.get("sta"):  # the same unit may also offer SeedLink, which SeisZone can backfill from
+    if web and web.get("sta"):  # the same unit may also offer SeedLink, which SeismoVerse can backfill from
         if seedlink_hello(inst.host, SEEDLINK_PORT):
             inst.details["seedlink_port"] = SEEDLINK_PORT
             inst.notes.append(f"This instrument also has a SeedLink server on port {SEEDLINK_PORT}; "
-                              f"adding {inst.host}:{SEEDLINK_PORT} instead lets SeisZone fetch missed "
+                              f"adding {inst.host}:{SEEDLINK_PORT} instead lets SeismoVerse fetch missed "
                               "data after outages.")
     return inst
 
@@ -798,7 +801,7 @@ def _direct(inst, typed, log, web):
     if not (direct.found and want <= {(s["net"], s["sta"]) for s in direct.stations}):
         return inst
     direct.details["typed"] = typed
-    direct.notes = [f"Typed {typed}. SeisZone connects to the instrument's own SeedLink server "
+    direct.notes = [f"Typed {typed}. SeismoVerse connects to the instrument's own SeedLink server "
                     f"{inst.host}:{sl_port}, so it fetches missed data after VPN or PC outages. "
                     f"Type {inst.host}:{GCF_PORT} to read GCF instead."]
     return direct

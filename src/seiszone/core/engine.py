@@ -708,7 +708,7 @@ class Engine:
             return
         if self._sl_server is not None:
             return
-        org = self.config.get("seedlink_server", "organization") or "SeisZone"
+        org = self.config.get("seedlink_server", "organization") or "SeismoVerse"
         server = SeedLinkServer(self.hub, organization=org)
         try:
             self._sl_server = await asyncio.start_server(server.handle, bind, port)
@@ -758,7 +758,7 @@ class Engine:
                 await self._close_server()
                 await self._open_server()
             elif self.server is not None:
-                self.server.organization = self.config.get("seedlink_server", "organization") or "SeisZone"
+                self.server.organization = self.config.get("seedlink_server", "organization") or "SeismoVerse"
             if self._gcf_server_settings() != self._gs_cfg or (self._gs_cfg[0] and self.gcf_server is None):
                 self._close_gcf_server()
                 await self._open_gcf_server()

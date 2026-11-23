@@ -86,7 +86,7 @@ class RecordDialog(QDialog):
         self.table.currentItemChanged.connect(lambda *_: self._update_buttons())
         self.table.itemDoubleClicked.connect(lambda *_: self.open_selected_folder())
         self.empty = QLabel("No recordings yet. Start one below - it runs until you stop it, also across "
-                            "restarts of SeisZone.")
+                            "restarts of SeismoVerse.")
         self.empty.setStyleSheet(f"color: {c['muted']};")
         self.stop_button = QPushButton(theme.icon("stop"), "Stop...")
         self.stop_button.clicked.connect(self.stop_selected)
@@ -363,7 +363,7 @@ class RecordDialog(QDialog):
     def _update_hint(self):
         name = "NET.STA.LOC.CHA" if self.layout_box.currentData() == "channel" else "NET.STA"
         self.hint.setText(f"Files are named NET.STA\\YYYY-MM-DD\\{name}_<YYYYMMDD>_<start HHMM>_<end HHMM>.mseed "
-                          "(UTC), a new file every file length, aligned to the clock. SeisZone never deletes "
+                          "(UTC), a new file every file length, aligned to the clock. SeismoVerse never deletes "
                           "recordings.")
 
     def _update_channel_list(self):

@@ -1,17 +1,18 @@
-"""One-command build of SeisZone: icon -> PyInstaller (build/dist/SeisZone) -> SeisZoneSetup.exe.
+"""One-command build of SeismoVerse (APP_NAME; SeisZone until 1.9.0): icon -> PyInstaller
+(build/dist/SeismoVerse) -> SeismoVerseSetup.exe.
 
     python installer/build.py                  everything
-    python installer/build.py --no-installer   only the program folder build/dist/SeisZone
+    python installer/build.py --no-installer   only the program folder build/dist/SeismoVerse
     python installer/build.py --clean          start from an empty PyInstaller work folder
 
 Steps:
   1. tools/make_icon.py draws assets/seiszone.ico and .png (so exe and installer match the app).
-  2. PyInstaller, one folder, windowed, name SeisZone, entry installer/seiszone_launcher.py.
+  2. PyInstaller, one folder, windowed, name SeismoVerse, entry installer/seiszone_launcher.py.
      All SeisZone modules are listed as hidden imports (some are imported only when a window or
      option is used); pyqtgraph's PySide6 UI templates and data files are collected explicitly
      because pyqtgraph imports them by name at run time. ObsPy and other large packages that
      are only used by the tests are excluded.
-  3. Inno Setup 6 (ISCC.exe) compiles installer/SeisZone.iss -> build/dist/SeisZoneSetup.exe.
+  3. Inno Setup 6 (ISCC.exe) compiles installer/SeisZone.iss -> build/dist/SeismoVerseSetup.exe.
 
 Nothing outside build/ is changed except the two icon files; build/screens and older setup
 files stay where they are.
@@ -30,19 +31,20 @@ SRC = os.path.join(ROOT, "src")
 BUILD = os.path.join(ROOT, "build")
 WORK = os.path.join(BUILD, "work")
 DIST = os.path.join(BUILD, "dist")
-APP_DIR = os.path.join(DIST, "SeisZone")
-EXE = os.path.join(APP_DIR, "SeisZone.exe")
-ISS = os.path.join(ROOT, "installer", "SeisZone.iss")
-VERSION_FILE = os.path.join(ROOT, "installer", "version_info.txt")
-LAUNCHER = os.path.join(ROOT, "installer", "seiszone_launcher.py")
-ICON = os.path.join(ROOT, "assets", "seiszone.ico")
-SETUP = os.path.join(DIST, "SeisZoneSetup.exe")
-
-EXCLUDES = ("obspy", "matplotlib", "tkinter", "PyQt5", "PyQt6", "PySide2", "IPython", "pytest",
-            "pyqtgraph.examples")
 
 sys.path.insert(0, SRC)
 from seiszone import APP_NAME, VERSION  # noqa: E402
+
+APP_DIR = os.path.join(DIST, APP_NAME)
+EXE = os.path.join(APP_DIR, f"{APP_NAME}.exe")
+ISS = os.path.join(ROOT, "installer", "SeisZone.iss")     # (file name kept from before the rename)
+VERSION_FILE = os.path.join(ROOT, "installer", "version_info.txt")
+LAUNCHER = os.path.join(ROOT, "installer", "seiszone_launcher.py")
+ICON = os.path.join(ROOT, "assets", "seiszone.ico")
+SETUP = os.path.join(DIST, f"{APP_NAME}Setup.exe")
+
+EXCLUDES = ("obspy", "matplotlib", "tkinter", "PyQt5", "PyQt6", "PySide2", "IPython", "pytest",
+            "pyqtgraph.examples")
 
 
 class BuildError(Exception):
@@ -151,7 +153,7 @@ def installer():
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--no-installer", action="store_true", help="build only build/dist/SeisZone")
+    p.add_argument("--no-installer", action="store_true", help=f"build only build/dist/{APP_NAME}")
     p.add_argument("--clean", action="store_true",
                    help="empty the PyInstaller work folder and cache before building")
     args = p.parse_args(argv)

@@ -17,7 +17,7 @@ user interface warns). state.json is handled the same way (State.load_error / re
      "details": {...what the instrument probe found: hostname, serial, firmware, lat, lon...}}
   ],
   "gecko":   {"enabled": true, "bind": "0.0.0.0", "ports": [58772], "rename": {}},   # Kelunji Gecko links connect IN
-  "seedlink_server": {"enabled": true, "bind": "0.0.0.0", "port": 18000, "organization": "SeisZone",
+  "seedlink_server": {"enabled": true, "bind": "0.0.0.0", "port": 18000, "organization": "SeismoVerse",
                       "buffer_days": 2, "buffer_folder": ""},   # packets kept on disk; "" = ServerBuffer
   "recording": {"folder": "<Documents>\\SeisZone\\Recordings", "file_minutes": 60, "layout": "channel"},
   "buffer_minutes": 60,                          # live data kept in memory per channel
@@ -59,12 +59,13 @@ SOURCE_KINDS = ("seedlink", "gcf-udp", "gcf-tcp")
 
 CONFIG_VERSION = 2
 OLD_SERVER_PORT = 18010     # the SeedLink server default of version 1 (the old service's port)
+OLD_ORGANIZATION = "SeisZone"  # the SeedLink server organization before the program was renamed (2.0.0)
 
 DEFAULTS = {
     "version": CONFIG_VERSION,
     "sources": [],
     "gecko": {"enabled": True, "bind": "0.0.0.0", "ports": [58772], "rename": {}},
-    "seedlink_server": {"enabled": True, "bind": "0.0.0.0", "port": 18000, "organization": "SeisZone",
+    "seedlink_server": {"enabled": True, "bind": "0.0.0.0", "port": 18000, "organization": "SeismoVerse",
                         "buffer_days": 2, "buffer_folder": ""},
     "gcf_server": {"enabled": False, "bind": "0.0.0.0", "port": 1567, "max_rate": 1000},
     "recording": {"folder": "", "file_minutes": 60, "layout": "channel"},
@@ -208,7 +209,16 @@ class Config:
 
     def _migrate(self):
         """Version 1 files: the SeedLink server moves from the old default 18010 (also the old Gecko
-        SeedLink service's port) to the standard SeedLink port 18000. Saved at once."""
+        SeedLink service's port) to the standard SeedLink port 18000. Saved at once.
+        The program's old name as the SeedLink server's organization (the old default) becomes
+        the new name; an organization the user typed stays."""
+        server = self.data["seedlink_server"]
+        if server.get("organization") == OLD_ORGANIZATION:
+            server["organization"] = DEFAULTS["seedlink_server"]["organization"]
+            log.info("SeedLink server organization changed from %s to %s (new program name)",
+                     OLD_ORGANIZATION, server["organization"])
+            if os.path.exists(self.path) and self.data.get("version", 1) >= CONFIG_VERSION:
+                self.save()
         if self.data.get("version", 1) >= CONFIG_VERSION:
             return
         server = self.data["seedlink_server"]
@@ -238,7 +248,7 @@ class Config:
             self.read_only = True
             self.load_error = f"{self.path} could not be read ({e})"
             log.error("config file %s could not be read (%s) - using defaults, settings are not "
-                      "saved until SeisZone is started again", self.path, e)
+                      "saved until SeismoVerse is started again", self.path, e)
             data = {}
         cfg = _merge(DEFAULTS, data)
         if not cfg["recording"].get("folder"):

@@ -18,9 +18,9 @@ import time
 from PySide6.QtCore import QByteArray, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QAction, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QDockWidget, QGridLayout, QLabel, QMainWindow,
-                               QMessageBox, QPushButton, QToolBar, QVBoxLayout)
+                               QMessageBox, QToolBar, QVBoxLayout)
 
-from .. import APP_NAME, VERSION, paths
+from .. import APP_NAME, AUTHOR, SUPPORTED_BY, VERSION, paths
 from ..core import utc_clock
 from . import theme
 from .channels_panel import ChannelsPanel
@@ -36,8 +36,6 @@ log = logging.getLogger("seiszone")
 
 DOT = chr(0x25CF)           # status dot in the status bar
 LAYOUT_VERSION = 2          # saveState version: 2 = channels in the centre, viewers in windows of their own
-STANDARDS = ("SeedLink 3 (client and server)", "miniSEED 2 (Steim1/Steim2)", "FDSN StationXML",
-             "Guralp GCF / Scream protocol (UDP, TCP/BTP)", "Kelunji Gecko telemetry framing")
 
 
 def human_bytes(n):
@@ -73,6 +71,8 @@ def user_guide_path():
 
 
 class AboutDialog(QDialog):
+    """The program's name, version, author and supporter (nothing else)."""
+
     def __init__(self, config, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"About {APP_NAME}")
@@ -83,33 +83,16 @@ class AboutDialog(QDialog):
         head.setPixmap(theme.app_icon().pixmap(56, 56))
         title = QLabel(f"<span style='font-size:16pt; font-weight:600'>{APP_NAME}</span>"
                        f"&nbsp;&nbsp;<span style='color:{c['muted']}'>version {VERSION}</span><br>"
-                       "Live seismic data acquisition, viewing and recording")
+                       "Live seismic data acquisition, viewing and recording<br><br>"
+                       f"<b>Author:</b> {AUTHOR}<br>"
+                       f"<b>Supported:</b> {SUPPORTED_BY}")
+        title.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.title = title
         top = QGridLayout()
         top.addWidget(head, 0, 0, Qt.AlignTop)
         top.addWidget(title, 0, 1)
         top.setColumnStretch(1, 1)
         lay.addLayout(top)
-        lay.addWidget(QLabel("<b>Open standards</b><br>" + "<br>".join(f"&bull; {s}" for s in STANDARDS)))
-
-        grid = QGridLayout()
-        folders = [("Settings and state", paths.config_dir()),
-                   ("Log files", paths.log_dir()),
-                   ("Recordings", config.get("recording", "folder") or paths.recordings_dir()),
-                   ("Exports", paths.exports_dir()),
-                   ("StationXML", paths.stationxml_dir())]
-        grid.addWidget(QLabel("<b>Folders</b>"), 0, 0, 1, 3)
-        for i, (label, folder) in enumerate(folders, start=1):
-            grid.addWidget(QLabel(label), i, 0)
-            path = QLabel(folder)
-            path.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            path.setStyleSheet(f"color: {c['muted']};")
-            grid.addWidget(path, i, 1)
-            btn = QPushButton("Open")
-            btn.setAutoDefault(False)
-            btn.clicked.connect(lambda _=False, f=folder: open_folder(f))
-            grid.addWidget(btn, i, 2)
-        grid.setColumnStretch(1, 1)
-        lay.addLayout(grid)
         box = QDialogButtonBox(QDialogButtonBox.Close)
         box.button(QDialogButtonBox.Close).setDefault(True)
         box.rejected.connect(self.reject)
@@ -243,7 +226,7 @@ class MainWindow(QMainWindow):
                               "Receiver, server, recording and display settings", "Ctrl+,")
         self.act_about = A("About", self.open_about, "app", f"About {APP_NAME}")
         self.act_quit = A("Quit", self.request_quit, None, f"Stop {APP_NAME} completely", "Ctrl+Q")
-        self.act_guide = A("User guide", self.open_user_guide, None, "Open the SeisZone user guide", "F1")
+        self.act_guide = A("User guide", self.open_user_guide, None, "Open the SeismoVerse user guide", "F1")
         self.act_logs = A("Log folder", lambda: open_folder(paths.log_dir()), None, paths.log_dir())
 
     def _build_toolbar(self):
@@ -620,7 +603,7 @@ class MainWindow(QMainWindow):
         if not self.active_recordings():
             return True
         ans = QMessageBox.question(self, f"Quit {APP_NAME}",
-                                   "Recordings stop being written while SeisZone is closed. Quit?",
+                                   "Recordings stop being written while SeismoVerse is closed. Quit?",
                                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         return ans == QMessageBox.Yes
 
