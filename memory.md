@@ -57,9 +57,9 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   Linux and "iOS". Plan: docs/reports/2026-11-23-linux-macos-ios-plan.md (Linux AppImage + Mac
   .app via GitHub Actions builds, signed on this PC; iPhone/iPad not possible with PySide6 +
   numpy today -> live web page instead). Waiting for the user's answers (Mac or iPhone, Linux
-  machine, WSL2, Apple account, Actions OK). **Found: the source repo rohitbhutta/seiszone is
-  PUBLIC** (not private as noted below and in README); its history has 23 commits with personal
-  Gmail authors and memory.md/reports with instrument IPs. Told the user; visibility is theirs to change.
+  machine, WSL2, Apple account, Actions OK). The user parked it ("we will work on it later") and
+  asked to work on updates first. **Found: the source repo rohitbhutta/seiszone is PUBLIC** (not
+  private as noted below and in README); told the user, visibility is theirs to change.
 
 * **2026-11-23 14:30 - signed updates (branch fix/signed-updates):** #5 merged (16b08c8). Releases
   must carry SeismoVerseSetup.exe.sig (Ed25519, core/ed25519.py) by the key in
