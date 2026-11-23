@@ -257,6 +257,37 @@ def test_gaps_break_the_line(qapp, tmp_path):
     v.deleteLater()
 
 
+def test_open_viewer_fills_a_gap_when_the_missed_data_arrive(qapp, tmp_path, monkeypatch):
+    """Live viewing backfill: a viewer that shows a gap (link down) draws the missed data as soon
+    as they arrive late (an instrument's SeedLink resume / missed-data fetch) - nothing to reopen."""
+    from seiszone.core import mseed
+    from seiszone.ui import waveform_view as wv
+    monkeypatch.setattr(wv, "PAUSED_RELOAD", 0.0)      # (re-read at once instead of within 2 s)
+    eng = FakeEngine(config=Config(str(tmp_path / "config.json")), seconds=60)
+    sid = "SS.SMR03..HHZ"
+    last = eng.hub.stats_snapshot()[sid]["last_end"]
+    for rec in mseed.encode_records("SS", "SMR03", "", "HHZ", 100, last + 20.0, np.zeros(1000, dtype=np.int32)):
+        eng.hub.add_record(rec, "gecko:0000A1B2")      # the link was down for 20 s
+    v = WaveformView(eng, eng.config)
+    try:
+        v.resize(900, 300)
+        v.show()
+        v.set_window(120)
+        v.set_channels([sid])
+        x, y = v._traces[0].curve.getData()
+        assert np.isnan(y).sum() == 1 and not ((x > last + 1) & (x < last + 19)).any()
+        for rec in mseed.encode_records("SS", "SMR03", "", "HHZ", 100, last, np.full(2000, 500, dtype=np.int32)):
+            eng.hub.add_record(rec, "gecko:0000A1B2")  # the missed 20 s, late
+        v.refresh()
+        x, y = v._traces[0].curve.getData()
+        assert np.isnan(y).sum() == 0                  # one line again
+        inside = (x > last + 1) & (x < last + 19)
+        assert inside.sum() > 50 and np.allclose(y[inside], y[inside][0])   # the late samples drawn
+    finally:
+        v.close()
+        v.deleteLater()
+
+
 def test_refresh_speed(view, qapp):
     """4 channels x 10-minute window: refresh() well under 50 ms, also when every trace has to
     be recomputed (a setting changed / the view moved by a pixel each time)."""

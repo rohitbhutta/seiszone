@@ -53,7 +53,10 @@ Your recordings, exports, settings and log files are **not** deleted.
 ## 3. Add an instrument (only IP address and port)
 
 1. Click **Add source** in the toolbar (or press Ctrl+N).
-2. Type the IP address and the port, for example `10.8.0.182:18000`.
+2. Type the IP address in the first box, for example `10.8.0.182`. Type the port in the **Port**
+   box only if it is not the usual SeedLink port: **empty = 18000** (the default). Any other port
+   you type, for example `16000` or `18001`, is used exactly as typed. (Typing `10.8.0.182:16000`
+   in the address box works too.)
 3. Click **Detect**. SeisZone asks the instrument what it is: station and network code, site
    name, channels, and its StationXML (instrument response). Over a slow VPN this can take
    a minute or two; the progress lines show what it is doing.
@@ -72,9 +75,15 @@ What you type decides how SeisZone reads the instrument:
 
 | You type | SeisZone reads |
 |----------|----------------|
-| `10.8.0.182` (IP only) | **SeedLink** (miniSEED) on port 18000. Only if no SeedLink server answers there does it try GCF on 1567 (and says so). |
-| `10.8.0.182:18000` | **SeedLink** only |
-| `10.8.0.182:1567` | **GCF** only (Scream protocol) |
+| `10.8.0.182`, Port empty | **SeedLink** (miniSEED) on port **18000**, the default. Only if no SeedLink server answers there does it try GCF on 1567 (and says so). |
+| Port `18000` | **SeedLink** only |
+| Port `1567` | **GCF** only (Scream protocol) |
+| Any other port, e.g. `16000` | **SeedLink** on that port first (any SeedLink server: SeisComP, ringserver, another digitiser, another SeisZone), then GCF on that port |
+
+SeisZone recognises every SeedLink server by its answer to HELLO, also those that end their
+lines differently or send only one line. If detection finds nothing but you know a SeedLink
+server is there, **Add anyway as SeedLink** adds it with the port in the Port box (empty = 18000)
+and keeps trying to connect.
 
 * **SeedLink is the best choice:** after a break (VPN down, PC off) the instrument sends the
   missed data again, so recordings have no gaps. SeisZone shows **live data first** and fetches
@@ -332,6 +341,16 @@ or Calibration), the result also says how many percent the measured one differs.
 Each trace shows its channel name, the minimum and maximum of what is visible, and its filter,
 scale factor and offset when they are set. Breaks in a trace are gaps in the data.
 
+**Live backfill.** When a link was down and the instrument sends the missed data afterwards
+(SeedLink instruments always do: SeisZone asks for everything since the last record it got), an
+open viewer draws those data into the gap within about two seconds, like the recording gets them.
+You do not need to reopen the viewer. Data older than the live buffer (Settings > Display) are
+shown from the **disk buffer** of the SeedLink server (the last 2 days of every channel, see "The
+data server") and from your recordings - also when nothing is being recorded. Instruments pulled
+over GCF UDP (port 1567) cannot send missed data again yet: their gaps stay. If such an
+instrument can also send SeedLink (a switch in its own web page), add it again with port 18000:
+then it backfills like the others.
+
 ## 8. Recording
 
 Click **Record** (or Ctrl+R). The Recordings window shows all recordings (top) and lets you
@@ -420,10 +439,29 @@ The other program can ask for recent data again after it was closed (standard Se
 sequence numbers), as long as SeisZone still holds it in memory. The Sources list shows the
 connected programs under **SeedLink server :18000**.
 
-### The data server: this PC's data on another computer (UDP 1567)
+### The data server: this PC's data on another computer (UDP 1567 and TCP 18000)
 
 The **Data server** button (main window tool bar, also in the File menu) opens a window like the
-earlier viewer's "My Server" page:
+earlier viewer's "My Server" page. It has two tabs, one per server:
+
+* **GCF over UDP (earlier viewer)**: port 1567, off until you switch it on (below).
+* **SeedLink over TCP**: port 18000, on by default. Every SeedLink program reads all of this PC's
+  data from it: SeisZone (**Add source**, this PC's IP:18000), SeisComP, Swarm, ObsPy. A SeedLink
+  client asks again for what it missed, so its data are backfilled after a network outage. The
+  tab shows whether the server runs, this PC's addresses, the connected programs (Client,
+  Stations, Connected since, Packets sent) and what happened (Control). Tick or untick it, or
+  type another port, and press **Apply**. Listen on and Organization stay in Settings >
+  SeedLink server.
+* **Keep on disk** (SeedLink tab, default **2 days**): every packet is also written to
+  `%LOCALAPPDATA%\SeisZone\ServerBuffer`, like the earlier viewer's "Server Buffer". A computer
+  that reads this PC and was switched off for hours - even while SeisZone itself restarted -
+  gets everything it missed when it connects again, and the viewers show data that old. The tab
+  shows the space used (about 1.5 GB per day with 38 instruments) and how far back it reaches.
+  Older files are removed by themselves; this folder is not a recording and your recordings are
+  never touched. "off (memory only)" keeps only the last 1-2 hours, in memory. Below 2 GB free
+  disk space the buffer pauses until there is room again.
+
+GCF over UDP, step by step:
 
 1. Tick **Send all data to other computers on the network (GCF over UDP)** and press **Apply**.
    The port is **1567**; "Channels up to" leaves out channels with a higher sample rate.

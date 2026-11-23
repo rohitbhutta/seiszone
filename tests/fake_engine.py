@@ -111,10 +111,26 @@ class FakeEngine:
                 "gecko": {"ports": [58772], "listening": [58772], "error": "",
                           "links": [{"peer": "10.10.100.254:50123", "serial": "0000A1B2", "station": "SS.SMR03",
                                      "sitename": "SMR03", "records": 4567, "bytes": 2338304, "since": now - 7200}]},
-                "server": {"port": 18000, "listening": True, "error": "", "clients": 1,
-                           "peers": [{"peer": "127.0.0.1:50555", "since": now - 60, "stations": "*", "packets": 99}]},
+                "server": self.seedlink_server_status(now),
                 "gcf_server": self.gcf_server_status(now),
                 "started": self.started}
+
+    def seedlink_server_status(self, now):
+        s = self.config.get("seedlink_server") or {}
+        on = bool(s.get("enabled", True))
+        return {"enabled": on, "bind": s.get("bind", "0.0.0.0"), "port": s.get("port", 18000), "listening": on,
+                "error": "", "clients": 1 if on else 0,
+                "peers": [{"peer": "127.0.0.1:50555", "since": now - 60, "stations": "*", "packets": 99}] if on else [],
+                "control": ["23-11-2026 01:20:00  Client 127.0.0.1:50555 connected",
+                            "23-11-2026 01:20:00  Client 127.0.0.1:50555 streaming *"] if on else [],
+                "buffer": self.buffer_status(s)}
+
+    @staticmethod
+    def buffer_status(s):
+        days = float(s.get("buffer_days", 2))
+        return {"enabled": days > 0, "days": days, "folder": r"C:\Users\me\AppData\Local\SeisZone\ServerBuffer",
+                "bytes": int(2.6 * 1024 ** 3) if days > 0 else None, "oldest": 1795300000.0 if days > 0 else None,
+                "paused": False, "error": ""}
 
     def gcf_server_status(self, now):
         on = bool((self.config.get("gcf_server") or {}).get("enabled"))

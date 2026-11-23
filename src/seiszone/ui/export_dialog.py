@@ -275,6 +275,9 @@ class ExportDialog(QDialog):
         """Where recorded files may be: every recording's folder plus the default folder."""
         folders = [s.get("folder") for s in self.engine.recorder.sessions()]
         folders.append(self.config.get("recording", "folder") or paths.recordings_dir())
+        store = getattr(self.engine, "store", None)
+        if store is not None:   # the SeedLink server's disk buffer (every channel, the last days)
+            folders.append(store.folder)
         return list(dict.fromkeys(f for f in folders if f))
 
     # ------------------------------------------------------------------------------------
