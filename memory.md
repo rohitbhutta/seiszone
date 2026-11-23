@@ -48,8 +48,8 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
 
 ## Status (2026-11-22, version 1.7.0 installed 19:48)
 
-* **2026-11-23 12:39 - 2.0.0 "SeismoVerse" merged (pull request #3, 65df26a) and built
-  (build/dist/SeismoVerseSetup.exe 68.8 MB; not installed yet):**
+* **2026-11-23 12:42 - 2.0.0 "SeismoVerse" installed and running** (merged in pull request #3,
+  65df26a; 38/39 sources as before; installed in place in C:\Program Files\SeisZone):
   the program is now named **SeismoVerse** (the user's request); the folders keep the old name
   SeisZone (DATA_FOLDER) and so do the package, mutex, Run value and installer AppId - see
   docs/history.md before renaming anything else. About shows only name, version, Author: Arnab

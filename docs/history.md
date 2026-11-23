@@ -4,6 +4,20 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-23 12:42 - 2.0.0 installed and running
+
+* The user ran SeismoVerseSetup.exe. SeismoVerse.exe 2.0.0 runs as the normal user from
+  C:\Program Files\SeisZone (updated in place; SeisZone.exe removed). Start menu and Public
+  desktop show SeismoVerse (no SeisZone shortcut left); firewall rule "SeismoVerse" enabled, the
+  old "SeisZone" rule deleted. Start with Windows was off before and stays off (no Run value).
+* Log: "SeedLink server organization changed from SeisZone to SeismoVerse", "SeismoVerse 2.0.0
+  starting", Gecko receiver on 58772 and SeedLink server on 18000 listening, ready at 12:42:21;
+  sources 38/39 receiving (the same 38/39 as before the update), missed data fetched. One
+  warning: SeedLink THA (10.8.0.7) sent a packet that is no valid miniSEED record (skipped).
+* The user then asked about the Data server window: "no option to add or type anything" in the
+  Clients and Control lists (they are read-only lists filled by connections) - asked what they
+  want to enter there.
+
 ## 2026-11-23 12:39 - 2.0.0 merged into main and built
 
 * At the user's OK ("Merge and build"): pull request #3 merged (merge commit 65df26a), local main
