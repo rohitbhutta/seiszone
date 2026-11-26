@@ -53,7 +53,13 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   installed and running on this PC since 14:41; its daily update check works. Next update: raise the version, build,
   `python installer/publish.py --notes-file notes.md` (dry run first).
 
-* **2026-11-26 - 2.3.0 on branch release/about-and-version (built, NOT published):** About shows
+* **2026-11-26 20:38 - 2.3.0 PUBLISHED** at the user's OK ("Merge, push, publish"): main
+  fast-forwarded to 156edda and pushed; release v2.3.0 of rohitbhutta/seismoverse-releases is
+  "latest" (installer SHA-256 a73a080b...b445, signed). Checked from GitHub with the updater
+  code (unchanged since 2.2.0): offered to 2.2.0, signature valid, download identical to the
+  build. Installed copies on 2.2.0 only check at start: use Help > Check for updates.
+
+* **2026-11-26 - 2.3.0 on branch release/about-and-version (built):** About shows
   name and version only (author/supporter removed, also from the manual cover; AUTHOR and
   SUPPORTED_BY constants gone). The automatic update check also runs while SeismoVerse keeps
   running (ui/app.py UPDATE_RECHECK_MS = 1 h asks MainWindow.check_updates_at_start; GitHub at

@@ -4,7 +4,19 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
-## 2026-11-26 - 2.3.0: About without names, update check while running (built, not published)
+## 2026-11-26 20:38 - 2.3.0 merged, pushed and published
+
+* At the user's OK ("Merge, push, publish"): main fast-forwarded to the branch (156edda) and
+  pushed. The installer built from b97ee72 (same tree) was published with installer/publish.py:
+  release v2.3.0 of rohitbhutta/seismoverse-releases, "latest", three files, SHA-256
+  a73a080b02362fac97cd8b230e98ef62b48fc5952160314c591dfe6925edb445.
+* Checked from the real GitHub with core/updater.py (unchanged since 2.2.0): latest_release ->
+  2.3.0 with a valid signature, offered to 2.2.0 (not to 2.3.0), download's SHA-256 equals the
+  signed one and the local build.
+* Other computers on 2.2.0 check only at start: Help > Check for updates (or a restart) shows
+  2.3.0 there. From 2.3.0 on the daily check also runs while SeismoVerse keeps running.
+
+## 2026-11-26 - 2.3.0: About without names, update check while running (built)
 
 * Asked: remove Author and Supported from About, make the version 1.1.0, and say how the other
   computer (SeismoVerse 2.2.0 installed) gets the update.
