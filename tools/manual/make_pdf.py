@@ -89,7 +89,7 @@ def footer(canv, doc):
 
 
 doc = Doc(OUT, pagesize=A4, leftMargin=2.54 * cm, rightMargin=2.54 * cm, topMargin=2.54 * cm,
-          bottomMargin=2.54 * cm, title="SeismoVerse User Manual", author="Arnab Kole",
+          bottomMargin=2.54 * cm, title="SeismoVerse User Manual", author="SeismoVerse",
           subject=f"SeismoVerse {VERSION} user manual")
 frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="f")
 doc.addPageTemplates([PageTemplate("cover", [frame]), PageTemplate("body", [frame], onPage=footer)])
@@ -108,8 +108,7 @@ story += [Spacer(1, 3.2 * cm), Image(ICON, 4 * cm, 4 * cm), Spacer(1, 1 * cm),
                                    alignment=TA_CENTER)),
           Spacer(1, 4.5 * cm)]
 centre = ParagraphStyle("c", fontName="Calibri", fontSize=12, leading=18, textColor=DARK, alignment=TA_CENTER)
-story += [Paragraph(f"Version {VERSION}", centre), Paragraph("<b>Author:</b> Arnab Kole", centre),
-          Paragraph("<b>Supported:</b> Rohit Santra", centre),
+story += [Paragraph(f"Version {VERSION}", centre),
           Paragraph('<font color="#5B6B73">November 2026</font>', centre),
           NextPageTemplate("body"), PageBreak()]
 # contents

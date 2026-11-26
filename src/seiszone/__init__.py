@@ -6,10 +6,8 @@ the name "seiszone".
 """
 
 APP_NAME = "SeismoVerse"
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 ORGANIZATION = "SeismoVerse"
-AUTHOR = "Arnab Kole"
-SUPPORTED_BY = "Rohit Santra"
 # The per-user folders: %APPDATA%\SeismoVerse, %LOCALAPPDATA%\SeismoVerse, Documents\SeismoVerse.
 # A PC that ran SeisZone 1.9.0 or older keeps its folders of the old name (LEGACY_DATA_FOLDER)
 # as long as it has them, so its settings, sources, recordings, logs and server buffer stay

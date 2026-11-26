@@ -8,7 +8,7 @@ const {
 } = require("docx");
 
 const [SHOTS, ICON, OUT] = process.argv.slice(2);
-const VERSION = "2.2.0";
+const VERSION = "2.3.0";
 const TEAL = "1F8A7E";
 const DARK = "1B2A33";
 const MUTED = "5B6B73";
@@ -396,7 +396,7 @@ H1("12. The tray icon and quitting");
 P("SeismoVerse has an icon in the notification area next to the clock. When **Closing the window keeps SeismoVerse running in the tray** is on (the default), closing the window does **not** stop SeismoVerse: data keeps coming in, recordings keep running and the SeedLink server keeps serving.");
 P("Right-click the tray icon for **Show SeismoVerse**, **Recording...** and **Quit**. Only **Quit** (here, **File > Quit** or **Ctrl+Q**) stops SeismoVerse completely. Running recordings then pause and continue when SeismoVerse starts again.");
 H2("About SeismoVerse");
-P("**About** in the toolbar shows the program's name, its version, the author and the supporter.");
+P("**About** in the toolbar shows the program's name and its version.");
 IMG("02_about.png", "About SeismoVerse.", 360);
 
 // ---------------------------------------------------------------------------------------------
@@ -404,7 +404,7 @@ H1("13. Getting updates");
 P("New versions of SeismoVerse are published on GitHub, and SeismoVerse can download and install them by itself, on any computer with internet access. When it looks for a new version, nothing about your PC, your instruments or your data is sent.");
 H2("The daily check");
 BULLETS([
-  "Once a day, a little after SeismoVerse starts, it looks for a newer version. **Settings > Program > Check for updates once a day** switches this on or off (on by default).",
+  "Once a day it looks for a newer version: a little after SeismoVerse starts, and every day while it keeps running (a computer that is never restarted gets updates too). **Settings > Program > Check for updates once a day** switches this on or off (on by default).",
   "A window opens only when a newer version exists. Without internet nothing happens.",
 ]);
 H2("Check now");
@@ -487,10 +487,6 @@ const cover = [
     children: [new TextRun({ text: "Live seismic data acquisition, viewing and recording", size: 24, color: MUTED, font: FONT })] }),
   new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 80 },
     children: [new TextRun({ text: `Version ${VERSION}`, size: 24, color: DARK })] }),
-  new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 80 },
-    children: [new TextRun({ text: "Author: ", bold: true, size: 24 }), new TextRun({ text: "Arnab Kole", size: 24 })] }),
-  new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 80 },
-    children: [new TextRun({ text: "Supported: ", bold: true, size: 24 }), new TextRun({ text: "Rohit Santra", size: 24 })] }),
   new Paragraph({ alignment: AlignmentType.CENTER,
     children: [new TextRun({ text: "November 2026", size: 22, color: MUTED })] }),
 ];
@@ -511,7 +507,7 @@ const footer = new Footer({ children: [new Paragraph({
 
 const page = { size: { width: 11906, height: 16838 }, margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 } };
 const doc = new Document({
-  creator: "Arnab Kole", title: "SeismoVerse User Manual", description: `SeismoVerse ${VERSION} user manual`,
+  creator: "SeismoVerse", title: "SeismoVerse User Manual", description: `SeismoVerse ${VERSION} user manual`,
   styles: {
     default: { document: { run: { font: FONT, size: 22, color: "222222" }, paragraph: { spacing: { line: 276 } } } },
     paragraphStyles: [

@@ -20,7 +20,7 @@ from PySide6.QtGui import QAction, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QDockWidget, QGridLayout, QLabel, QMainWindow,
                                QMessageBox, QToolBar, QVBoxLayout)
 
-from .. import APP_NAME, AUTHOR, SUPPORTED_BY, VERSION, paths
+from .. import APP_NAME, VERSION, paths
 from ..core import utc_clock
 from . import theme
 from .channels_panel import ChannelsPanel
@@ -73,7 +73,7 @@ def user_guide_path():
 
 
 class AboutDialog(QDialog):
-    """The program's name, version, author and supporter (nothing else)."""
+    """The program's name, version and one line about it (nothing else)."""
 
     def __init__(self, config, parent=None):
         super().__init__(parent)
@@ -85,9 +85,7 @@ class AboutDialog(QDialog):
         head.setPixmap(theme.app_icon().pixmap(56, 56))
         title = QLabel(f"<span style='font-size:16pt; font-weight:600'>{APP_NAME}</span>"
                        f"&nbsp;&nbsp;<span style='color:{c['muted']}'>version {VERSION}</span><br>"
-                       "Live seismic data acquisition, viewing and recording<br><br>"
-                       f"<b>Author:</b> {AUTHOR}<br>"
-                       f"<b>Supported:</b> {SUPPORTED_BY}")
+                       "Live seismic data acquisition, viewing and recording")
         title.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.title = title
         top = QGridLayout()
@@ -575,9 +573,13 @@ class MainWindow(QMainWindow):
         return check_for_updates(self, self.config, manual)
 
     def check_updates_at_start(self):
-        """The automatic check, at most once a day, only in the installed program and only when
-        it is switched on (Settings > Program)."""
+        """The automatic check: a little after start and then every hour while SeismoVerse keeps
+        running (ui.app UPDATE_RECHECK_MS, for PCs that run for weeks), but GitHub is asked at
+        most once a day (updater.CHECK_EVERY), only by the installed program and only when it is
+        switched on (Settings > Program). Not while a check runs or the update window is open."""
         from ..core import updater
+        if getattr(self, "_update_check", None) is not None or "update" in self.dialogs:
+            return None
         if updater.automatic_check_allowed(self.config.get("updates") or {}):
             return self.check_updates(manual=False)
         return None

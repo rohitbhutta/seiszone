@@ -809,17 +809,17 @@ def test_data_server_send_to_a_computer_added_by_hand(qapp, window):
 # 2.0.0: the program is named SeismoVerse
 # --------------------------------------------------------------------------------------------
 
-def test_about_shows_the_name_author_and_supporter_only(window, qapp):
-    from seiszone import APP_NAME, AUTHOR, SUPPORTED_BY
+def test_about_shows_the_name_and_version_only(window, qapp):
+    from seiszone import APP_NAME
     window.open_about()
     about = window.dialogs["about"]
     text = about.title.text()
     assert APP_NAME == "SeismoVerse" and about.windowTitle() == "About SeismoVerse"
     assert f"version {VERSION}" in text and "SeismoVerse" in text
-    assert f"<b>Author:</b> {AUTHOR}" in text and AUTHOR == "Arnab Kole"
-    assert f"<b>Supported:</b> {SUPPORTED_BY}" in text and SUPPORTED_BY == "Rohit Santra"
+    assert "Live seismic data acquisition, viewing and recording" in text
     everything = " ".join(w.text() for w in about.findChildren(QLabel))
-    for gone in ("Open standards", "Folders", "Settings and state", "StationXML", "Guralp", "Kelunji"):
+    for gone in ("Author", "Supported", "Arnab", "Rohit", "Open standards", "Folders",
+                 "Settings and state", "StationXML", "Guralp", "Kelunji"):
         assert gone not in everything, gone
     assert not [b for b in about.findChildren(QPushButton) if b.text() == "Open"]
     about.reject()
@@ -1031,6 +1031,30 @@ def test_update_window_downloads_checks_and_starts_the_installer(qapp, window, m
         dlg2.close()
     finally:
         dlg.close()
+
+
+def test_automatic_update_check_also_while_running(qapp, window, monkeypatch):
+    """2.3.0: the automatic check also runs while SeismoVerse keeps running (ui.app asks every
+    hour, GitHub is asked at most once a day), never beside a running check or an open update
+    window."""
+    from seiszone.core import updater
+    assert app_mod.UPDATE_RECHECK_MS == 3600 * 1000 and updater.CHECK_EVERY < 24 * 3600
+    monkeypatch.setattr(updater, "automatic_check_allowed", lambda cfg: True)
+    asked = []
+    monkeypatch.setattr(updater, "latest_release", lambda: asked.append(1) or _release("9.1.0"))
+    window._update_check = object()
+    assert window.check_updates_at_start() is None and not asked       # a check is still running
+    window._update_check = None
+    assert window.check_updates_at_start() is not None
+    end = time.time() + 5
+    while "update" not in window.dialogs and time.time() < end:
+        pump(qapp, 0.05)
+    try:
+        assert "update" in window.dialogs and asked == [1]
+        assert window.check_updates_at_start() is None and asked == [1]  # the update window is open
+    finally:
+        window.dialogs["update"].close()
+        pump(qapp, 0.1)
 
 
 def test_update_check_setting(qapp, window):

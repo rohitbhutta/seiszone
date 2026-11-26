@@ -612,9 +612,10 @@ settings or logs.
 ## 15. Updates
 
 New versions are published as GitHub Releases of github.com/rohitbhutta/seismoverse-releases.
-SeismoVerse looks for one once a day, a little after it starts (Settings > Program > "Check for
-updates once a day", on by default; only the installed program, not a run from the source
-folder), and at once with **Help > Check for updates...**. Nothing about the PC or its data is
+SeismoVerse looks for one once a day: a little after it starts and, while it keeps running,
+every day after that, so a PC that is never restarted gets updates too (Settings > Program >
+"Check for updates once a day", on by default; only the installed program, not a run from the
+source folder). **Help > Check for updates...** looks at once. Nothing about the PC or its data is
 sent.
 
 When a newer version exists, the update window shows What's new and **Download and install**:

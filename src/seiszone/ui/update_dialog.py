@@ -7,7 +7,8 @@
     installer (progress, Cancel), checks its SHA-256 and starts it; Windows asks for permission,
     setup closes SeismoVerse, updates it and opens it again.
   * check_for_updates(): Help > Check for updates (manual: always answers) and the automatic
-    check once a day at start (only when a newer, not skipped version exists does a window open).
+    check once a day, at start and while SeismoVerse keeps running (only when a newer, not
+    skipped version exists does a window open; Later offers it again the next day).
 
 config["updates"]: {"check": bool, "last_check": time, "skip": "version not to offer again"}.
 """
