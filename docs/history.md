@@ -4,6 +4,21 @@ One dated entry per piece of work, newest first, so nothing is lost if a session
 assistant breaks. memory.md holds the current state and the rules; this file holds what was done,
 what was found and what is waiting. Reports with the details are in docs/reports/.
 
+## 2026-11-26 - 2.3.0: About without names, update check while running (built, not published)
+
+* Asked: remove Author and Supported from About, make the version 1.1.0, and say how the other
+  computer (SeismoVerse 2.2.0 installed) gets the update.
+* Found: updater.is_newer only offers a higher version, so 2.2.0 would never offer 1.1.0. Asked;
+  the user chose **2.3.0**, the daily check also while running, and the names removed from the
+  manual too.
+* Changes (branch release/about-and-version, b97ee72): About = name, version, one line;
+  AUTHOR/SUPPORTED_BY removed; ui/app.py UPDATE_RECHECK_MS (1 h) timer calls
+  check_updates_at_start (GitHub at most once a day, not beside a running check or an open
+  update window); user guide and manual text; manual (Word + PDF, 29 pages) rebuilt with new
+  screenshots, no names on the cover, creator "SeismoVerse".
+* Tests: 389 passed, 1 skipped (7 min 20 s). New test: the check while running.
+* Waiting: the user's OK to merge into main, push and publish v2.3.0.
+
 ## 2026-11-23 (late) - plan for Linux, Mac and iPhone/iPad (plan only, nothing changed)
 
 * Asked: run SeismoVerse on a Linux machine and an "iOS machine"; plan first.

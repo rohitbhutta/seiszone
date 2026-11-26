@@ -53,6 +53,15 @@ Tests must never contact these or listen on 58772, 18000 or 18010 (the real Geck
   installed and running on this PC since 14:41; its daily update check works. Next update: raise the version, build,
   `python installer/publish.py --notes-file notes.md` (dry run first).
 
+* **2026-11-26 - 2.3.0 on branch release/about-and-version (built, NOT published):** About shows
+  name and version only (author/supporter removed, also from the manual cover; AUTHOR and
+  SUPPORTED_BY constants gone). The automatic update check also runs while SeismoVerse keeps
+  running (ui/app.py UPDATE_RECHECK_MS = 1 h asks MainWindow.check_updates_at_start; GitHub at
+  most once a day; skipped while a check runs or the update window is open). The user first
+  asked for version 1.1.0: told them installed 2.2.0 only accepts a HIGHER version, they chose
+  2.3.0. Version numbers must always go up. 389 passed, 1 skipped. Waiting for the user's OK to
+  merge to main, push and publish (notes in the session scratchpad: release_notes_2.3.0.md).
+
 * **2026-11-23 (late) - Linux / Mac / iPhone plan, nothing built:** the user wants SeismoVerse on
   Linux and "iOS". Plan: docs/reports/2026-11-23-linux-macos-ios-plan.md (Linux AppImage + Mac
   .app via GitHub Actions builds, signed on this PC; iPhone/iPad not possible with PySide6 +
